@@ -1,5 +1,7 @@
 # Architecture (draft)
 
+> Superseded by [`PLAN.md`](PLAN.md) where they differ. This file will be rewritten from the plan.
+
 Source: `docs/proposal_v0.3.pdf`. Scope of the initial project = Stages 1-3.
 
 ```

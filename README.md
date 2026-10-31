@@ -4,6 +4,7 @@ Reconstruct a short reference video as an editable 3D scene (Blender), then use
 structure-conditioned video generation for the final look. Pilot project to test
 whether an editable 3D representation beats direct generative editing.
 
+- **Plan (current, Japanese): [`docs/PLAN.md`](docs/PLAN.md)** — takes precedence over the proposal
 - Proposal: [`docs/proposal_v0.3.pdf`](docs/proposal_v0.3.pdf)
 - Architecture draft: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
