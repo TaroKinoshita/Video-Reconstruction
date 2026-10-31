@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.blend1
+# large / generated media (keep configs and manifests, not raw video)
+evaluation/clips/*
+!evaluation/clips/.gitkeep
+!evaluation/clips/manifest.json
+runs/*
+!runs/.gitkeep
+*.mp4
+*.mov
+*.exr

@@ -1,0 +1,9 @@
+[project]
+name = "vrecon"
+version = "0.0.1"
+description = "Video reconstruction into editable 3D scenes + structure-conditioned generation (pilot)"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]

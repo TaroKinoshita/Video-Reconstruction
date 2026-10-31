@@ -1,0 +1,7 @@
+# Module selection by configuration (proposal sec. 11).
+# Each module is independently addable / removable / replaceable.
+core_llm:      { impl: claude, enabled: true }
+analysis:      { impl: opencv_basic, enabled: true }
+scene_builder: { impl: blender_bpy, enabled: true }
+generator:     { impl: wan_fun_control, enabled: false }   # runs on GPU machine (pattern A)
+compare:       { impl: basic_metrics, enabled: true }
