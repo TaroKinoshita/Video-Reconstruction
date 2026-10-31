@@ -12,3 +12,5 @@ runs/*
 *.mp4
 *.mov
 *.exr
+*.egg-info/
+.pytest_cache/

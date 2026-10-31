@@ -1,9 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "vrecon"
 version = "0.0.1"
-description = "Video reconstruction into editable 3D scenes + structure-conditioned generation (pilot)"
-requires-python = ">=3.10"
-dependencies = []
+description = "Video reconstruction into editable 3D scenes + structure-conditioned generation (research pilot)"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+# Blender as a Python module. bpy 5.2.3 wheels exist only for CPython 3.13.
+blender = ["bpy==5.2.3; python_version == '3.13'"]
+dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
