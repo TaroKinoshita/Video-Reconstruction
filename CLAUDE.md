@@ -13,6 +13,10 @@ Research / non-commercial project: reconstruct reference video as an editable Bl
 - No GPU in cloud sessions. Render small (e.g. 320x180, Cycles CPU, few samples).
 - Blender 5 animation API: read keyframes through `bpy_extras.anim_utils.action_get_channelbag_for_slot`, not `action.fcurves`.
 
+## CLI
+- `vrecon build | handoff | ingest` (see README). Code: `src/vrecon/cli.py`.
+- Read-back design: baseline = readout of the saved .blend at handoff (`scene/readback.py`), diff in pure Python (`scene/ingest.py`).
+
 ## Rules
 - Only `src/vrecon/scene` calls `bpy`.
 - Scene state is the source of the adopted reconstruction; never treat it as ground truth. Never overwrite human edits or `locked` fields.

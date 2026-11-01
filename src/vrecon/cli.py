@@ -1,0 +1,100 @@
+"""vrecon command line (PLAN.md 7.1). Humans and AI clients use the same commands.
+
+    vrecon build   PROJECT [--shot S] --blend OUT.blend [--render-dir DIR --frames 0,12]
+    vrecon handoff PROJECT [--shot S] --out DIR
+    vrecon ingest  PROJECT --handoff DIR/handoff.json [--blend EDITED.blend] [--dry-run]
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+
+from vrecon.schema import load_project, save_project
+
+
+def _cmd_build(args: argparse.Namespace) -> int:
+    from vrecon.scene.builder import build_scene, render_frames, save_blend
+
+    project = load_project(args.project)
+    report = build_scene(project, args.shot)
+    for w in report.warnings:
+        print(f"warning: {w}")
+    print(f"saved {save_blend(args.blend)}")
+    if args.render_dir:
+        frames = [int(f) for f in args.frames.split(",")]
+        for p in render_frames(args.render_dir, frames, engine=args.engine, resolution_percentage=args.percent):
+            print(f"rendered {p}")
+    return 0
+
+
+def _cmd_handoff(args: argparse.Namespace) -> int:
+    from vrecon.scene.handoff import handoff
+
+    project = load_project(args.project)
+    snap = handoff(project, args.out, args.shot)
+    print(f"handed off {snap.shot_id} at revision {snap.revision}")
+    print(f"  edit:  {snap.blend_path}")
+    print(f"  then:  vrecon ingest {args.project} --handoff {args.out}/handoff.json")
+    print("  imported: transforms of objects with vrecon_id, camera settings, their keyframes")
+    return 0
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    from vrecon.scene.handoff import ingest_blend, load_snapshot
+    from vrecon.scene.ingest import IngestConflict
+
+    project = load_project(args.project)
+    try:
+        result = ingest_blend(project, load_snapshot(args.handoff), args.blend)
+    except IngestConflict as exc:
+        print(f"conflict: {exc}", file=sys.stderr)
+        return 2
+    for w in result.warnings:
+        print(f"warning: {w}")
+    if result.status == "no_changes":
+        print("no importable changes")
+        return 0
+    for e in result.edits:
+        print(f"edit {e.id}: {e.target_id}.{e.field}")
+    if args.dry_run:
+        print("dry run: project not saved")
+    else:
+        save_project(result.project, args.project)
+        print(f"saved {args.project} (revision {result.project.revision})")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="vrecon")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    b = sub.add_parser("build", help="build a shot as a .blend (and optionally render)")
+    b.add_argument("project")
+    b.add_argument("--shot")
+    b.add_argument("--blend", required=True)
+    b.add_argument("--render-dir")
+    b.add_argument("--frames", default="0")
+    b.add_argument("--engine", default="CYCLES")
+    b.add_argument("--percent", type=int, default=100)
+    b.set_defaults(func=_cmd_build)
+
+    h = sub.add_parser("handoff", help="build a .blend for a human to edit and save the baseline")
+    h.add_argument("project")
+    h.add_argument("--shot")
+    h.add_argument("--out", required=True)
+    h.set_defaults(func=_cmd_handoff)
+
+    i = sub.add_parser("ingest", help="import human edits from the handed-off .blend")
+    i.add_argument("project")
+    i.add_argument("--handoff", required=True)
+    i.add_argument("--blend", help="edited .blend (default: the handed-off file)")
+    i.add_argument("--dry-run", action="store_true")
+    i.set_defaults(func=_cmd_ingest)
+
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

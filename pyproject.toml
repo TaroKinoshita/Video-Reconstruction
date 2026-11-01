@@ -16,6 +16,9 @@ dependencies = [
 blender = ["bpy==5.2.3; python_version == '3.13'"]
 dev = ["pytest>=8"]
 
+[project.scripts]
+vrecon = "vrecon.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
