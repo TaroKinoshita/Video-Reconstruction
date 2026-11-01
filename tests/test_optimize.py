@@ -25,9 +25,9 @@ def wrong_project():
 def test_ground_truth_has_low_silhouette_loss(reference):  # noqa: F811
     obs = gt_stand_in_masks(reference)
     assert obs.observation.provenance.tool == "ground_truth_stand_in"
-    good = silhouette_metrics(gt_project(), obs, PAIRS)["silhouette_loss"]
-    bad = silhouette_metrics(wrong_project(), obs, PAIRS)["silhouette_loss"]
-    assert good < 0.15  # floor from the quick hull raster vs Blender's render at 160x96
+    good = silhouette_metrics(gt_project(), obs, PAIRS, down=1)["silhouette_loss"]
+    bad = silhouette_metrics(wrong_project(), obs, PAIRS, down=1)["silhouette_loss"]
+    assert good < 0.12  # edge pixels dominate at 160x96 (0.03 on the 640x352 clips)
     assert bad > good + 0.1
 
 
@@ -70,7 +70,7 @@ def test_service_cli_and_mcp_tools(reference, tmp_path):  # noqa: F811
     rd = str(tmp_path / "run")
     service.init_run(str(tmp_path / "project.json"), rd, str(reference))
     st = service.state(rd)
-    assert st["revision"] == 0 and st["pairs"] == PAIRS
+    assert st["revision"] == 0 and st["pairs"] == {**PAIRS, "obj_floor": "obj_floor"}
     d = service.diagnose(rd)
     assert d["objects"]["obj_b"]["loss"] > d["objects"]["obj_a"]["loss"]  # the misplaced one stands out
     assert main(["run", "optimize", rd, "--param", "focal:cam_001", "--hypothesis", "focal", "--max-evals", "30"]) == 0

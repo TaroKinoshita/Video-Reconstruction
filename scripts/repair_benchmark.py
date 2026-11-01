@@ -54,14 +54,16 @@ def perturb(project, seed: int):
 
 
 def hypotheses(project):
-    hs = [("camera focal length is off", [Param("focal", "cam_001", step=0.1)])]
+    # camera first, judged on set pieces only (floor, wall): misplaced objects must not pull the focal length
+    hs = [("camera focal length is off (judged on the set)", [Param("focal", "cam_001", step=0.1)], "set")]
     for o in project.reconstruction.objects:
         if o.kind == "set":
             continue
-        hs.append((f"{o.id} misplaced on the floor", [Param("translation", o.id, 0, 0.25), Param("translation", o.id, 1, 0.25)]))
-        hs.append((f"{o.id} has the wrong size", [Param("size", o.id, a, 0.15) for a in range(3)]))
+        hs.append((f"{o.id} misplaced on the floor",
+                   [Param("translation", o.id, 0, 0.25), Param("translation", o.id, 1, 0.25)], "all"))
+        hs.append((f"{o.id} has the wrong size", [Param("size", o.id, a, 0.15) for a in range(3)], "all"))
         if o.keys:
-            hs.append((f"{o.id} moves at the wrong time", [Param("time", o.id, step=4.0)]))
+            hs.append((f"{o.id} moves at the wrong time", [Param("time", o.id, step=4.0)], "all"))
     return hs
 
 
@@ -81,6 +83,7 @@ def run_clip(clip: Path, out_root: Path, passes: int, evals: int) -> dict:
     run_dir.mkdir(parents=True)
     save_project(wrong, run_dir / "project.json")
     pairs = auto_pairs(wrong, obs)
+    set_ids = {o.id for o in wrong.reconstruction.objects if o.kind == "set"}
 
     def evaluate(p):
         return {"silhouette_loss": silhouette_metrics(p, obs, pairs)["silhouette_loss"]}
@@ -92,8 +95,10 @@ def run_clip(clip: Path, out_root: Path, passes: int, evals: int) -> dict:
     start = time.time()
     outcomes = []
     for n in range(passes):
-        for i, (hyp, params) in enumerate(hypotheses(mgr.adopted)):
-            prop, info = optimize(mgr.adopted, obs, pairs, params, hyp, f"p{n}_{i:02d}", max_evals=evals)
+        for i, (hyp, params, judged_on) in enumerate(hypotheses(mgr.adopted)):
+            sets = {k: v for k, v in pairs.items() if v in set_ids}
+            use = sets if judged_on == "set" and sets else pairs
+            prop, info = optimize(mgr.adopted, obs, use, params, hyp, f"p{n}_{i:02d}", max_evals=evals)
             out = mgr.try_proposal(prop)
             outcomes.append({"pass": n, "hypothesis": hyp, "status": out.status, "loss": info["loss_after"]})
     seconds = time.time() - start
@@ -121,14 +126,20 @@ def main() -> int:
     clips = sorted(p for p in Path(args.synthetic).iterdir() if (p / "gt.json").is_file())
     if args.clips:
         clips = [c for c in clips if c.name in args.clips]
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
     results = []
     for clip in clips:
         r = run_clip(clip, Path("runs/repair_benchmark"), args.passes, args.evals)
         results.append(r)
+        write(out, args, results)  # after every clip, so an interrupted run keeps what it finished
         print(f"{r['clip']}: loss {r['silhouette_loss'][0]:.3f} -> {r['silhouette_loss'][1]:.3f}, "
               f"accepted {r['accepted']}/{r['tried']}, {r['seconds']} s", flush=True)
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    print((out / "results.md").read_text())
+    return 0
+
+
+def write(out: Path, args, results: list) -> None:
     (out / "results.json").write_text(json.dumps({"settings": vars(args), "results": results}, indent=2) + "\n")
     rows = ["| clip | silhouette loss | focal error | reprojection error | mask IoU | timing error (frames) | accepted |",
             "|---|---|---|---|---|---|---|"]
@@ -144,8 +155,6 @@ def main() -> int:
             "Fixed hypothesis order, no LLM. Tests the repair machinery only (PLAN.md 11.8).\n"
             "Reprojection error is a fraction of the image diagonal.\n\n")
     (out / "results.md").write_text("# Repair benchmark\n\n" + note + "\n".join(rows) + "\n")
-    print((out / "results.md").read_text())
-    return 0
 
 
 if __name__ == "__main__":

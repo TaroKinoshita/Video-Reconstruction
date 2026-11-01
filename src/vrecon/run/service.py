@@ -38,14 +38,17 @@ def _observation(cfg: dict) -> MaskObservation:
 
 
 def auto_pairs(project, obs: MaskObservation, shot_id: str = "shot_001") -> dict[str, str]:
-    """Observed label -> reconstruction object, by silhouette overlap (sets like floors/walls excluded)."""
+    """Observed label -> reconstruction object: movers by silhouette overlap, set pieces by label."""
     movers = [o.id for o in project.reconstruction.objects if o.kind != "set"]
     t, h, w = obs.masks.shape
     frames = list(range(0, t, 3))
     sil = render_silhouettes(project, shot_id, frames, movers, (w, h))
     sets = {o.id for o in project.reconstruction.objects if o.kind == "set"}
-    obs_map = {k: v for k, v in obs.id_map.items() if v not in sets and "floor" not in v and "wall" not in v}
-    return match_objects(obs.masks[frames], sil, obs_map, {i + 1: m for i, m in enumerate(movers)})
+    obs_map = {k: v for k, v in obs.id_map.items() if v not in sets}
+    pairs = match_objects(obs.masks[frames], sil, obs_map, {i + 1: m for i, m in enumerate(movers)})
+    # set pieces (floor, wall) pair by label when the observation provides them: they pin the camera
+    pairs.update({sid: sid for sid in sets if sid in obs.id_map.values()})
+    return pairs
 
 
 def _manager(run_dir: Path):

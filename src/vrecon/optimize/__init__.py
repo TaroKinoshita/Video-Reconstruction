@@ -51,45 +51,101 @@ def gt_stand_in_masks(clip_dir: str | Path, obs_id: str = "obs_masks_gt_stand_in
 # --- silhouette objective ----------------------------------------------------------------------------
 
 
+# box faces as corner indices into _CORNERS (x, y, z in {-0.5, 0.5}, index = 4*ix + 2*iy + iz)
+_FACES = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+_NEAR = 0.05
+
+
+def _clip_near(poly: np.ndarray) -> np.ndarray:
+    """Sutherland-Hodgman clip of a camera-space polygon against z >= _NEAR."""
+    out = []
+    for i in range(len(poly)):
+        a, b = poly[i], poly[(i + 1) % len(poly)]
+        ina, inb = a[2] >= _NEAR, b[2] >= _NEAR
+        if ina:
+            out.append(a)
+        if ina != inb:
+            t = (_NEAR - a[2]) / (b[2] - a[2])
+            out.append(a + t * (b - a))
+    return np.array(out)
+
+
 def render_silhouettes(project: Project, shot_id: str, frames: list[int], ids: list[str],
-                       size: tuple[int, int]) -> np.ndarray:
-    """Index image per frame (1-based position in `ids`), painted far to near."""
-    w, h = size
+                       size: tuple[int, int], down: int = 1) -> np.ndarray:
+    """Index image per frame (1-based position in `ids`) with a per-pixel depth test.
+
+    Faces are clipped at the camera's near plane, so large set pieces (floor, wall) that extend
+    behind the camera are drawn correctly. Depth per pixel comes from each face's plane:
+    z = d / (n . K^-1 [u, v, 1]). `down` renders at 1/down resolution (size is the full size).
+    """
+    w, h = -(-size[0] // down), -(-size[1] // down)
     out = np.zeros((len(frames), h, w), np.uint16)
     cam = next(c for c in project.reconstruction.cameras if c.shot_id == shot_id)
     objs = {o.id: o for o in project.reconstruction.objects}
     for i, f in enumerate(frames):
         r_c, c_c, k = camera_pose(cam, f)
-        polys = []
+        if down > 1:  # pixel centres of the strided grid [::down] map to full-res u = down * u'
+            k = k.copy()
+            k[0, 0] /= down
+            k[1, 1] /= down
+            k[0, 2] /= down
+            k[1, 2] /= down
+        zbuf = np.full((h, w), np.inf)
+        img = out[i]
         for n, oid in enumerate(ids, start=1):
             o = objs[oid]
             r, t, s = object_pose(project, o, shot_id, f)
-            pts = (_CORNERS * (np.array(o.size or (1, 1, 1)) * s)) @ r.T + t
-            uv, z = project_points(pts, r_c, c_c, k)
-            if (z <= 1e-3).any():
-                continue  # a corner behind the camera: skip (not handled by a convex hull)
-            polys.append((float(np.linalg.norm(t - c_c)), n, cv2.convexHull(np.round(uv).astype(np.int32))))
-        for _, n, hull in sorted(polys, reverse=True):
-            cv2.fillConvexPoly(out[i], hull, n)
+            world = (_CORNERS * (np.array(o.size or (1, 1, 1)) * s)) @ r.T + t
+            cam_pts = (world - c_c) @ r_c  # camera coordinates (OpenCV)
+            if (cam_pts[:, 2] < _NEAR).all():
+                continue
+            for face in _FACES:
+                poly = _clip_near(cam_pts[list(face)])
+                if len(poly) < 3:
+                    continue
+                normal = np.cross(poly[1] - poly[0], poly[2] - poly[0])
+                if np.linalg.norm(normal) < 1e-12:
+                    continue
+                d = float(normal @ poly[0])
+                uv = poly[:, :2] / poly[:, 2:3] * np.array([k[0, 0], k[1, 1]]) + np.array([k[0, 2], k[1, 2]])
+                x0, y0 = np.floor(uv.min(0)).astype(int)
+                x1, y1 = np.ceil(uv.max(0)).astype(int)
+                x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, w - 1), min(y1, h - 1)
+                if x1 < x0 or y1 < y0:
+                    continue
+                sub = np.zeros((y1 - y0 + 1, x1 - x0 + 1), np.uint8)
+                cv2.fillPoly(sub, [np.round(uv - [x0, y0]).astype(np.int32)], 1)
+                ys, xs = np.nonzero(sub)
+                if len(xs) == 0:
+                    continue
+                us, vs = xs + x0, ys + y0
+                denom = normal[0] * (us - k[0, 2]) / k[0, 0] + normal[1] * (vs - k[1, 2]) / k[1, 1] + normal[2]
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    z = d / denom
+                ok = (z > 0) & (z < zbuf[vs, us])
+                zbuf[vs[ok], us[ok]] = z[ok]
+                img[vs[ok], us[ok]] = n
     return out
 
 
 def silhouette_metrics(project: Project, obs: MaskObservation, pairs: dict[str, str], shot_id: str = "shot_001",
-                       stride: int = 3) -> dict:
+                       stride: int = 3, down: int = 2) -> dict:
     """Loss = mean over objects of mean over frames of (1 - IoU); plus per-object diagnostics.
 
     pairs: observed label -> reconstruction object id.
     """
-    t, h, w = obs.masks.shape
+    t, h0, w0 = obs.masks.shape
     frames = list(range(0, t, stride))
     ids = list(pairs.values())
-    sil = render_silhouettes(project, shot_id, frames, ids, (w, h))
+    sil = render_silhouettes(project, shot_id, frames, ids, (w0, h0), down=down)
+    masks = obs.masks[:, ::down, ::down]
+    h, w = masks.shape[1:]
     inv = {v: k for k, v in obs.id_map.items()}
     per = {}
     for n, (label, oid) in enumerate(pairs.items(), start=1):
         ious, dx, dy = [], [], []
         for i, f in enumerate(frames):
-            a, b = obs.masks[f] == inv[label], sil[i] == n
+            a, b = masks[f] == inv[label], sil[i] == n
             union = np.logical_or(a, b).sum()
             if union == 0:
                 continue
@@ -196,6 +252,15 @@ def optimize(project: Project, obs: MaskObservation, pairs: dict[str, str], para
     x0 = np.zeros(len(params))
     before = loss(x0)
     x, after, evals = pattern_search(loss, x0, np.array([p.step for p in params]), max_evals=max_evals)
+    if any(p.kind == "time" for p in params) and stride > 1:
+        # timing is invisible between sampled frames: polish on every frame with small steps
+        def fine(y):
+            return silhouette_metrics(apply_params(project, params, y)[0], obs, pairs, stride=1)["silhouette_loss"]
+
+        fine_steps = np.array([1.0 if p.kind == "time" else p.step / 8 for p in params])
+        x, after, e2 = pattern_search(fine, x, fine_steps, max_evals=30, min_ratio=0.25)
+        evals += e2
+        before = fine(x0)
     _, changes = apply_params(project, params, x)
     info = {"loss_before": before, "loss_after": after, "evaluations": evals,
             "values": {f"{p.kind}:{p.target_id}:{p.axis}": float(v) for p, v in zip(params, x)}}
