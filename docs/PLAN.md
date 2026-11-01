@@ -338,7 +338,7 @@ GPUの目安（参考）：Video Depth Anything の公式表では、A100、入�
 |---|---|
 | 選んだ理由 | 奥行き、輪郭、ポーズ、HED、直線などの映像で、フレームごとに形と動きを縛れる（RQ2に必須）。制御の強さ（`control_context_scale`）を調整できる。最大15秒／24fps |
 | 実行環境 | 重い（本体約33B、フルだと80GBに収まらず退避が必要）。80GB級のレンタルGPUを想定。量子化版を使う場合は、版と設定を記録する |
-| ライセンス | MiniMax H3 Community License。対象地域（米国、EU、英国、韓国は対象外とされる）と、生成映像の公開範囲の条件を、**使う前に原文で確認する【未確認】** |
+| ライセンス | MiniMax H3 Community License（原文確認済み、2026-11-01） |
 | 実装 | VideoX-Fun（コミット `e8c314f`）の `MiniMaxH3ControlPipeline`。実行スクリプトは `gpu/h3_control/run_jobs.py` |
 | 入力の条件 | 24fps固定、幅と高さは32の倍数、フレーム数は17n+5（最大243）。`guidance_scale` は1.0（蒸留済みのため） |
 | 制御用の映像 | 奥行きは「近い＝白、遠い＝黒」、2〜85パーセンタイルで正規化（VideoX-Funの注釈ツールと同じ流儀）。輪郭はCanny（100/200）。H3の学習時の前処理は公開されていないので、この流儀は仮の選択。設定は manifest に記録する |
@@ -494,7 +494,6 @@ OSSは一度に集めない。その段階で必要な分だけ入れる。
 
 - [ ] ローカルPCのGPU（機種、VRAM）
 - [x] V2Vモデルの選定 → MiniMax-H3＋Fun ControlNet Union 2.0（9.1）
-- [ ] MiniMax H3 Community License の原文確認（対象地域、生成映像の公開範囲）
 - [ ] 大きいファイルの置き場所
 - [ ] 評価用の映像の入手先と権利の確認
 - [ ] CineReconの数値の確認（論文）

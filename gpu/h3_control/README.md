@@ -13,10 +13,6 @@ GPUマシン：pull → setup_gpu.sh → run_jobs.py → pack_results.sh → 小
 クラウド：結果を読んで採点（次の作業）
 ```
 
-## 0. 使う前に
-
-- [ ] **MiniMax H3 Community License の原文を読む**（対象地域、生成映像の公開範囲）。`docs/PLAN.md` 9.1。
-
 ## 1. GPUマシンを用意する
 
 | 項目 | 目安 | 理由 |
