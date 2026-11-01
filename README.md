@@ -4,6 +4,7 @@ Reconstruct a short reference video as an editable 3D scene (Blender), then use
 structure-conditioned video generation for the final look. Pilot project to test
 whether an editable 3D representation beats direct generative editing.
 
+- **Handoff / current status (Japanese): [`docs/HANDOFF.md`](docs/HANDOFF.md)** — start here
 - **Plan (current, Japanese): [`docs/PLAN.md`](docs/PLAN.md)** — takes precedence over the proposal
 - Proposal: [`docs/proposal_v0.3.pdf`](docs/proposal_v0.3.pdf)
 - Architecture draft: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
@@ -17,6 +18,18 @@ bash scripts/setup.sh
 Installs Mesa EGL on Linux (software OpenGL, no GPU needed), creates `.venv` with
 Python 3.13, installs `bpy` 5.2.3 (~400 MB) and this package, then runs a render
 smoke test. Safe to rerun. Tests: `.venv/bin/python -m pytest`.
+
+### Windows (PowerShell)
+
+```powershell
+winget install --id=astral-sh.uv -e
+winget install --id=Gyan.FFmpeg -e
+uv venv --python 3.13 .venv
+uv pip install --python .venv\Scripts\python.exe -e ".[blender,control,mcp,dev]"
+.venv\Scripts\python.exe -m pytest -q
+```
+
+Bash scripts (`scripts/*.sh`, `gpu/`, `baselines/`) need WSL or Git Bash.
 
 ## Usage (phase 0)
 

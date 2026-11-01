@@ -3,6 +3,7 @@
 Research / non-commercial project: reconstruct reference video as an editable Blender scene, then V2V generation.
 
 ## Read first
+- `docs/HANDOFF.md` (Japanese): current status, open issues, next steps. Start here.
 - `docs/PLAN.md` (Japanese, authoritative plan). Section 12 = stages and exit criteria.
 - `docs/ARCHITECTURE.md` (responsibilities, repair loop).
 - `docs/CONVENTIONS.md` (axes, units, rotations, intrinsics, time). Follow it in all code.
