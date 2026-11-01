@@ -59,3 +59,27 @@ def test_time_mapping():
     assert scene_time_to_shot_frame(2.0, 1.0, Rational(num=24, den=1)) == pytest.approx(24)
     assert shot_frame_to_blender(0) == 1
     assert math.isclose(shot_frame_to_blender(2.5), 3.5)
+
+
+def test_look_at_opencv():
+    from vrecon.scene.convert import look_at_opencv, quat_to_matrix
+
+    q = look_at_opencv((0, -5, 1), (0, 0, 1))
+    m = quat_to_matrix(q)
+    assert [m[i][2] for i in range(3)] == pytest.approx([0, 1, 0])  # z forward = +y
+    assert [m[i][0] for i in range(3)] == pytest.approx([1, 0, 0])  # x right = +x
+    assert [m[i][1] for i in range(3)] == pytest.approx([0, 0, -1])  # y down = -z
+
+
+def test_matrix_to_quat_roundtrip():
+    import random
+
+    from vrecon.scene.convert import matrix_to_quat, quat_to_matrix
+
+    rng = random.Random(5)
+    for _ in range(50):
+        q = [rng.gauss(0, 1) for _ in range(4)]
+        n = sum(c * c for c in q) ** 0.5
+        q = tuple(c / n for c in q)
+        q = q if q[0] >= 0 else tuple(-c for c in q)
+        assert matrix_to_quat(quat_to_matrix(q)) == pytest.approx(q, abs=1e-9)

@@ -14,7 +14,9 @@ Research / non-commercial project: reconstruct reference video as an editable Bl
 - Blender 5 animation API: read keyframes through `bpy_extras.anim_utils.action_get_channelbag_for_slot`, not `action.fcurves`.
 
 ## CLI
-- `vrecon build | handoff | ingest` (see README). Code: `src/vrecon/cli.py`.
+- `vrecon build | handoff | ingest | control` (see README). Code: `src/vrecon/cli.py`.
+- Control videos for V2V: `scene/passes.py` (depth/index via emission override + EXR, shaded pass) -> `control/core.py` (numpy/cv2/ffmpeg). H3 constraints: 24 fps, W/H multiples of 32, 17n+5 frames.
+- Phase 1a: `scripts/make_phase1a_scenes.py`, `evaluation/phase1a/`, GPU side in `gpu/h3_control/` (runs in the VideoX-Fun env, not vrecon).
 - Read-back design: baseline = readout of the saved .blend at handoff (`scene/readback.py`), diff in pure Python (`scene/ingest.py`).
 
 ## Rules

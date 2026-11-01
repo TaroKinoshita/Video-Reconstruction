@@ -14,3 +14,10 @@ runs/*
 *.exr
 *.egg-info/
 .pytest_cache/
+# phase 1a: control videos (small) travel through git to the GPU machine; passes and previews stay local
+!evaluation/phase1a/controls/*/control_*.mp4
+evaluation/phase1a/controls/*/passes/
+evaluation/phase1a/controls/*/preview/
+# GPU machine
+third_party/
+models/

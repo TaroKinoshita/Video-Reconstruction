@@ -94,3 +94,42 @@ def scene_time_to_shot_frame(time: float, scene_time_start: float, fps: Rational
 
 def shot_frame_to_blender(shot_frame: float) -> float:
     return shot_frame + FRAME_OFFSET
+
+
+def matrix_to_quat(m: list[list[float]]) -> Quat:
+    """Unit quaternion (w, x, y, z), w >= 0, from a 3x3 rotation matrix (rows)."""
+    tr = m[0][0] + m[1][1] + m[2][2]
+    if tr > 0:
+        s = (tr + 1.0) ** 0.5 * 2
+        q = (0.25 * s, (m[2][1] - m[1][2]) / s, (m[0][2] - m[2][0]) / s, (m[1][0] - m[0][1]) / s)
+    elif m[0][0] > m[1][1] and m[0][0] > m[2][2]:
+        s = (1.0 + m[0][0] - m[1][1] - m[2][2]) ** 0.5 * 2
+        q = ((m[2][1] - m[1][2]) / s, 0.25 * s, (m[0][1] + m[1][0]) / s, (m[0][2] + m[2][0]) / s)
+    elif m[1][1] > m[2][2]:
+        s = (1.0 + m[1][1] - m[0][0] - m[2][2]) ** 0.5 * 2
+        q = ((m[0][2] - m[2][0]) / s, (m[0][1] + m[1][0]) / s, 0.25 * s, (m[1][2] + m[2][1]) / s)
+    else:
+        s = (1.0 + m[2][2] - m[0][0] - m[1][1]) ** 0.5 * 2
+        q = ((m[1][0] - m[0][1]) / s, (m[0][2] + m[2][0]) / s, (m[1][2] + m[2][1]) / s, 0.25 * s)
+    n = sum(c * c for c in q) ** 0.5
+    q = tuple(c / n for c in q)
+    return q if q[0] >= 0 else tuple(-c for c in q)
+
+
+def look_at_opencv(eye, target, up=(0.0, 0.0, 1.0)) -> Quat:
+    """Camera-to-world rotation (OpenCV camera axes: x right, y down, z forward) looking at target."""
+
+    def norm(v):
+        n = sum(c * c for c in v) ** 0.5
+        if n < 1e-12:
+            raise ValueError("degenerate look-at")
+        return [c / n for c in v]
+
+    def cross(a, b):
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+    z = norm([t - e for t, e in zip(target, eye)])
+    x = norm(cross(z, up))
+    y = cross(z, x)
+    m = [[x[i], y[i], z[i]] for i in range(3)]  # columns are the camera axes in world coordinates
+    return matrix_to_quat(m)

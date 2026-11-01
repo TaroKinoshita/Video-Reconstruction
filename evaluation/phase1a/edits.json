@@ -1,0 +1,58 @@
+{
+  "base": "base",
+  "edits": [
+    {
+      "id": "edit_camera",
+      "type": "camera_path",
+      "description": "camera path: slow dolly-in -> lateral truck from left to right, same look-at target",
+      "changed": [
+        "cam_001"
+      ],
+      "unchanged": [
+        "obj_hero",
+        "obj_pillar",
+        "obj_crate",
+        "obj_wall",
+        "obj_floor"
+      ],
+      "expected": "camera trajectory follows the truck path; object layout and hero motion timing unchanged"
+    },
+    {
+      "id": "edit_object",
+      "type": "object_replace",
+      "description": "main object: 0.6 m cube -> tall narrow block 0.35 x 0.35 x 1.1 m (same path and timing)",
+      "changed": [
+        "obj_hero"
+      ],
+      "unchanged": [
+        "cam_001",
+        "obj_pillar",
+        "obj_crate",
+        "obj_wall",
+        "obj_floor"
+      ],
+      "expected": "hero silhouette matches the new block; its path and timing unchanged"
+    },
+    {
+      "id": "edit_timing",
+      "type": "action_timing",
+      "description": "main object starts moving 1.0 s (24 frames) later; same path and duration",
+      "changed": [
+        "obj_hero"
+      ],
+      "unchanged": [
+        "cam_001",
+        "obj_pillar",
+        "obj_crate",
+        "obj_wall",
+        "obj_floor"
+      ],
+      "expected": "hero motion onset at frame 48 instead of 24; everything else unchanged",
+      "event": {
+        "target": "obj_hero",
+        "onset_frame_base": 24,
+        "onset_frame_edit": 48
+      }
+    }
+  ]
+}

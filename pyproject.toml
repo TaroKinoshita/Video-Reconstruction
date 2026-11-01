@@ -14,6 +14,7 @@ dependencies = [
 [project.optional-dependencies]
 # Blender as a Python module. bpy 5.2.3 wheels exist only for CPython 3.13.
 blender = ["bpy==5.2.3; python_version == '3.13'"]
+control = ["numpy>=2", "opencv-python-headless>=4.10"]
 dev = ["pytest>=8"]
 
 [project.scripts]

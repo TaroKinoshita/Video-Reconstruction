@@ -24,11 +24,12 @@ smoke test. Safe to rerun. Tests: `.venv/bin/python -m pytest`.
 .venv/bin/vrecon build   project.json --blend out/scene.blend --render-dir out/frames --frames 0,12
 .venv/bin/vrecon handoff project.json --out out/handoff      # then edit out/handoff/scene.blend in Blender
 .venv/bin/vrecon ingest  project.json --handoff out/handoff/handoff.json [--dry-run]
+.venv/bin/vrecon control project.json --out out/controls       # depth / canny control videos for V2V
 ```
 
 `ingest` imports transforms of objects with a `vrecon_id`, camera settings and their keyframes,
 records them as human edits, and bumps the project revision. Other edits are reported as warnings.
 
 ## Status
-Phase 0 done: project schema, conventions, Blender builder, handoff/ingest. Next: phase 1
-(V2V control test and single-shot baseline). See `docs/PLAN.md` section 12.
+Phase 0 done. Phase 1a in progress: test scenes and control videos in `evaluation/phase1a/`,
+GPU generation with MiniMax-H3 + Fun ControlNet Union 2.0 in `gpu/h3_control/` (see its README).

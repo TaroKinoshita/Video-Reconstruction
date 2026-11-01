@@ -1,0 +1,49 @@
+{
+  "project_id": "proj_p1a_edit_object",
+  "revision": 0,
+  "shot_id": "shot_001",
+  "blender": "5.2.3 LTS",
+  "width": 1280,
+  "height": 704,
+  "frames": 124,
+  "fps": 24.0,
+  "h3_problems": [],
+  "controls": {
+    "depth": {
+      "path": "control_depth.mp4",
+      "sha256": "eab5d2c4f3a04e3b9b91f1f254111c4c801300be0ee00b367e2a251e9df8931c",
+      "params": {
+        "mode": "clip",
+        "lo": 3.451171875,
+        "hi": 10.4375,
+        "lo_pct": 2.0,
+        "hi_pct": 85.0
+      }
+    },
+    "canny": {
+      "path": "control_canny.mp4",
+      "sha256": "dcf9ee7bec4c3504f7e2a67ecc1ec5b3cb0853e3706f6e1d1a4b46969106969e",
+      "params": {
+        "low": 100,
+        "high": 200
+      }
+    }
+  },
+  "passes": {
+    "depth": "passes/depth.npz",
+    "index": "passes/index.npz",
+    "id_map": {
+      "1": "obj_crate",
+      "2": "obj_floor",
+      "3": "obj_hero",
+      "4": "obj_pillar",
+      "5": "obj_wall"
+    }
+  },
+  "previews": [
+    "preview/frame_000000.png",
+    "preview/frame_000062.png",
+    "preview/frame_000123.png"
+  ],
+  "warnings": []
+}
