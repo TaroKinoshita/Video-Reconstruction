@@ -52,8 +52,8 @@ else
 fi
 
 # 3. Install package ------------------------------------------------------------
-log "Installing vrecon[blender,control,dev] (bpy is ~400 MB on first install)"
-uv pip install --python .venv/bin/python -q -e ".[blender,control,dev]"
+log "Installing vrecon[blender,control,mcp,dev] (bpy is ~400 MB on first install)"
+uv pip install --python .venv/bin/python -q -e ".[blender,control,mcp,dev]"
 .venv/bin/python -c 'import bpy; print("[setup] Blender", bpy.app.version_string)'
 
 # 4. Smoke test -------------------------------------------------------------------

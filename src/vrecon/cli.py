@@ -7,6 +7,7 @@
     vrecon new     VIDEO --out DIR [--id proj_x] [--threshold 27] [--no-shots]
     vrecon score   REFERENCE_DIR PROJECT [--shot S] [--out report.json]
     vrecon score-blend REFERENCE_DIR SCENE.blend [--out report.json]
+    vrecon run init|state|diagnose|optimize|submit|history|rollback ...   (repair loop; see run/service.py)
 """
 
 from __future__ import annotations
@@ -118,6 +119,32 @@ def _cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run(args: argparse.Namespace) -> int:
+    import json
+
+    from vrecon.run import service
+
+    a = args.run_cmd
+    if a == "init":
+        out = service.init_run(args.project, args.run_dir, args.masks, args.max_attempts)
+    elif a == "state":
+        out = service.state(args.run_dir)
+    elif a == "diagnose":
+        out = service.diagnose(args.run_dir)
+    elif a == "optimize":
+        out = service.run_optimizer(args.run_dir, args.param, args.hypothesis, args.max_evals)
+    elif a == "submit":
+        from pathlib import Path
+
+        out = service.submit(args.run_dir, json.loads(Path(args.proposal).read_text()))
+    elif a == "history":
+        out = service.history(args.run_dir, args.last)
+    else:
+        out = service.rollback(args.run_dir, args.revision)
+    print(json.dumps(out, indent=2, default=str))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="vrecon")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -175,6 +202,31 @@ def main(argv: list[str] | None = None) -> int:
     sb.add_argument("project", metavar="blend")
     sb.add_argument("--out")
     sb.set_defaults(func=_cmd_score)
+
+    r = sub.add_parser("run", help="repair loop: try proposals on a copy, adopt only improvements")
+    r.set_defaults(func=_cmd_run)
+    rs = r.add_subparsers(dest="run_cmd", required=True)
+    x = rs.add_parser("init")
+    x.add_argument("project")
+    x.add_argument("run_dir")
+    x.add_argument("--masks", required=True, help="clip folder with object masks (gt stand-in for now)")
+    x.add_argument("--max-attempts", type=int, default=30)
+    for name in ("state", "diagnose"):
+        rs.add_parser(name).add_argument("run_dir")
+    x = rs.add_parser("optimize")
+    x.add_argument("run_dir")
+    x.add_argument("--param", action="append", required=True, help="focal:cam_001 | translation:obj:axis | size:obj:axis")
+    x.add_argument("--hypothesis", required=True)
+    x.add_argument("--max-evals", type=int, default=120)
+    x = rs.add_parser("submit")
+    x.add_argument("run_dir")
+    x.add_argument("proposal", help="JSON file")
+    x = rs.add_parser("history")
+    x.add_argument("run_dir")
+    x.add_argument("--last", type=int, default=20)
+    x = rs.add_parser("rollback")
+    x.add_argument("run_dir")
+    x.add_argument("revision", type=int)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -18,6 +18,7 @@ Research / non-commercial project: reconstruct reference video as an editable Bl
 - Control videos for V2V: `scene/passes.py` (depth/index via emission override + EXR, shaded pass) -> `control/core.py` (numpy/cv2/ffmpeg). H3 constraints: 24 fps, W/H multiples of 32, 17n+5 frames.
 - Phase 1a: `scripts/make_phase1a_scenes.py`, `evaluation/phase1a/`, GPU side in `gpu/h3_control/` (runs in the VideoX-Fun env, not vrecon).
 - Scoring: `metrics/` (pure numpy) + `evaluate.py`. Synthetic GT clips: `scripts/make_synthetic_clips.py` -> `evaluation/synthetic/` (gt.json/gt_passes are evaluation-only, never inputs to reconstruction). Baseline B kit: `baselines/b_llm_mcp/` (needs GUI Blender; not runnable in cloud).
+- Repair loop: `run/manager.py` (proposals, constraints, accept rule, atomic adoption), `optimize/` (silhouette loss via fast hull raster, pattern search), `run/service.py` shared by `vrecon run ...` and `mcp_server.py` (mcp 2.x `MCPServer`). Masks are a GT stand-in until a segmenter is integrated.
 - Read-back design: baseline = readout of the saved .blend at handoff (`scene/readback.py`), diff in pure Python (`scene/ingest.py`).
 
 ## Rules
