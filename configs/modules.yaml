@@ -3,5 +3,6 @@
 core_llm:      { impl: claude, enabled: true }
 analysis:      { impl: opencv_basic, enabled: true }
 scene_builder: { impl: blender_bpy, enabled: true }
-generator:     { impl: wan_fun_control, enabled: false }   # runs on GPU machine (pattern A)
+generator:     { impl: minimax_h3_fun_controlnet_union_2, enabled: false }   # PLAN.md 9.1; runs on a rented GPU (pattern A)
+generator_direct: { impl: fasth3_omni, enabled: false }   # condition A candidate (PLAN.md 9.1)
 compare:       { impl: basic_metrics, enabled: true }
