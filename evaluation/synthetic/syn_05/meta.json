@@ -1,0 +1,29 @@
+{
+  "id": "syn_05",
+  "seed": 5,
+  "camera_motion": "orbit",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "events": [
+    {
+      "object": "obj_01",
+      "onset_frame": 13,
+      "end_frame": 40
+    },
+    {
+      "object": "obj_02",
+      "onset_frame": 14,
+      "end_frame": 49
+    },
+    {
+      "object": "obj_03",
+      "onset_frame": 6,
+      "end_frame": 43
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json or gt_passes/"
+}

@@ -196,3 +196,9 @@ def test_score_blend_wrong_aspect_is_refused(reference, tmp_path):
     bpy.ops.wm.save_mainfile()
     with pytest.raises(ValueError, match="aspect"):
         score_blend(reference, blend)
+
+
+def test_onset_definition_matches_keyframe():
+    gt = gt_project()  # obj_a's starting key is at frame 4
+    assert onset_frame(gt, "obj_a", "shot_001") == 4
+    assert onset_frame(gt, "obj_b", "shot_001") is None  # never moves

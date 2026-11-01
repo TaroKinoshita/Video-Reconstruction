@@ -21,10 +21,13 @@ smoke test. Safe to rerun. Tests: `.venv/bin/python -m pytest`.
 ## Usage (phase 0)
 
 ```bash
+.venv/bin/vrecon new     clip.mp4 --out myproj                 # import a video, detect shots
 .venv/bin/vrecon build   project.json --blend out/scene.blend --render-dir out/frames --frames 0,12
 .venv/bin/vrecon handoff project.json --out out/handoff      # then edit out/handoff/scene.blend in Blender
 .venv/bin/vrecon ingest  project.json --handoff out/handoff/handoff.json [--dry-run]
 .venv/bin/vrecon control project.json --out out/controls       # depth / canny control videos for V2V
+.venv/bin/vrecon score   evaluation/synthetic/syn_01 project.json   # score against a ground-truth clip
+.venv/bin/vrecon score-blend evaluation/synthetic/syn_01 scene.blend  # score any .blend (e.g. from an LLM)
 ```
 
 `ingest` imports transforms of objects with a `vrecon_id`, camera settings and their keyframes,
@@ -33,3 +36,5 @@ records them as human edits, and bumps the project revision. Other edits are rep
 ## Status
 Phase 0 done. Phase 1a in progress: test scenes and control videos in `evaluation/phase1a/`,
 GPU generation with MiniMax-H3 + Fun ControlNet Union 2.0 in `gpu/h3_control/` (see its README).
+Phase 1b prep: synthetic ground-truth clips (`evaluation/synthetic/`), scoring tools, baseline B kit
+(`baselines/b_llm_mcp/`).

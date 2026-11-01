@@ -1,0 +1,19 @@
+{
+  "id": "syn_03",
+  "seed": 3,
+  "camera_motion": "dolly",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "events": [
+    {
+      "object": "obj_01",
+      "onset_frame": 14,
+      "end_frame": 52
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json or gt_passes/"
+}

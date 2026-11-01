@@ -1,0 +1,24 @@
+{
+  "id": "syn_06",
+  "seed": 6,
+  "camera_motion": "handheld",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "events": [
+    {
+      "object": "obj_01",
+      "onset_frame": 17,
+      "end_frame": 61
+    },
+    {
+      "object": "obj_02",
+      "onset_frame": 23,
+      "end_frame": 69
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json or gt_passes/"
+}

@@ -21,3 +21,6 @@ evaluation/phase1a/controls/*/preview/
 # GPU machine
 third_party/
 models/
+# synthetic ground-truth clips: video, gt.json, meta.json are small and shared; passes are regenerated
+!evaluation/synthetic/*/video.mp4
+evaluation/synthetic/*/gt_passes/

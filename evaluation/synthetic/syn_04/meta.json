@@ -1,0 +1,24 @@
+{
+  "id": "syn_04",
+  "seed": 4,
+  "camera_motion": "truck",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "events": [
+    {
+      "object": "obj_01",
+      "onset_frame": 30,
+      "end_frame": 55
+    },
+    {
+      "object": "obj_02",
+      "onset_frame": 14,
+      "end_frame": 55
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json or gt_passes/"
+}

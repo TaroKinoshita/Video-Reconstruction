@@ -218,7 +218,11 @@ def anchored_reprojection_error(gt: Project, rec: Project, shot_id: str, gt_dept
 
 
 def onset_frame(project: Project, obj_id: str, shot_id: str, eps: float = 0.01) -> int | None:
-    """First shot frame where the object has moved more than eps (m) or turned more than ~0.6 deg."""
+    """Motion onset: the last shot frame at the starting pose, i.e. the frame where the motion begins.
+
+    Same definition as the synthetic clips' meta.json (the frame of the starting keyframe). Movement
+    means more than eps (m) of translation or ~0.6 deg of rotation from frame 0.
+    """
     obj = next((o for o in project.reconstruction.objects if o.id == obj_id), None)
     shot = next(s for s in project.shots if s.id == shot_id)
     if obj is None:
@@ -227,7 +231,7 @@ def onset_frame(project: Project, obj_id: str, shot_id: str, eps: float = 0.01) 
     for f in range(shot.end - shot.start):
         r, t, _ = object_pose(project, obj, shot_id, f)
         if np.linalg.norm(t - t0) > eps or _rot_angle_deg(r0.T @ r) > 0.6:
-            return f
+            return max(f - 1, 0)
     return None
 
 
