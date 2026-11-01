@@ -4,6 +4,7 @@
     vrecon handoff PROJECT [--shot S] --out DIR
     vrecon ingest  PROJECT --handoff DIR/handoff.json [--blend EDITED.blend] [--dry-run]
     vrecon control PROJECT [--shot S] --out DIR [--kinds depth,canny] [--depth-mode clip|frame]
+    vrecon new     VIDEO --out DIR [--id proj_x] [--threshold 27] [--no-shots]
 """
 
 from __future__ import annotations
@@ -82,6 +83,18 @@ def _cmd_control(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_new(args: argparse.Namespace) -> int:
+    from vrecon.video import new_project
+
+    p = new_project(args.video, args.out, args.id, shots=not args.no_shots, threshold=args.threshold)
+    src = p.source
+    print(f"created {args.out}/project.json ({p.id})")
+    print(f"  video: {src.width}x{src.height}, {src.fps.num}/{src.fps.den} fps, {src.frame_count} frames")
+    for s in p.shots:
+        print(f"  {s.id}: frames {s.start}-{s.end - 1} ({s.end - s.start} frames)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="vrecon")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -118,6 +131,14 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--no-preview", action="store_true")
     c.add_argument("--strict", action="store_true", help="fail if the shot does not fit H3 constraints")
     c.set_defaults(func=_cmd_control)
+
+    n = sub.add_parser("new", help="create a project from a reference video (with shot detection)")
+    n.add_argument("video")
+    n.add_argument("--out", required=True)
+    n.add_argument("--id")
+    n.add_argument("--threshold", type=float, default=27.0, help="PySceneDetect content threshold")
+    n.add_argument("--no-shots", action="store_true", help="treat the whole video as one shot")
+    n.set_defaults(func=_cmd_new)
 
     args = parser.parse_args(argv)
     return args.func(args)
