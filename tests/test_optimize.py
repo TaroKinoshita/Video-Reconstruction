@@ -84,3 +84,16 @@ def test_service_cli_and_mcp_tools(reference, tmp_path):  # noqa: F811
     assert {"run_state", "run_diagnose", "run_optimize", "run_submit", "run_history", "run_rollback"} <= names
     res = asyncio.run(server.call_tool("run_state", {"run_dir": rd}))
     assert "revision" in json.dumps(res, default=str)
+
+
+def test_time_search_fixes_late_onset(reference):  # noqa: F811
+    obs = gt_stand_in_masks(reference)
+    p = gt_project()
+    a = next(o for o in p.reconstruction.objects if o.id == "obj_a")
+    a.keys = [k.model_copy(update={"time": k.time + 4 / 24}) for k in a.keys]  # 4 frames late
+    from vrecon.run import apply_changes
+
+    prop, info = optimize(p, obs, PAIRS, [Param("time", "obj_a", step=4.0)], "obj_a starts late", "t1", max_evals=40)
+    assert info["loss_after"] < info["loss_before"]
+    fixed = apply_changes(p, prop.changes)
+    assert abs(score(reference, fixed)["timing"]["obj_a"]["error_frames"]) <= 1

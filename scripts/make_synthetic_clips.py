@@ -159,11 +159,22 @@ def main() -> int:
     ap.add_argument("--out", default="evaluation/synthetic")
     ap.add_argument("--only", nargs="*")
     ap.add_argument("--samples", type=int, default=16)
+    ap.add_argument("--passes-only", action="store_true",
+                    help="only (re)render missing gt_passes from the committed gt.json (fast; for new sessions)")
     args = ap.parse_args()
     for spec in SPECS:
         if args.only and spec["id"] not in args.only:
             continue
-        render_clip(spec, Path(args.out) / spec["id"], args.samples)
+        out = Path(args.out) / spec["id"]
+        if args.passes_only:
+            if not (out / "gt_passes" / "index.npz").is_file():
+                from vrecon.schema import load_project
+
+                build_scene(load_project(out / "gt.json"))
+                render_passes(out / "gt_passes", shaded=False)
+                print(f"{spec['id']}: passes rendered", flush=True)
+            continue
+        render_clip(spec, out, args.samples)
     return 0
 
 

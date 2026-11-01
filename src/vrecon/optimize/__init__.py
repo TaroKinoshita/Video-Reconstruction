@@ -111,7 +111,8 @@ def silhouette_metrics(project: Project, obs: MaskObservation, pairs: dict[str, 
 @dataclass
 class Param:
     """kind: 'translation' (offset added to an object's rest and all keys, along axis 0-2),
-    'size' (object size along axis), 'focal' (multiplier on all of a camera's focal lengths)."""
+    'size' (object size along axis), 'focal' (multiplier on all of a camera's focal lengths),
+    'time' (shift of all of an animated object's key times, in frames)."""
 
     kind: str
     target_id: str
@@ -143,6 +144,13 @@ def apply_params(project: Project, params: list[Param], x: np.ndarray) -> tuple[
             sz[prm.axis] = max(sz[prm.axis] + float(v), 0.01)
             o.size = tuple(sz)
             touched[(o.id, "size")] = o.size
+        elif prm.kind == "time":
+            o = objs[prm.target_id]
+            if not o.keys:
+                raise ValueError(f"{o.id} is not animated; 'time' needs keys")
+            dt = float(v) * p.source.fps.den / p.source.fps.num
+            o.keys = [k.model_copy(update={"time": k.time + dt}) for k in o.keys]
+            touched[(o.id, "keys")] = o.keys
         elif prm.kind == "focal":
             c = cams[prm.target_id]
             m = max(1.0 + float(v), 0.05)

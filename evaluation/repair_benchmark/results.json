@@ -1,0 +1,774 @@
+{
+  "settings": {
+    "synthetic": "evaluation/synthetic",
+    "clips": null,
+    "passes": 2,
+    "evals": 60,
+    "out": "evaluation/repair_benchmark"
+  },
+  "results": [
+    {
+      "clip": "syn_01",
+      "pairs": {
+        "obj_01": "obj_01"
+      },
+      "injected": {
+        "focal_multiplier": 0.8430796125177787,
+        "obj_01": {
+          "dx": 0.3022650611681835,
+          "dy": -0.43689317811229067,
+          "size": [
+            0.7001968419691265,
+            0.9926496952598975,
+            0.6441602569892847
+          ],
+          "time_frames": 3
+        }
+      },
+      "before": {
+        "camera_focal_rel_mean": 0.15692038748222117,
+        "reprojection_error_mean": 0.01518707620574286,
+        "mask_iou_mean": 0.644143390791185,
+        "timing_abs_error_frames_mean": 3.0
+      },
+      "after": {
+        "camera_focal_rel_mean": 0.0736168765500446,
+        "reprojection_error_mean": 0.0079813733099859,
+        "mask_iou_mean": 0.8563746229772714,
+        "timing_abs_error_frames_mean": 2.0
+      },
+      "silhouette_loss": [
+        0.34617401607272,
+        0.13723036414705392
+      ],
+      "accepted": 7,
+      "tried": 8,
+      "seconds": 13.5,
+      "outcomes": [
+        {
+          "pass": 0,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.30768006367943324
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.2638220147764454
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.1841911416502181
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "rejected",
+          "loss": 0.1841911416502181
+        },
+        {
+          "pass": 1,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.17936888976947973
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.15169585529062668
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.14025557238530284
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.13723036414705392
+        }
+      ]
+    },
+    {
+      "clip": "syn_02",
+      "pairs": {
+        "obj_01": "obj_01",
+        "obj_02": "obj_02"
+      },
+      "injected": {
+        "focal_multiplier": 0.8908415212594927,
+        "obj_01": {
+          "dx": -0.1389425260163928,
+          "dy": -0.3309163843395563,
+          "size": [
+            1.1482707615612677,
+            0.526054607793871,
+            0.4126018138833642
+          ],
+          "time_frames": -6
+        },
+        "obj_02": {
+          "dx": -0.4642655582636296,
+          "dy": 0.18124618499266254,
+          "size": [
+            0.9732128070807814,
+            0.5361581789697462,
+            0.9820190325580475
+          ],
+          "time_frames": 6
+        }
+      },
+      "before": {
+        "camera_focal_rel_mean": 0.10915847874050724,
+        "reprojection_error_mean": 0.07198686241635938,
+        "mask_iou_mean": 0.28537878623552504,
+        "timing_abs_error_frames_mean": 6.0
+      },
+      "after": {
+        "camera_focal_rel_mean": 0.04556422561153362,
+        "reprojection_error_mean": 0.021023213412394895,
+        "mask_iou_mean": 0.7177490230009483,
+        "timing_abs_error_frames_mean": 3.0
+      },
+      "silhouette_loss": [
+        0.7081247727569518,
+        0.2773100528137108
+      ],
+      "accepted": 14,
+      "tried": 14,
+      "seconds": 45.0,
+      "outcomes": [
+        {
+          "pass": 0,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.6947239966139015
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.635083200304529
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.6328796506281293
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.5867258545388614
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.35778184246186423
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 has the wrong size",
+          "status": "accepted",
+          "loss": 0.33294215661751586
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.33262236690868163
+        },
+        {
+          "pass": 1,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.3313173314404761
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.29990261735864726
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.2924369902133129
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.286605789559144
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.28047736583779753
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 has the wrong size",
+          "status": "accepted",
+          "loss": 0.27809499284638406
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.2773100528137108
+        }
+      ]
+    },
+    {
+      "clip": "syn_03",
+      "pairs": {
+        "obj_01": "obj_01"
+      },
+      "injected": {
+        "focal_multiplier": 0.8407359089372834,
+        "obj_01": {
+          "dx": -0.36957720391485727,
+          "dy": 0.4159448117309811,
+          "size": [
+            0.7152268874153958,
+            0.6521457928521953,
+            1.0675281292201222
+          ],
+          "time_frames": 4
+        }
+      },
+      "before": {
+        "camera_focal_rel_mean": 0.15926409106271652,
+        "reprojection_error_mean": 0.03721053577489467,
+        "mask_iou_mean": 0.3567756498258679,
+        "timing_abs_error_frames_mean": 4.0
+      },
+      "after": {
+        "camera_focal_rel_mean": 0.0820871619219893,
+        "reprojection_error_mean": 0.00872854730676217,
+        "mask_iou_mean": 0.7959094809667177,
+        "timing_abs_error_frames_mean": 2.0
+      },
+      "silhouette_loss": [
+        0.6230742367103872,
+        0.1720856824309459
+      ],
+      "accepted": 8,
+      "tried": 8,
+      "seconds": 12.5,
+      "outcomes": [
+        {
+          "pass": 0,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.5955007219041555
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.28390624553683164
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.26172153770300144
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.21891088122910574
+        },
+        {
+          "pass": 1,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.21262265788049817
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.1914228365288021
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.17738964730770024
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.1720856824309459
+        }
+      ]
+    },
+    {
+      "clip": "syn_04",
+      "pairs": {
+        "obj_01": "obj_01",
+        "obj_02": "obj_02"
+      },
+      "injected": {
+        "focal_multiplier": 0.8696701414114489,
+        "obj_01": {
+          "dx": 0.22121690508766645,
+          "dy": -0.02112160507610239,
+          "size": [
+            0.34830009553608615,
+            0.453926136441499,
+            0.5714222645609347
+          ],
+          "time_frames": 2
+        },
+        "obj_02": {
+          "dx": -0.27807182430968236,
+          "dy": 0.03668000817481354,
+          "size": [
+            0.6252658534632048,
+            0.4548445774947475,
+            0.437349613606722
+          ],
+          "time_frames": -2
+        }
+      },
+      "before": {
+        "camera_focal_rel_mean": 0.13032985858855106,
+        "reprojection_error_mean": 0.026979350978776025,
+        "mask_iou_mean": 0.2805102474753728,
+        "timing_abs_error_frames_mean": 2.0
+      },
+      "after": {
+        "camera_focal_rel_mean": 0.13872434141061615,
+        "reprojection_error_mean": 0.01936686603948689,
+        "mask_iou_mean": 0.5205848803864193,
+        "timing_abs_error_frames_mean": 2.0
+      },
+      "silhouette_loss": [
+        0.7048140522104365,
+        0.4475211107090846
+      ],
+      "accepted": 11,
+      "tried": 14,
+      "seconds": 38.4,
+      "outcomes": [
+        {
+          "pass": 0,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.5659775439442328
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.5317879870761946
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.4992821874217942
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.49845375011712506
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.4727393339964634
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 has the wrong size",
+          "status": "accepted",
+          "loss": 0.4530101940433931
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.4526543429078757
+        },
+        {
+          "pass": 1,
+          "hypothesis": "camera focal length is off",
+          "status": "rejected",
+          "loss": 0.4526543429078757
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.45250055285469076
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.4499494533681287
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.449664372571957
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.4475211107090846
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 has the wrong size",
+          "status": "rejected",
+          "loss": 0.4475211107090846
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 moves at the wrong time",
+          "status": "rejected",
+          "loss": 0.4475211107090846
+        }
+      ]
+    },
+    {
+      "clip": "syn_05",
+      "pairs": {
+        "obj_01": "obj_01",
+        "obj_02": "obj_02",
+        "obj_03": "obj_03"
+      },
+      "injected": {
+        "focal_multiplier": 1.174178698926073,
+        "obj_01": {
+          "dx": 0.29519356556569665,
+          "dy": 0.4424502837770503,
+          "size": [
+            0.9667111624283593,
+            1.09937298171244,
+            0.9630780448081491
+          ],
+          "time_frames": 3
+        },
+        "obj_02": {
+          "dx": 0.1489745531369242,
+          "dy": 0.4009004917506227,
+          "size": [
+            0.35932954922697286,
+            0.6687948493076438,
+            0.5482573597343406
+          ],
+          "time_frames": -6
+        },
+        "obj_03": {
+          "dx": -0.2506692855573134,
+          "dy": 0.23118371677942418,
+          "size": [
+            0.8120723372033003,
+            0.40119354394349793,
+            1.4610885209381186
+          ],
+          "time_frames": 3
+        }
+      },
+      "before": {
+        "camera_focal_rel_mean": 0.17417869892607302,
+        "reprojection_error_mean": 0.03689509317650281,
+        "mask_iou_mean": 0.37639202692524926,
+        "timing_abs_error_frames_mean": 4.0
+      },
+      "after": {
+        "camera_focal_rel_mean": 0.016625339649413897,
+        "reprojection_error_mean": 0.010310642564893696,
+        "mask_iou_mean": 0.764358712298125,
+        "timing_abs_error_frames_mean": 2.0
+      },
+      "silhouette_loss": [
+        0.6408787109696212,
+        0.20594037336567947
+      ],
+      "accepted": 17,
+      "tried": 20,
+      "seconds": 87.6,
+      "outcomes": [
+        {
+          "pass": 0,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.5849531454870972
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.5497646093622273
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.48799737321395126
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "rejected",
+          "loss": 0.48798570145957454
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.4188226490559615
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 has the wrong size",
+          "status": "accepted",
+          "loss": 0.4122929866409293
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.3804799235964194
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_03 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.28776492254055236
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_03 has the wrong size",
+          "status": "accepted",
+          "loss": 0.2421101862596562
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_03 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.23781338507559335
+        },
+        {
+          "pass": 1,
+          "hypothesis": "camera focal length is off",
+          "status": "rejected",
+          "loss": 0.23781338507559335
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.22976719427865291
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.2295969872840881
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.22859324894962108
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.22283537863385217
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 has the wrong size",
+          "status": "accepted",
+          "loss": 0.22014406798995614
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 moves at the wrong time",
+          "status": "rejected",
+          "loss": 0.22014406798995614
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_03 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.21107938845617713
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_03 has the wrong size",
+          "status": "accepted",
+          "loss": 0.20719516295951404
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_03 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.20594037336567947
+        }
+      ]
+    },
+    {
+      "clip": "syn_06",
+      "pairs": {
+        "obj_01": "obj_01",
+        "obj_02": "obj_02"
+      },
+      "injected": {
+        "focal_multiplier": 0.8514965372069054,
+        "obj_01": {
+          "dx": -0.23837851705534208,
+          "dy": -0.499548285114929,
+          "size": [
+            0.9804274558176608,
+            0.6786878209254145,
+            0.7647275037204333
+          ],
+          "time_frames": 4
+        },
+        "obj_02": {
+          "dx": 0.2701398359379902,
+          "dy": -0.22730191432802926,
+          "size": [
+            0.6657180061077486,
+            1.0026552827369914,
+            1.0715302376918263
+          ],
+          "time_frames": -3
+        }
+      },
+      "before": {
+        "camera_focal_rel_mean": 0.14850346279309454,
+        "reprojection_error_mean": 0.03757222175388868,
+        "mask_iou_mean": 0.565147407441733,
+        "timing_abs_error_frames_mean": 3.5
+      },
+      "after": {
+        "camera_focal_rel_mean": 0.14317329403968024,
+        "reprojection_error_mean": 0.015369623023064048,
+        "mask_iou_mean": 0.7895928822261074,
+        "timing_abs_error_frames_mean": 2.5
+      },
+      "silhouette_loss": [
+        0.43710156904208475,
+        0.20653805359118405
+      ],
+      "accepted": 13,
+      "tried": 14,
+      "seconds": 42.4,
+      "outcomes": [
+        {
+          "pass": 0,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.43636191270142854
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.2706699920312974
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.2678195053655902
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.25980163670525735
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.24604045703365507
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 has the wrong size",
+          "status": "accepted",
+          "loss": 0.22334092611602324
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.22089247557726488
+        },
+        {
+          "pass": 1,
+          "hypothesis": "camera focal length is off",
+          "status": "accepted",
+          "loss": 0.22063966534407897
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.21634235325953877
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.21532052869497226
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 moves at the wrong time",
+          "status": "accepted",
+          "loss": 0.2143469944031794
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 misplaced on the floor",
+          "status": "accepted",
+          "loss": 0.20775130263972552
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 has the wrong size",
+          "status": "accepted",
+          "loss": 0.20653805359118405
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 moves at the wrong time",
+          "status": "rejected",
+          "loss": 0.20646501353283836
+        }
+      ]
+    }
+  ]
+}
