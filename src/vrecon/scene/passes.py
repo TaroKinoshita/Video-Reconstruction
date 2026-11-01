@@ -24,7 +24,6 @@ import bpy
 import numpy as np
 
 from .builder import ID_PROP
-from .convert import shot_frame_to_blender
 
 
 @dataclass
@@ -52,8 +51,7 @@ def _assign_pass_indices() -> dict[int, str]:
 
 def _data_material() -> bpy.types.Material:
     mat = bpy.data.materials.get("vrecon_data") or bpy.data.materials.new("vrecon_data")
-    mat.use_nodes = True
-    nt = mat.node_tree
+    nt = mat.node_tree  # Blender 5 materials always have a node tree
     nt.nodes.clear()
     cam = nt.nodes.new("ShaderNodeCameraData")
     info = nt.nodes.new("ShaderNodeObjectInfo")
@@ -89,8 +87,11 @@ def _setup_data_render(scene) -> dict:
     scene.view_settings.view_transform = "Standard"
     scene.view_settings.look = "None"
     world = bpy.data.worlds.get("vrecon_black") or bpy.data.worlds.new("vrecon_black")
-    world.use_nodes = False
     world.color = (0.0, 0.0, 0.0)
+    bg = world.node_tree.nodes.get("Background") if world.node_tree else None
+    if bg is not None:
+        bg.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+        bg.inputs["Strength"].default_value = 0.0
     scene.world = world
     scene.view_layers[0].material_override = _data_material()
     s = scene.render.image_settings
@@ -135,7 +136,7 @@ def render_passes(out_dir: str | Path, shot_frames: list[int] | None = None, sha
     with tempfile.TemporaryDirectory() as tmp:
         exr = Path(tmp) / "data.exr"
         for i, f in enumerate(shot_frames):
-            scene.frame_set(int(shot_frame_to_blender(f)))
+            scene.frame_set(scene.frame_start + int(f))
             scene.render.filepath = str(exr)
             bpy.ops.render.render(write_still=True)
             px = _read_exr(exr)
@@ -171,7 +172,7 @@ def _render_shaded(scene, out_dir: Path, shot_frames: list[int]) -> None:
     s.color_depth = "8"
     scene.view_settings.view_transform = "Standard"
     for f in shot_frames:
-        scene.frame_set(int(shot_frame_to_blender(f)))
+        scene.frame_set(scene.frame_start + int(f))
         scene.render.filepath = str(out_dir / f"frame_{f:06d}.png")
         bpy.ops.render.render(write_still=True)
     scene.render.engine = prev_engine
