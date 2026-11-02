@@ -33,6 +33,14 @@
       "group": "extra"
     },
     {
+      "id": "base__gray",
+      "scene": "base",
+      "control": "controls/base/control_gray.mp4",
+      "control_kind": "gray",
+      "prompt": "A small red cube slides slowly across a light wooden floor in a quiet, minimalist room. Behind it is a plain white wall. A gray concrete pillar stands on the left and a wooden crate sits on the right. Soft, even daylight. Realistic, sharp, natural colors.",
+      "group": "extra"
+    },
+    {
       "id": "edit_camera__depth",
       "scene": "edit_camera",
       "control": "controls/edit_camera/control_depth.mp4",
@@ -45,6 +53,14 @@
       "scene": "edit_camera",
       "control": "controls/edit_camera/control_canny.mp4",
       "control_kind": "canny",
+      "prompt": "A small red cube slides slowly across a light wooden floor in a quiet, minimalist room. Behind it is a plain white wall. A gray concrete pillar stands on the left and a wooden crate sits on the right. Soft, even daylight. Realistic, sharp, natural colors.",
+      "group": "extra"
+    },
+    {
+      "id": "edit_camera__gray",
+      "scene": "edit_camera",
+      "control": "controls/edit_camera/control_gray.mp4",
+      "control_kind": "gray",
       "prompt": "A small red cube slides slowly across a light wooden floor in a quiet, minimalist room. Behind it is a plain white wall. A gray concrete pillar stands on the left and a wooden crate sits on the right. Soft, even daylight. Realistic, sharp, natural colors.",
       "group": "extra"
     },
@@ -65,6 +81,14 @@
       "group": "extra"
     },
     {
+      "id": "edit_object__gray",
+      "scene": "edit_object",
+      "control": "controls/edit_object/control_gray.mp4",
+      "control_kind": "gray",
+      "prompt": "A tall, narrow red block slides slowly across a light wooden floor in a quiet, minimalist room. Behind it is a plain white wall. A gray concrete pillar stands on the left and a wooden crate sits on the right. Soft, even daylight. Realistic, sharp, natural colors.",
+      "group": "extra"
+    },
+    {
       "id": "edit_timing__depth",
       "scene": "edit_timing",
       "control": "controls/edit_timing/control_depth.mp4",
@@ -77,6 +101,14 @@
       "scene": "edit_timing",
       "control": "controls/edit_timing/control_canny.mp4",
       "control_kind": "canny",
+      "prompt": "A small red cube slides slowly across a light wooden floor in a quiet, minimalist room. Behind it is a plain white wall. A gray concrete pillar stands on the left and a wooden crate sits on the right. Soft, even daylight. Realistic, sharp, natural colors.",
+      "group": "extra"
+    },
+    {
+      "id": "edit_timing__gray",
+      "scene": "edit_timing",
+      "control": "controls/edit_timing/control_gray.mp4",
+      "control_kind": "gray",
       "prompt": "A small red cube slides slowly across a light wooden floor in a quiet, minimalist room. Behind it is a plain white wall. A gray concrete pillar stands on the left and a wooden crate sits on the right. Soft, even daylight. Realistic, sharp, natural colors.",
       "group": "extra"
     }

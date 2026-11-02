@@ -51,7 +51,7 @@ python gpu/h3_control/run_jobs.py --jobs evaluation/phase1a/jobs.json --out runs
 ```
 
 - 標準は `main` グループ：4シーン（基準＋編集3つ）× 奥行き × シード3つ ＝ **12本**。
-- 輪郭（canny）の分も回すなら `--group extra`、全部なら `--group ""`。
+- 輪郭（canny）とグレー（箱の描画、計画書16.4）の分も回すなら `--group extra`、全部なら `--group ""`。
 - 1本だけ試すなら：`--only base__depth --seeds 43`
 - 途中で止まっても、もう一度実行すれば終わった分は飛ばして続きから回る。
 - 1本ごとに `video.mp4`（音声つき。H3は音も生成する）、`sheet.jpg`（最初・真ん中・最後のフレーム）、`meta.json`（設定、シード、かかった時間、GPUメモリの最大値、環境）を保存する。

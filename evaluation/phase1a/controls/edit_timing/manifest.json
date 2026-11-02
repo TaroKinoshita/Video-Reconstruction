@@ -27,6 +27,13 @@
         "low": 100,
         "high": 200
       }
+    },
+    "gray": {
+      "path": "control_gray.mp4",
+      "sha256": "cf09c301ea8d031e9b2dd75fed4f0921a40e13eb4fb7660924976fdb159f8f4a",
+      "params": {
+        "source": "workbench shaded pass"
+      }
     }
   },
   "passes": {
@@ -40,10 +47,6 @@
       "5": "obj_wall"
     }
   },
-  "previews": [
-    "preview/frame_000000.png",
-    "preview/frame_000062.png",
-    "preview/frame_000123.png"
-  ],
+  "previews": [],
   "warnings": []
 }

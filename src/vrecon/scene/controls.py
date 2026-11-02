@@ -53,7 +53,7 @@ def export_controls(
     if problems and strict_h3:
         raise ValueError("scene does not fit H3 constraints:\n  - " + "\n  - ".join(problems))
 
-    passes = render_passes(out / "passes", shaded="canny" in kinds)
+    passes = render_passes(out / "passes", shaded=bool({"canny", "gray"} & set(kinds)))
     files: dict[str, dict] = {}
     if "depth" in kinds:
         depth = np.load(out / "passes" / "depth.npz")["depth"]
@@ -65,6 +65,13 @@ def export_controls(
         frames, info = canny_control(load_frames(shaded))
         path = encode_mp4(frames, out / "control_canny.mp4", fps=FPS)
         files["canny"] = {"path": path.name, "sha256": _sha256(path), "params": info}
+
+    if "gray" in kinds:  # the shaded proxy render itself, as a grayscale control (rendered-proxy conditioning)
+        shaded = sorted((out / "passes" / "shaded").glob("frame_*.png"))
+        rgb = load_frames(shaded)
+        gray = (0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]).round().astype(np.uint8)
+        path = encode_mp4(np.repeat(gray[..., None], 3, axis=-1), out / "control_gray.mp4", fps=FPS)
+        files["gray"] = {"path": path.name, "sha256": _sha256(path), "params": {"source": "workbench shaded pass"}}
 
     previews = []
     if preview:

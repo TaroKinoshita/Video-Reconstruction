@@ -178,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("project")
     c.add_argument("--shot")
     c.add_argument("--out", required=True)
-    c.add_argument("--kinds", default="depth,canny")
+    c.add_argument("--kinds", default="depth,canny,gray")
     c.add_argument("--depth-mode", choices=["clip", "frame"], default="clip")
     c.add_argument("--no-preview", action="store_true")
     c.add_argument("--strict", action="store_true", help="fail if the shot does not fit H3 constraints")

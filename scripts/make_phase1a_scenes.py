@@ -180,7 +180,7 @@ def main() -> int:
             {"id": f"{name}__{kind}", "scene": name, "control": f"controls/{name}/control_{kind}.mp4",
              "control_kind": kind, "prompt": prompts[name], "group": "main" if kind == "depth" else "extra"}
             for name in scenes
-            for kind in ("depth", "canny")
+            for kind in ("depth", "canny", "gray")
         ],
     }
     (out / "jobs.json").write_text(json.dumps(jobs, indent=2, ensure_ascii=False) + "\n")
