@@ -11,7 +11,8 @@ import json
 from pathlib import Path
 
 from vrecon.metrics import match_objects
-from vrecon.optimize import MaskObservation, Param, gt_stand_in_masks, optimize, render_silhouettes, silhouette_metrics
+from vrecon.optimize import (MaskObservation, Param, combined_loss, gt_stand_in_masks, optimize, render_silhouettes,
+                             silhouette_metrics)
 from vrecon.schema import load_project
 
 from .manager import AcceptRule, Proposal, RunManager
@@ -27,7 +28,9 @@ def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min
     if (rd / "config.json").exists():
         raise FileExistsError(f"{rd} already has a run")
     rd.mkdir(parents=True, exist_ok=True)
+    video = Path(masks) / "video.mp4"
     cfg = {"project": str(Path(project).resolve()), "masks": str(Path(masks).resolve()), "mask_source": "gt_stand_in",
+           "video": str(video.resolve()) if video.is_file() else None,
            "rule": {"primary": "silhouette_loss", "min_gain": min_gain}, "max_attempts": max_attempts}
     (rd / "config.json").write_text(json.dumps(cfg, indent=2) + "\n")
     return cfg
@@ -51,17 +54,31 @@ def auto_pairs(project, obs: MaskObservation, shot_id: str = "shot_001") -> dict
     return pairs
 
 
+def _tracks(cfg: dict):
+    if not cfg.get("video"):
+        return None
+    from vrecon.optimize.tracks import track_points
+
+    return track_points(cfg["video"])  # OpenCV LK on the reference video, about a second
+
+
 def _manager(run_dir: Path):
     cfg = _config(run_dir)
     obs = _observation(cfg)
+    tracks = _tracks(cfg)
     pairs_cache: dict = {}
 
     def evaluate(p):
         pairs = pairs_cache.setdefault("pairs", auto_pairs(p, obs))
-        return {"silhouette_loss": silhouette_metrics(p, obs, pairs)["silhouette_loss"]}
+        sets = sorted(o.id for o in p.reconstruction.objects if o.kind == "set")
+        set_pairs = {k: v for k, v in pairs.items() if v in sets}
+        return {"silhouette_loss": combined_loss(p, obs, pairs, tracks),
+                "camera_loss": combined_loss(p, obs, set_pairs, tracks, sets or None, use_silhouette=bool(set_pairs))}
 
     rule = AcceptRule(**cfg["rule"])
-    return RunManager(cfg["project"], run_dir, evaluate, rule, max_attempts=cfg["max_attempts"]), obs, pairs_cache
+    mgr = RunManager(cfg["project"], run_dir, evaluate, rule, max_attempts=cfg["max_attempts"])
+    mgr.tracks = tracks
+    return mgr, obs, pairs_cache
 
 
 def state(run_dir: str) -> dict:
@@ -82,8 +99,15 @@ def diagnose(run_dir: str) -> dict:
     pairs = auto_pairs(mgr.adopted, obs)
     m = silhouette_metrics(mgr.adopted, obs, pairs)
     m["pairs"] = pairs
+    if mgr.tracks is not None:
+        from vrecon.optimize.tracks import track_metrics
+
+        sets = [o.id for o in mgr.adopted.reconstruction.objects if o.kind == "set"]
+        m["tracks_all"] = track_metrics(mgr.adopted, mgr.tracks)
+        m["tracks_on_set"] = track_metrics(mgr.adopted, mgr.tracks, ids=sets or None)
     m["hint"] = ("offset_x > 0: reconstruction is right of the observation; offset_y > 0: lower. "
-                 "A shared offset/scale across all objects suggests the camera; one object alone suggests that object.")
+                 "A shared offset/scale across all objects suggests the camera; one object alone suggests that object. "
+                 "tracks_on_set high: suspect the camera (focal). Camera proposals are judged on camera evidence only.")
     return m
 
 
@@ -99,8 +123,16 @@ def run_optimizer(run_dir: str, params: list[str], hypothesis: str, max_evals: i
         parsed.append(Param(kind, target, axis, step))
     pairs = auto_pairs(mgr.adopted, obs)
     pid = f"opt_{mgr.attempts + 1:03d}"
-    prop, info = optimize(mgr.adopted, obs, pairs, parsed, hypothesis, pid, max_evals=max_evals)
-    out = mgr.try_proposal(prop)
+    camera_only = all(p.kind == "focal" for p in parsed)
+    if camera_only:  # judge camera hypotheses on camera evidence only: set outlines + tracks on the set
+        sets = sorted(o.id for o in mgr.adopted.reconstruction.objects if o.kind == "set")
+        set_pairs = {k: v for k, v in pairs.items() if v in sets}
+        prop, info = optimize(mgr.adopted, obs, set_pairs, parsed, hypothesis, pid, max_evals=max_evals,
+                              tracks=mgr.tracks, track_ids=sets or None, use_silhouette=bool(set_pairs))
+        out = mgr.try_proposal(prop, rule=AcceptRule(primary="camera_loss", min_gain=1e-4))
+    else:
+        prop, info = optimize(mgr.adopted, obs, pairs, parsed, hypothesis, pid, max_evals=max_evals, tracks=mgr.tracks)
+        out = mgr.try_proposal(prop)
     return {"outcome": out.model_dump(mode="json"), "search": info}
 
 

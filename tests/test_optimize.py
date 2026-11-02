@@ -97,3 +97,26 @@ def test_time_search_fixes_late_onset(reference):  # noqa: F811
     assert info["loss_after"] < info["loss_before"]
     fixed = apply_changes(p, prop.changes)
     assert abs(score(reference, fixed)["timing"]["obj_a"]["error_frames"]) <= 1
+
+
+def test_track_loss_sees_focal_error(tmp_path):
+    import subprocess
+
+    from test_metrics import gt_project as gtp
+    from vrecon.optimize.tracks import track_metrics, track_points
+    from vrecon.scene.builder import build_scene, render_frames
+    from vrecon.scene.look import apply_look
+    from vrecon.control.core import encode_mp4, load_frames
+
+    gt = gtp()  # camera trucks sideways
+    build_scene(gt)
+    apply_look(1)
+    frames = render_frames(tmp_path / "f", list(range(16)), engine="BLENDER_WORKBENCH")
+    encode_mp4(load_frames(frames), tmp_path / "v.mp4", crf=12)
+    tr = track_points(tmp_path / "v.mp4", reseed=4, span=12)
+    assert len(tr.xy) > 10 and tr.observation.provenance.tool == "opencv_lk"
+    good = track_metrics(gt, tr)["track_loss"]
+    wrong = gt.model_copy(deep=True)
+    cam = wrong.reconstruction.cameras[0]
+    cam.intrinsics = cam.intrinsics.model_copy(update={"fx": 180.0, "fy": 180.0})
+    assert track_metrics(wrong, tr)["track_loss"] > 2 * good

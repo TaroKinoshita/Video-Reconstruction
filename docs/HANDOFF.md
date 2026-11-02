@@ -1,4 +1,4 @@
-# 引き継ぎ資料（2026-11-02 時点）
+# 引き継ぎ資料（2026-11-02 更新）
 
 新しいセッション（ローカルの Claude Code など）は、まずこれを読む。詳しい方針は `docs/PLAN.md`（計画書、最優先）、
 設計は `docs/ARCHITECTURE.md`、座標などの取り決めは `docs/CONVENTIONS.md`。
@@ -27,11 +27,12 @@
 | 採点（IoU、カメラ、再投影、タイミング） | 完了 | `src/vrecon/metrics/`、`evaluate.py` |
 | 1b：基準点B（素のLLM＋blender-mcp）の実行キット | 書いたけど**未実行** | `baselines/b_llm_mcp/`（手順書あり） |
 | 実行管理（提案→制約→評価→採用） | 完了 | `src/vrecon/run/manager.py` |
-| 数値探し（画角、位置、大きさ、タイミング） | 動く。**課題あり** | `src/vrecon/optimize/` |
+| 数値探し（画角、位置、大きさ、タイミング） | 動く。画角は6本全部で回復。タイミングは2〜4フレーム残る | `src/vrecon/optimize/` |
+| 点の追跡（OpenCV Lucas-Kanade、重みなし）と、追跡点のズレの損失 | 完了 | `src/vrecon/optimize/tracks.py` |
 | CLI / MCPサーバー | 完了 | `src/vrecon/cli.py`、`src/vrecon/mcp_server.py` |
 | 修理ベンチマーク | 結果あり | `evaluation/repair_benchmark/`（`NOTES.md` に考察） |
 
-テストは80件、全部合格（`python -m pytest -q`）。
+テストは81件、全部合格（`python -m pytest -q`）。
 
 ## 3. 決まっていること（変えるなら計画書も直す）
 
@@ -44,21 +45,24 @@
 
 ## 4. 分かっている課題
 
-1. **参照映像の「物の領域」は、まだ正解マスクで代用してる。** 本物の分割ツール（SAM2など）と点の追跡（CoTrackerなど）が要る。
-   前のクラウド環境は Hugging Face に繋がらなかったので入れられなかった。ローカルなら入れられるはず。
-2. **画角の推定が、輪郭だけでは安定しない**（`evaluation/repair_benchmark/NOTES.md`）。物も含めて判断すると、物を動かして辻褄を合わせてしまう。
-   床・壁だけで判断すると、カメラが水平に近いとき手がかりが足りない。→ 点の追跡を観測に加えるのが次の一手（未検証）。
-3. **タイミングが2フレーム前後残る。** 一定速度の動きでは「遅れて動く」と「先にずらして置く」が見分けにくい。
+1. **参照映像の「物の領域」は、まだ正解マスクで代用してる。** 本物の分割ツール（SAM2など）が要る。
+   クラウド環境では `huggingface.co` と `download.pytorch.org` に繋がらなかった（2026-11-02 も同じ）。ローカルなら入れられるはず。
+   差し替える場所：`optimize/__init__.py` の `gt_stand_in_masks`（同じ形の `MaskObservation` を返せばいい）。
+2. ~~画角の推定が不安定~~ → **解決**（合成映像で）。点の追跡を足して、カメラの提案を「床・壁の輪郭と、床・壁に乗った点」だけで
+   判断・採用するようにした（`evaluation/repair_benchmark/NOTES.md`）。
+3. **タイミングが2〜4フレーム残る。** 一定速度の動きでは「遅れて動く」と「先にずらして置く」が見分けにくい。
 4. GPU側（`gpu/h3_control/run_jobs.py`）と基準点B（`baselines/b_llm_mcp/run_baseline.sh`）は、**まだ一度も実際に動かしてない**。最初は1本だけ試す。
 5. 本物のテスト映像（単一カット12本：開発用6本、検証用6本）がまだない。
+6. 修理の順番（画角 → 物ごとの位置 → 大きさ → タイミング）は、今は決め打ち。AIに選ばせる版（条件Cの本番）はまだ。
 
 ## 5. 次にやること（おすすめ順）
 
 1. ローカルで環境を作って、テストが通るのを確認する（下の手順）。
-2. **点の追跡と領域分割の道具を入れる**（課題1、2）。観測の提供元を `optimize/__init__.py` の `gt_stand_in_masks` と差し替える。
+2. **本物の領域分割（SAM2 など）を入れる**（課題1）。合成映像で、正解マスクの代用と同じくらい修理が効くか、ベンチマークで比べる。
 3. **基準点Bを1本回す**（`baselines/b_llm_mcp/README.md`。GUI版Blenderが要る）。
-4. **H3で1本だけ生成してみる**（`gpu/h3_control/README.md`。80GB級のGPUを借りる）。
-5. 本物のテスト映像を集める。
+4. **AIに仮説を選ばせる**：`vrecon-mcp` を Claude Code に繋いで、`run_diagnose` → 仮説 → `run_optimize` を回させる（課題6）。
+5. **H3で1本だけ生成してみる**（`gpu/h3_control/README.md`。80GB級のGPUを借りる）。
+6. 本物のテスト映像を集める。
 
 ## 6. ローカル環境の作り方
 
@@ -83,7 +87,7 @@ vrecon control project.json --out ctl/                    # V2V用の制御映�
 vrecon score evaluation/synthetic/syn_01 project.json     # 正解と比べて採点
 vrecon score-blend evaluation/synthetic/syn_01 scene.blend
 vrecon run init|state|diagnose|optimize|submit|history|rollback   # 修理ループ
-python scripts/repair_benchmark.py                        # 修理ベンチマーク（6本で約15分）
+python scripts/repair_benchmark.py                        # 修理ベンチマーク（6本で約15分、点の追跡つき）
 ```
 
 MCPで使う場合：`claude mcp add vrecon -- <repo>/.venv/bin/python -m vrecon.mcp_server`

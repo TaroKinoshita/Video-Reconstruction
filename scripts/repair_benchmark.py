@@ -20,7 +20,8 @@ import time
 from pathlib import Path
 
 from vrecon.evaluate import score
-from vrecon.optimize import Param, gt_stand_in_masks, optimize, silhouette_metrics
+from vrecon.optimize import Param, combined_loss, gt_stand_in_masks, optimize
+from vrecon.optimize.tracks import track_points
 from vrecon.run import AcceptRule, RunManager
 from vrecon.run.service import auto_pairs
 from vrecon.schema import Pose, load_project, save_project
@@ -54,8 +55,8 @@ def perturb(project, seed: int):
 
 
 def hypotheses(project):
-    # camera first, judged on set pieces only (floor, wall): misplaced objects must not pull the focal length
-    hs = [("camera focal length is off (judged on the set)", [Param("focal", "cam_001", step=0.1)], "set")]
+    # camera first, judged on point tracks pinned to set pieces only: misplaced objects must not pull the focal
+    hs = [("camera focal length is off (judged on the set: outlines + tracks)", [Param("focal", "cam_001", step=0.1)], "set")]
     for o in project.reconstruction.objects:
         if o.kind == "set":
             continue
@@ -85,8 +86,15 @@ def run_clip(clip: Path, out_root: Path, passes: int, evals: int) -> dict:
     pairs = auto_pairs(wrong, obs)
     set_ids = {o.id for o in wrong.reconstruction.objects if o.kind == "set"}
 
+    tracks = track_points(clip / "video.mp4")  # from the reference video itself (a real observation)
+
+    set_pairs = {k: v for k, v in pairs.items() if v in set_ids}
+
     def evaluate(p):
-        return {"silhouette_loss": silhouette_metrics(p, obs, pairs)["silhouette_loss"]}
+        return {"silhouette_loss": combined_loss(p, obs, pairs, tracks),  # silhouette + weighted track loss
+                "camera_loss": combined_loss(p, obs, set_pairs, tracks, sorted(set_ids), use_silhouette=bool(set_pairs))}
+
+    camera_rule = AcceptRule(primary="camera_loss", min_gain=1e-4)
 
     mgr = RunManager(run_dir / "project.json", run_dir / "run", evaluate, AcceptRule(primary="silhouette_loss",
                                                                                       min_gain=1e-4), max_attempts=60)
@@ -96,10 +104,13 @@ def run_clip(clip: Path, out_root: Path, passes: int, evals: int) -> dict:
     outcomes = []
     for n in range(passes):
         for i, (hyp, params, judged_on) in enumerate(hypotheses(mgr.adopted)):
-            sets = {k: v for k, v in pairs.items() if v in set_ids}
-            use = sets if judged_on == "set" and sets else pairs
-            prop, info = optimize(mgr.adopted, obs, use, params, hyp, f"p{n}_{i:02d}", max_evals=evals)
-            out = mgr.try_proposal(prop)
+            if judged_on == "set":
+                prop, info = optimize(mgr.adopted, obs, set_pairs, params, hyp, f"p{n}_{i:02d}", max_evals=evals,
+                                      tracks=tracks, track_ids=sorted(set_ids), use_silhouette=bool(set_pairs))
+            else:
+                prop, info = optimize(mgr.adopted, obs, pairs, params, hyp, f"p{n}_{i:02d}", max_evals=evals,
+                                      tracks=tracks)
+            out = mgr.try_proposal(prop, rule=camera_rule if judged_on == "set" else None)
             outcomes.append({"pass": n, "hypothesis": hyp, "status": out.status, "loss": info["loss_after"]})
     seconds = time.time() - start
     after = summarize(score(clip, mgr.adopted))
@@ -141,7 +152,7 @@ def main() -> int:
 
 def write(out: Path, args, results: list) -> None:
     (out / "results.json").write_text(json.dumps({"settings": vars(args), "results": results}, indent=2) + "\n")
-    rows = ["| clip | silhouette loss | focal error | reprojection error | mask IoU | timing error (frames) | accepted |",
+    rows = ["| clip | loss (silhouette + tracks) | focal error | reprojection error | mask IoU | timing error (frames) | accepted |",
             "|---|---|---|---|---|---|---|"]
     for r in results:
         b, a = r["before"], r["after"]
@@ -151,7 +162,8 @@ def write(out: Path, args, results: list) -> None:
                     f"| {fmt(b['mask_iou_mean'])} → {fmt(a['mask_iou_mean'])} "
                     f"| {fmt(b['timing_abs_error_frames_mean'])} → {fmt(a['timing_abs_error_frames_mean'])} "
                     f"| {r['accepted']}/{r['tried']} |")
-    note = ("Masks: ground-truth stand-in. Errors: injected (focal, floor position, size, timing). "
+    note = ("Masks: ground-truth stand-in. Point tracks: OpenCV Lucas-Kanade on the reference video. "
+            "Errors: injected (focal, floor position, size, timing). "
             "Fixed hypothesis order, no LLM. Tests the repair machinery only (PLAN.md 11.8).\n"
             "Reprojection error is a fraction of the image diagonal.\n\n")
     (out / "results.md").write_text("# Repair benchmark\n\n" + note + "\n".join(rows) + "\n")

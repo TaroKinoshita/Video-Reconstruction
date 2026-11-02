@@ -163,8 +163,13 @@ class RunManager:
             fh.write(json.dumps(rec) + "\n")
         return outcome
 
-    def try_proposal(self, proposal: Proposal, candidate: Project | None = None) -> Outcome:
-        """Evaluate a proposal (or a candidate produced by code) and adopt it only if it passes."""
+    def try_proposal(self, proposal: Proposal, candidate: Project | None = None,
+                     rule: AcceptRule | None = None) -> Outcome:
+        """Evaluate a proposal (or a candidate produced by code) and adopt it only if it passes.
+
+        rule: judge this proposal by a different metric than the run's default (PLAN.md 6.4: what counts as
+        better depends on what the proposal is trying to fix, e.g. camera proposals on camera evidence).
+        """
         rev = self.adopted.revision
         if self.attempts >= self.max_attempts:
             return Outcome(proposal_id=proposal.id, status="budget_exhausted", revision=rev,
@@ -185,7 +190,7 @@ class RunManager:
         except Exception as exc:
             return self._log(Outcome(proposal_id=proposal.id, status="error", revision=rev,
                                      reasons=[f"evaluation failed: {exc}"]), proposal)
-        reasons = self.rule.judge(self.metrics, after)
+        reasons = (rule or self.rule).judge(self.metrics, after)
         if reasons:
             return self._log(Outcome(proposal_id=proposal.id, status="rejected", revision=rev, reasons=reasons,
                                      metrics_before=self.metrics, metrics_after=after), proposal)

@@ -243,11 +243,30 @@ def pattern_search(f, x0: np.ndarray, steps: np.ndarray, max_evals: int = 300, m
     return x, fx, evals
 
 
-def optimize(project: Project, obs: MaskObservation, pairs: dict[str, str], params: list[Param],
-             hypothesis: str, proposal_id: str, max_evals: int = 300, stride: int = 3) -> tuple[Proposal, dict]:
-    """Search the parameters and return a proposal for the run manager (it decides about adoption)."""
-    def loss(x):
-        return silhouette_metrics(apply_params(project, params, x)[0], obs, pairs, stride=stride)["silhouette_loss"]
+TRACK_WEIGHT = 50.0  # puts track loss (fraction of the diagonal, ~0.001) on the silhouette loss scale (~0.1)
+
+
+def combined_loss(project: Project, obs: MaskObservation | None, pairs: dict[str, str], tracks=None,
+                  track_ids: list[str] | None = None, stride: int = 3, use_silhouette: bool = True) -> float:
+    total = 0.0
+    if use_silhouette and obs is not None and pairs:
+        total += silhouette_metrics(project, obs, pairs, stride=stride)["silhouette_loss"]
+    if tracks is not None:
+        from .tracks import track_metrics
+
+        total += TRACK_WEIGHT * track_metrics(project, tracks, ids=track_ids)["track_loss"]
+    return total
+
+
+def optimize(project: Project, obs: MaskObservation | None, pairs: dict[str, str], params: list[Param],
+             hypothesis: str, proposal_id: str, max_evals: int = 300, stride: int = 3, tracks=None,
+             track_ids: list[str] | None = None, use_silhouette: bool = True) -> tuple[Proposal, dict]:
+    """Search the parameters and return a proposal for the run manager (it decides about adoption).
+
+    The searched loss is the silhouette loss and/or the point-track loss (see combined_loss).
+    """
+    def loss(x, stride=stride):
+        return combined_loss(apply_params(project, params, x)[0], obs, pairs, tracks, track_ids, stride, use_silhouette)
 
     x0 = np.zeros(len(params))
     before = loss(x0)
@@ -255,7 +274,7 @@ def optimize(project: Project, obs: MaskObservation, pairs: dict[str, str], para
     if any(p.kind == "time" for p in params) and stride > 1:
         # timing is invisible between sampled frames: polish on every frame with small steps
         def fine(y):
-            return silhouette_metrics(apply_params(project, params, y)[0], obs, pairs, stride=1)["silhouette_loss"]
+            return loss(y, stride=1)
 
         fine_steps = np.array([1.0 if p.kind == "time" else p.step / 8 for p in params])
         x, after, e2 = pattern_search(fine, x, fine_steps, max_evals=30, min_ratio=0.25)
