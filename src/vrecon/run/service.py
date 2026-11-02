@@ -136,6 +136,17 @@ def run_optimizer(run_dir: str, params: list[str], hypothesis: str, max_evals: i
     return {"outcome": out.model_dump(mode="json"), "search": info}
 
 
+def auto(run_dir: str, passes: int = 2, max_evals: int = 60) -> dict:
+    """Fixed hypothesis order (camera first, then each object's position, size, timing); no LLM."""
+    from .policy import auto_repair
+
+    mgr, obs, _ = _manager(Path(run_dir))
+    before = dict(mgr.metrics)
+    records = auto_repair(mgr, obs, auto_pairs(mgr.adopted, obs), mgr.tracks, passes, max_evals)
+    return {"revision": mgr.adopted.revision, "metrics_before": before, "metrics_after": mgr.metrics,
+            "accepted": sum(r["status"] == "accepted" for r in records), "tried": len(records), "attempts": records}
+
+
 def submit(run_dir: str, proposal: dict) -> dict:
     """An LLM-written proposal: {"id", "hypothesis", "changes": [{"target_id", "field", "value"}]}."""
     mgr, _, _ = _manager(Path(run_dir))
@@ -158,4 +169,4 @@ def rollback(run_dir: str, revision: int) -> dict:
     return {"revision": p.revision, "metrics": mgr.metrics}
 
 
-__all__ = ["auto_pairs", "diagnose", "history", "init_run", "rollback", "run_optimizer", "state", "submit"]
+__all__ = ["auto", "auto_pairs", "diagnose", "history", "init_run", "rollback", "run_optimizer", "state", "submit"]

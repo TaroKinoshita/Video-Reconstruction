@@ -120,3 +120,15 @@ def test_track_loss_sees_focal_error(tmp_path):
     cam = wrong.reconstruction.cameras[0]
     cam.intrinsics = cam.intrinsics.model_copy(update={"fx": 180.0, "fy": 180.0})
     assert track_metrics(wrong, tr)["track_loss"] > 2 * good
+
+
+def test_run_auto(reference, tmp_path):  # noqa: F811
+    from vrecon.cli import main
+    from vrecon.run import service
+
+    save_project(wrong_project(), tmp_path / "project.json")
+    rd = str(tmp_path / "run")
+    service.init_run(str(tmp_path / "project.json"), rd, str(reference))
+    out = service.auto(rd, passes=1, max_evals=30)
+    assert out["accepted"] >= 1 and out["metrics_after"]["silhouette_loss"] < out["metrics_before"]["silhouette_loss"]
+    assert main(["run", "history", rd, "--last", "1"]) == 0

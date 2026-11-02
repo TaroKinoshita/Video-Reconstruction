@@ -20,9 +20,10 @@ import time
 from pathlib import Path
 
 from vrecon.evaluate import score
-from vrecon.optimize import Param, combined_loss, gt_stand_in_masks, optimize
+from vrecon.optimize import combined_loss, gt_stand_in_masks
 from vrecon.optimize.tracks import track_points
 from vrecon.run import AcceptRule, RunManager
+from vrecon.run.policy import auto_repair
 from vrecon.run.service import auto_pairs
 from vrecon.schema import Pose, load_project, save_project
 
@@ -54,20 +55,6 @@ def perturb(project, seed: int):
     return p, injected
 
 
-def hypotheses(project):
-    # camera first, judged on point tracks pinned to set pieces only: misplaced objects must not pull the focal
-    hs = [("camera focal length is off (judged on the set: outlines + tracks)", [Param("focal", "cam_001", step=0.1)], "set")]
-    for o in project.reconstruction.objects:
-        if o.kind == "set":
-            continue
-        hs.append((f"{o.id} misplaced on the floor",
-                   [Param("translation", o.id, 0, 0.25), Param("translation", o.id, 1, 0.25)], "all"))
-        hs.append((f"{o.id} has the wrong size", [Param("size", o.id, a, 0.15) for a in range(3)], "all"))
-        if o.keys:
-            hs.append((f"{o.id} moves at the wrong time", [Param("time", o.id, step=4.0)], "all"))
-    return hs
-
-
 def summarize(rep):
     return {k: rep["summary"].get(k) for k in KEYS}
 
@@ -94,24 +81,13 @@ def run_clip(clip: Path, out_root: Path, passes: int, evals: int) -> dict:
         return {"silhouette_loss": combined_loss(p, obs, pairs, tracks),  # silhouette + weighted track loss
                 "camera_loss": combined_loss(p, obs, set_pairs, tracks, sorted(set_ids), use_silhouette=bool(set_pairs))}
 
-    camera_rule = AcceptRule(primary="camera_loss", min_gain=1e-4)
 
     mgr = RunManager(run_dir / "project.json", run_dir / "run", evaluate, AcceptRule(primary="silhouette_loss",
                                                                                       min_gain=1e-4), max_attempts=60)
     before = summarize(score(clip, wrong))
     loss0 = mgr.metrics["silhouette_loss"]
     start = time.time()
-    outcomes = []
-    for n in range(passes):
-        for i, (hyp, params, judged_on) in enumerate(hypotheses(mgr.adopted)):
-            if judged_on == "set":
-                prop, info = optimize(mgr.adopted, obs, set_pairs, params, hyp, f"p{n}_{i:02d}", max_evals=evals,
-                                      tracks=tracks, track_ids=sorted(set_ids), use_silhouette=bool(set_pairs))
-            else:
-                prop, info = optimize(mgr.adopted, obs, pairs, params, hyp, f"p{n}_{i:02d}", max_evals=evals,
-                                      tracks=tracks)
-            out = mgr.try_proposal(prop, rule=camera_rule if judged_on == "set" else None)
-            outcomes.append({"pass": n, "hypothesis": hyp, "status": out.status, "loss": info["loss_after"]})
+    outcomes = auto_repair(mgr, obs, pairs, tracks, passes, evals)
     seconds = time.time() - start
     after = summarize(score(clip, mgr.adopted))
     return {"clip": clip.name, "pairs": pairs, "injected": injected, "before": before, "after": after,

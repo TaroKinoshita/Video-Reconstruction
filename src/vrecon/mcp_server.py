@@ -47,6 +47,12 @@ def run_optimize(run_dir: str, params: list[str], hypothesis: str, max_evals: in
 
 
 @server.tool()
+def run_auto(run_dir: str, passes: int = 2, max_evals: int = 60) -> dict:
+    """Scripted repair (camera first, then each object's position, size, timing). The no-LLM baseline."""
+    return service.auto(run_dir, passes, max_evals)
+
+
+@server.tool()
 def run_submit(run_dir: str, proposal: dict) -> dict:
     """Try a hand-written proposal {id, hypothesis, changes:[{target_id, field, value}]}."""
     return service.submit(run_dir, proposal)

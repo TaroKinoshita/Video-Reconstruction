@@ -1,0 +1,18 @@
+{
+  "_note": "PLAN.md 11.6. JSON syntax (valid YAML). Fill from dev-clip pilot runs, set status to frozen, commit, and only THEN score held-out clips. Do not change after held-out results exist; if you must, record why in changes.",
+  "status": "draft",
+  "frozen_commit": null,
+  "primary_metric": "reprojection_error_mean",
+  "lower_is_better": {
+    "reprojection_error_mean": true,
+    "mask_iou_mean": false,
+    "camera_rotation_deg_mean": true,
+    "camera_focal_rel_mean": true,
+    "timing_abs_error_frames_mean": true
+  },
+  "improvement_threshold": null,
+  "budget": {"minutes": 60, "max_turns": 200, "repair_attempts": 30},
+  "attempts_per_condition": 3,
+  "clips": {"dev": [], "held_out": []},
+  "changes": []
+}

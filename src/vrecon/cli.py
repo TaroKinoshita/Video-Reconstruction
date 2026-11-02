@@ -7,7 +7,7 @@
     vrecon new     VIDEO --out DIR [--id proj_x] [--threshold 27] [--no-shots]
     vrecon score   REFERENCE_DIR PROJECT [--shot S] [--out report.json]
     vrecon score-blend REFERENCE_DIR SCENE.blend [--out report.json]
-    vrecon run init|state|diagnose|optimize|submit|history|rollback ...   (repair loop; see run/service.py)
+    vrecon run init|state|diagnose|optimize|auto|submit|history|rollback ...   (repair loop; see run/service.py)
 """
 
 from __future__ import annotations
@@ -133,6 +133,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         out = service.diagnose(args.run_dir)
     elif a == "optimize":
         out = service.run_optimizer(args.run_dir, args.param, args.hypothesis, args.max_evals)
+    elif a == "auto":
+        out = service.auto(args.run_dir, args.passes, args.max_evals)
     elif a == "submit":
         from pathlib import Path
 
@@ -215,9 +217,13 @@ def main(argv: list[str] | None = None) -> int:
         rs.add_parser(name).add_argument("run_dir")
     x = rs.add_parser("optimize")
     x.add_argument("run_dir")
-    x.add_argument("--param", action="append", required=True, help="focal:cam_001 | translation:obj:axis | size:obj:axis")
+    x.add_argument("--param", action="append", required=True, help="focal:cam_001 | translation:obj:axis | size:obj:axis | time:obj")
     x.add_argument("--hypothesis", required=True)
     x.add_argument("--max-evals", type=int, default=120)
+    x = rs.add_parser("auto", help="fixed hypothesis order, no LLM (ablation of condition C)")
+    x.add_argument("run_dir")
+    x.add_argument("--passes", type=int, default=2)
+    x.add_argument("--max-evals", type=int, default=60)
     x = rs.add_parser("submit")
     x.add_argument("run_dir")
     x.add_argument("proposal", help="JSON file")

@@ -29,10 +29,13 @@
 | 実行管理（提案→制約→評価→採用） | 完了 | `src/vrecon/run/manager.py` |
 | 数値探し（画角、位置、大きさ、タイミング） | 動く。画角は6本全部で回復。タイミングは2〜4フレーム残る | `src/vrecon/optimize/` |
 | 点の追跡（OpenCV Lucas-Kanade、重みなし）と、追跡点のズレの損失 | 完了 | `src/vrecon/optimize/tracks.py` |
+| 決め打ちの修理（`vrecon run auto`、MCPの `run_auto`）＝条件CのAIなし版 | 完了 | `src/vrecon/run/policy.py` |
+| 条件の比較レポート（H1a・H1bの表） | 完了（偽データでテスト済み） | `scripts/compare_conditions.py` |
+| 基準値ファイルのひな形（まだ下書き、固定前） | 完了 | `evaluation/thresholds.yaml` |
 | CLI / MCPサーバー | 完了 | `src/vrecon/cli.py`、`src/vrecon/mcp_server.py` |
 | 修理ベンチマーク | 結果あり | `evaluation/repair_benchmark/`（`NOTES.md` に考察） |
 
-テストは81件、全部合格（`python -m pytest -q`）。
+テストは83件、全部合格（`python -m pytest -q`）。
 
 ## 3. 決まっていること（変えるなら計画書も直す）
 
@@ -53,7 +56,9 @@
 3. **タイミングが2〜4フレーム残る。** 一定速度の動きでは「遅れて動く」と「先にずらして置く」が見分けにくい。
 4. GPU側（`gpu/h3_control/run_jobs.py`）と基準点B（`baselines/b_llm_mcp/run_baseline.sh`）は、**まだ一度も実際に動かしてない**。最初は1本だけ試す。
 5. 本物のテスト映像（単一カット12本：開発用6本、検証用6本）がまだない。
-6. 修理の順番（画角 → 物ごとの位置 → 大きさ → タイミング）は、今は決め打ち。AIに選ばせる版（条件Cの本番）はまだ。
+6. 修理の順番（画角 → 物ごとの位置 → 大きさ → タイミング）は、今は決め打ち（`vrecon run auto`）。AIに選ばせる版（条件Cの本番）はまだ。
+7. 条件Cの**最初の再構成**（修理の出発点）を作る部分がまだない。ベンチマークは正解にわざと誤差を入れたものから始めている。
+   本番では、AI（＋blender-mcp）が作った最初のシーンを `score-blend` と同じ方法で取り込んで、修理に回す想定。
 
 ## 5. 次にやること（おすすめ順）
 
@@ -86,7 +91,8 @@ vrecon handoff project.json --out h/  →  vrecon ingest project.json --handoff 
 vrecon control project.json --out ctl/                    # V2V用の制御映像
 vrecon score evaluation/synthetic/syn_01 project.json     # 正解と比べて採点
 vrecon score-blend evaluation/synthetic/syn_01 scene.blend
-vrecon run init|state|diagnose|optimize|submit|history|rollback   # 修理ループ
+vrecon run init|state|diagnose|optimize|auto|submit|history|rollback   # 修理ループ（auto = 決め打ちの順番）
+python scripts/compare_conditions.py 結果フォルダ --ref B --cand C  # 条件の比較表（結果フォルダ/<条件>/<クリップ>/<回>/score.json）
 python scripts/repair_benchmark.py                        # 修理ベンチマーク（6本で約15分、点の追跡つき）
 ```
 
