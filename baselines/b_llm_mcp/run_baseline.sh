@@ -11,11 +11,17 @@
 # Blender runs under Xvfb, as in CineRecon's setup.
 set -euo pipefail
 
-CLIP="$(cd "$1" && pwd)"; RUN="$2"; shift 2
+# Absolute path that native programs understand too (Git Bash: C:/..., not /c/...).
+abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
+
+CLIP="$(abspath "$1")"; RUN="$2"; shift 2
 MODEL="claude-opus-5-5"; MINUTES=60; TURNS=200
 PORT="${BLENDER_PORT:-9876}"
 MCP_VERSION="2.2.6"          # mcp-for-blender (blender-mcp) version used for every run
-BLENDER="${BLENDER:-blender}"
+WIN_BLENDER="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
+if [[ -z "${BLENDER:-}" ]]; then
+  if ! command -v blender >/dev/null 2>&1 && [[ -x "$WIN_BLENDER" ]]; then BLENDER="$WIN_BLENDER"; else BLENDER=blender; fi
+fi
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --model) MODEL="$2"; shift ;;
@@ -25,12 +31,13 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
+HERE="$(abspath "$(dirname "${BASH_SOURCE[0]}")")"
+REPO="$(abspath "$HERE/../..")"
+VENV_PY="$REPO/.venv/bin/python"; [[ -x "$REPO/.venv/Scripts/python.exe" ]] && VENV_PY="$REPO/.venv/Scripts/python.exe"
 
 if [[ -e "$RUN" && -n "$(ls -A "$RUN" 2>/dev/null)" ]]; then echo "$RUN is not empty"; exit 2; fi
 mkdir -p "$RUN/workspace/input" "$RUN/workspace/output" "$RUN/logs"
-RUN="$(cd "$RUN" && pwd)"
+RUN="$(abspath "$RUN")"
 WS="$RUN/workspace"
 
 # Only the video goes into the agent's workspace. Ground truth never does (PLAN.md 11.8).
@@ -77,5 +84,5 @@ set -e
 END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # --- Record, check, score -------------------------------------------------------------------------
-"$REPO/.venv/bin/python" "$HERE/finish_run.py" --run "$RUN" --clip "$CLIP" --model "$MODEL" \
+"$VENV_PY" "$HERE/finish_run.py" --run "$RUN" --clip "$CLIP" --model "$MODEL" \
   --mcp-version "$MCP_VERSION" --start "$START" --end "$END" --exit-code "$EXIT" --minutes "$MINUTES" --turns "$TURNS"

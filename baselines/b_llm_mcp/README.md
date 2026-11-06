@@ -22,14 +22,16 @@
 - 実行後、AIのログに正解ファイルの名前（`gt.json`、`gt_passes`、`meta.json`、`/evaluation/`）が出てきたら、**その実行は無効（`valid: false`）**にする。
 - 実行フォルダ（RUN_DIR）は `evaluation/` の外に作ること。
 
-## 実行に必要なもの（このクラウドセッションでは動かない）
+## 実行に必要なもの
 
-- **Blender 5.2.x の GUI版**：このクラウド環境は `download.blender.org` に繋がらず、Python版のBlenderしか入らないため。
+- **Blender 5.2.x の GUI版**：手元のWindows PCに入ってる（`C:\Program Files\Blender Foundation\Blender 5.2`。環境変数 `BLENDER` がなく、`blender` にパスが通ってなければ、ここを自動で使う）
 - `uv` / `uvx`、`claude` CLI、`ffmpeg`
 - このリポジトリの `.venv`（採点に使う。`bash scripts/setup.sh`）
 - Linuxで画面がない場合は `xvfb-run`
 
-場所は自分のPCか、GPUマシンのどちらか。CineRecon は Cycles を GPU で描画してるから、GPUマシンの方が近い条件になる。
+WindowsではGit Bashで実行する。手元のPCはRTX 4060があるので、CineRecon と同じくCyclesをGPUで描画できる。
+
+実行すると `install-addon` で blender-mcp のアドオンが Blender のユーザー設定に入る可能性がある（手元の 5.2 には今 `blend_ai` などのアドオンがある）。**Windowsでの実行は、まだ一度も確かめてない。**
 
 ## 実行
 
@@ -48,7 +50,7 @@ bash baselines/b_llm_mcp/run_baseline.sh evaluation/synthetic/syn_01 ~/vrecon_ru
 ## 採点だけしたいとき
 
 ```bash
-.venv/bin/vrecon score-blend evaluation/synthetic/syn_01 path/to/scene.blend --out score.json
+.venv/Scripts/vrecon score-blend evaluation/synthetic/syn_01 path/to/scene.blend --out score.json   # Linuxは .venv/bin/vrecon
 ```
 
 AIが作った `.blend` は、物の名前もカメラの設定もバラバラ。だから採点の前に次のように揃える：

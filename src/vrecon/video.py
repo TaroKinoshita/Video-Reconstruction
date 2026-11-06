@@ -46,7 +46,7 @@ def _uneven_timestamps(path: str | Path, fps: Fraction, tolerance: float = 0.25)
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time",
          "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, encoding="utf-8", errors="replace", check=True,
     )
     times = sorted(float(t) for t in out.stdout.split() if t not in ("", "N/A"))
     if len(times) < 3:
@@ -60,7 +60,7 @@ def probe(path: str | Path) -> VideoInfo:
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
          "stream=width,height,r_frame_rate,avg_frame_rate,nb_read_frames,codec_name:stream_tags=rotate"
          ":stream_side_data=rotation", "-of", "json", str(path)],
-        capture_output=True, text=True,
+        capture_output=True, encoding="utf-8", errors="replace",
     )
     if out.returncode != 0:
         raise ValueError(f"not a readable video: {path}: {out.stderr.strip()[-300:]}")
@@ -178,6 +178,6 @@ def new_project(video: str | Path, out_dir: str | Path, project_id: str | None =
         ],
         observations=observations,
     )
-    (out / "input" / "import.json").write_text(json.dumps(record, indent=2) + "\n")
+    (out / "input" / "import.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     save_project(project, out / "project.json")
     return project

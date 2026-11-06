@@ -87,7 +87,7 @@ def make_jobs(tmp_path: Path, frames: int) -> Path:
 def run_dry(jobs: Path, out: Path):
     return subprocess.run(
         [sys.executable, str(ROOT / "gpu/h3_control/run_jobs.py"), "--jobs", str(jobs), "--out", str(out), "--dry-run"],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, encoding="utf-8", errors="replace", timeout=120,
     )
 
 

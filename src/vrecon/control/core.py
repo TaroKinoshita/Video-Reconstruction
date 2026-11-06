@@ -93,8 +93,31 @@ def canny_control(frames_rgb: np.ndarray, low: int = 100, high: int = 200) -> tu
 def load_frames(paths: list[Path]) -> np.ndarray:
     import cv2
 
-    frames = [cv2.cvtColor(cv2.imread(str(p), cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB) for p in paths]
+    # imdecode, not imread: OpenCV's file functions cannot open non-ASCII paths on Windows.
+    frames = [cv2.cvtColor(cv2.imdecode(np.fromfile(p, np.uint8), cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB) for p in paths]
     return np.stack(frames)
+
+
+def read_video_rgb(path: str | Path) -> np.ndarray:
+    """Decode a whole video to uint8 RGB [T, H, W, 3] with the system ffmpeg.
+
+    Not cv2.VideoCapture: it cannot open non-ASCII paths on Windows.
+    """
+    size = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+         "-of", "csv=p=0", str(path)],
+        capture_output=True, encoding="utf-8", errors="replace",
+    )
+    if size.returncode != 0 or not size.stdout.strip():
+        raise ValueError(f"not a readable video: {path}: {size.stderr.strip()[-300:]}")
+    w, h = (int(x) for x in size.stdout.strip().split(",")[:2])
+    proc = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v:0", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {proc.stderr.decode(errors='replace')[-2000:]}")
+    return np.frombuffer(proc.stdout, np.uint8).reshape(-1, h, w, 3)
 
 
 def encode_mp4(frames_rgb: np.ndarray, path: str | Path, fps: int = FPS, crf: int = 10) -> Path:
@@ -121,6 +144,6 @@ def probe_frames(path: str | Path) -> int:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames",
          "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, encoding="utf-8", errors="replace", check=True,
     )
     return int(out.stdout.strip())

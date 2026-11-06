@@ -39,7 +39,7 @@ def gt_stand_in_masks(clip_dir: str | Path, obs_id: str = "obs_masks_gt_stand_in
     """Object masks from a synthetic clip's ground truth, labelled as a stand-in."""
     d = Path(clip_dir)
     masks = np.load(d / "gt_passes" / "index.npz")["index"]
-    id_map = {int(k): v for k, v in json.loads((d / "gt_passes" / "id_map.json").read_text()).items()}
+    id_map = {int(k): v for k, v in json.loads((d / "gt_passes" / "id_map.json").read_text(encoding="utf-8")).items()}
     obs = Observation(id=obs_id, kind="mask", shot_id="shot_001",
                       summary={"labels": sorted(id_map.values()), "frames": int(masks.shape[0])},
                       provenance=Provenance(tool="ground_truth_stand_in",

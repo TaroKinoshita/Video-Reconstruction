@@ -60,7 +60,7 @@ def main() -> int:
 
     def version(cmd):
         try:
-            return subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout.strip()
+            return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=30).stdout.strip()
         except Exception:
             return None
 
@@ -70,7 +70,7 @@ def main() -> int:
         "model": a.model,
         "mcp_for_blender": a.mcp_version,
         "claude_cli": version(["claude", "--version"]),
-        "blender": (run / "logs" / "blender_version.txt").read_text().strip()
+        "blender": (run / "logs" / "blender_version.txt").read_text(encoding="utf-8").strip()
         if (run / "logs" / "blender_version.txt").is_file() else None,
         "prompt": "baselines/b_llm_mcp/prompt_L1.txt (CineRecon L1, GPU made optional)",
         "budget": {"minutes": a.minutes, "max_turns": a.turns},
@@ -83,7 +83,7 @@ def main() -> int:
         "ground_truth_leak": leaked,
         "valid": not leaked,
     }
-    (run / "run.json").write_text(json.dumps(record, indent=2) + "\n")
+    (run / "run.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({k: record[k] for k in ("clip", "model", "exit_code", "timed_out", "valid")}, indent=2))
     if leaked:
         print(f"INVALID RUN: the agent log mentions {leaked}", file=sys.stderr)
@@ -96,7 +96,7 @@ def main() -> int:
             report = score_blend(clip, blend)
         except Exception as exc:  # an unscoreable scene is itself a result
             report = {"error": f"{type(exc).__name__}: {exc}"}
-        (run / "score.json").write_text(json.dumps(report, indent=2) + "\n")
+        (run / "score.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(report.get("summary", report), indent=2))
     return 0
 

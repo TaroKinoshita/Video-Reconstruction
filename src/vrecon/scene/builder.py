@@ -196,6 +196,32 @@ def build_scene(project: Project, shot_id: str | None = None) -> BuildReport:
     return report
 
 
+def set_cycles_device(scene, device: str | None = None) -> str:
+    """Point Cycles at a device and return what it uses, e.g. "CPU" or "OPTIX: <gpu name>".
+
+    `device` is cpu, optix, cuda or auto (first GPU backend found, else CPU). When it is None, the
+    VRECON_RENDER_DEVICE environment variable decides, and without that, auto.
+    """
+    choice = (device or os.environ.get("VRECON_RENDER_DEVICE") or "auto").lower()
+    if choice not in ("cpu", "optix", "cuda", "auto"):
+        raise ValueError(f"unknown render device {choice!r}: use cpu, optix, cuda or auto")
+    if choice != "cpu":
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+        for backend in ("OPTIX", "CUDA") if choice == "auto" else (choice.upper(),):
+            prefs.compute_device_type = backend
+            prefs.get_devices()
+            gpus = [d for d in prefs.devices if d.type == backend]
+            if gpus:
+                for d in prefs.devices:
+                    d.use = d.type == backend
+                scene.cycles.device = "GPU"
+                return f"{backend}: {', '.join(d.name for d in gpus)}"
+        if choice != "auto":  # asked for this GPU backend explicitly: do not fall back silently
+            raise RuntimeError(f"no {choice.upper()} device found")
+    scene.cycles.device = "CPU"
+    return "CPU"
+
+
 def render_frames(
     out_dir: str | os.PathLike[str],
     shot_frames: list[int],
@@ -207,7 +233,7 @@ def render_frames(
     scene = bpy.context.scene
     scene.render.engine = engine
     if engine == "CYCLES":
-        scene.cycles.device = "CPU"
+        set_cycles_device(scene)
         scene.cycles.samples = samples
     scene.render.resolution_percentage = resolution_percentage
     scene.render.image_settings.file_format = "PNG"

@@ -24,7 +24,7 @@ def test_compare_report(tmp_path):
     put(r, "C", "syn_02", "a0", 0.6, 0.02)
     put(r, "B", "syn_02", "a1", 0.1, 0.9, valid=False)  # invalid run must be ignored
     out = subprocess.run([sys.executable, str(ROOT / "scripts/compare_conditions.py"), str(r)],
-                         capture_output=True, text=True, check=True).stdout
+                         capture_output=True, encoding="utf-8", errors="replace", check=True).stdout
     assert "C better on 1/2 clips" in out  # primary: reprojection (syn_01 yes, syn_02 no)
     assert "B: 5 (invalid 1)" in out
     assert "| syn_01 | 0.025 | 0.011 | yes |" in out

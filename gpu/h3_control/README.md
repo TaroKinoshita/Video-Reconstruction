@@ -21,6 +21,8 @@ GPUマシン：pull → setup_gpu.sh → run_jobs.py → pack_results.sh → 小
 | メインメモリ（RAM） | 多め（できれば200GB前後） | 標準の `model_group_offload` は、使ってない層をRAMに置く。テキストエンコーダー（約62GB）もある |
 | ディスク | 250GB以上 | 重み：本体＋テキストエンコーダーで約124GB、ControlNet 2.0で約13.5GB |
 
+**手元のPC（RTX 4060 Laptop、VRAM 8GB、RAM 32GB、Cドライブの空き約205GB）では、この目安に届かないので、レンタルGPUを使う。**
+
 **この表の数字は、VideoX-Funの説明とモデルカードから見積もったもの。実際に動かして確かめてない。**
 RAMが足りないときは、`--memory-mode model_cpu_offload_and_qfloat8`（Transformerを8bitにする。画質が少し落ちる可能性あり）を使う。使った設定は結果に自動で記録される。
 

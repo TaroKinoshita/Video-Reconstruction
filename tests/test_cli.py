@@ -15,7 +15,7 @@ from test_readback import make_project  # noqa: E402
 
 
 def run(*args, check=True):
-    proc = subprocess.run([sys.executable, "-m", "vrecon.cli", *args], capture_output=True, text=True, timeout=600)
+    proc = subprocess.run([sys.executable, "-m", "vrecon.cli", *args], capture_output=True, encoding="utf-8", errors="replace", timeout=600)
     if check and proc.returncode != 0:
         raise AssertionError(proc.stdout + proc.stderr)
     return proc

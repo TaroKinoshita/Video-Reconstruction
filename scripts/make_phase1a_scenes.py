@@ -162,7 +162,7 @@ def main() -> int:
     for name, project in scenes.items():
         save_project(project, out / "scenes" / f"{name}.json")
 
-    (out / "edits.json").write_text(json.dumps({"base": "base", "edits": EDITS}, indent=2) + "\n")
+    (out / "edits.json").write_text(json.dumps({"base": "base", "edits": EDITS}, indent=2) + "\n", encoding="utf-8")
 
     prompts = {"base": BASE_PROMPT, "edit_camera": BASE_PROMPT, "edit_object": OBJECT_PROMPT, "edit_timing": BASE_PROMPT}
     jobs = {
@@ -183,7 +183,7 @@ def main() -> int:
             for kind in ("depth", "canny", "gray")
         ],
     }
-    (out / "jobs.json").write_text(json.dumps(jobs, indent=2, ensure_ascii=False) + "\n")
+    (out / "jobs.json").write_text(json.dumps(jobs, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {len(scenes)} scenes, edits.json and jobs.json ({len(jobs['jobs'])} jobs) to {out}")
     return 0
 

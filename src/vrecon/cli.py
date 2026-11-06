@@ -113,7 +113,7 @@ def _cmd_score(args: argparse.Namespace) -> int:
     if args.out:
         from pathlib import Path
 
-        Path(args.out).write_text(text + "\n")
+        Path(args.out).write_text(text + "\n", encoding="utf-8")
         print(f"wrote {args.out}")
     print(json.dumps(report["summary"], indent=2))
     return 0
@@ -138,7 +138,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     elif a == "submit":
         from pathlib import Path
 
-        out = service.submit(args.run_dir, json.loads(Path(args.proposal).read_text()))
+        out = service.submit(args.run_dir, json.loads(Path(args.proposal).read_text(encoding="utf-8")))
     elif a == "history":
         out = service.history(args.run_dir, args.last)
     else:

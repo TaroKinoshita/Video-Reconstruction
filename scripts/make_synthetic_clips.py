@@ -150,7 +150,7 @@ def render_clip(spec: dict, out: Path, samples: int) -> None:
     build_scene(project)
     render_passes(out / "gt_passes", shaded=False)
     save_project(project, out / "gt.json")
-    (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     print(f"{spec['id']}: {spec['camera']}, {spec['objects']} object(s) -> {out}", flush=True)
 
 

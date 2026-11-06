@@ -473,11 +473,11 @@ OSSは一度に集めない。その段階で必要な分だけ入れる。
 
 ## 13. 開発と運用
 
-- **クラウドセッション**：コードを書く、テストする、GitHubにpushする。BlenderのGUIとGPUはない。
-- **ローカルPC**：実際に使う場所。Blender、GPU、ローカルのClaude Codeがある。
-- **やり取り（パターンA）**：クラウドでpush → ローカルでpullして実行 → 結果（小さいファイルと一覧だけ）をpush。
+- **【変更 2026-11-06】ローカルPCを開発の中心にする**：Windows 11、Core i7-13700H、RAM 32GB、RTX 4060 Laptop（VRAM 8GB）、Cドライブの空き約205GB、Blender 5.2 GUI版。ローカルのClaude Codeで、コードを書く、テストする、実行するまでを行う。
+- **クラウドセッション**：CPUのみ、Linux。補助としてのみ使う。BlenderのGUIとGPUはない。
+- **レンタルGPU**：VRAMが足りないもの（MiniMax-H3の生成）を動かす。ローカルでpushして、GPUマシンでpullして実行し、結果（小さいファイルと一覧だけ）をpushする。
 - 動画や大きいファイルはGitに入れない。置き場所は別に決める（【検討中】）。
-- このクラウド環境では、`arxiv.org`、`huggingface.co`、`cinerecon.github.io` が拒否された。モデルの重みのダウンロードや論文の確認が必要なら、環境の設定で許可する。
+- クラウド環境では `arxiv.org`、`huggingface.co`、`cinerecon.github.io` が拒否された。ローカルでは `huggingface.co`、`download.pytorch.org`、`arxiv.org` に繋がることを確認済み（2026-11-06）。
 
 ## 14. リスクと対応
 
@@ -492,14 +492,14 @@ OSSは一度に集めない。その段階で必要な分だけ入れる。
 
 ## 15. 未決事項
 
-- [ ] ローカルPCのGPU（機種、VRAM）
+- [x] ローカルPCのGPU → RTX 4060 Laptop、VRAM 8GB（13章）
 - [x] V2Vモデルの選定 → MiniMax-H3＋Fun ControlNet Union 2.0（9.1）
 - [ ] 大きいファイルの置き場所
 - [ ] 評価用の映像の入手先と権利の確認
 - [ ] CineReconの数値の確認（論文）
 - [ ] 最初に使うLLM（条件BとCで共通）
 - [ ] Blenderの版の固定（5.2.x）
-- [ ] `docs/CONVENTIONS.md`（座標、単位、時刻の取り決め）の作成
+- [x] `docs/CONVENTIONS.md`（座標、単位、時刻の取り決め）の作成
 - [ ] 各指標の基準値、予算の上限（予備実験のあと、11.6で固定）
 - [ ] 編集しやすさの具体的な評価作業の定義
 

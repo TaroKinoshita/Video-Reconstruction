@@ -122,12 +122,12 @@ def main() -> int:
         write(out, args, results)  # after every clip, so an interrupted run keeps what it finished
         print(f"{r['clip']}: loss {r['silhouette_loss'][0]:.3f} -> {r['silhouette_loss'][1]:.3f}, "
               f"accepted {r['accepted']}/{r['tried']}, {r['seconds']} s", flush=True)
-    print((out / "results.md").read_text())
+    print((out / "results.md").read_text(encoding="utf-8"))
     return 0
 
 
 def write(out: Path, args, results: list) -> None:
-    (out / "results.json").write_text(json.dumps({"settings": vars(args), "results": results}, indent=2) + "\n")
+    (out / "results.json").write_text(json.dumps({"settings": vars(args), "results": results}, indent=2) + "\n", encoding="utf-8")
     rows = ["| clip | loss (silhouette + tracks) | focal error | reprojection error | mask IoU | timing error (frames) | accepted |",
             "|---|---|---|---|---|---|---|"]
     for r in results:
@@ -142,7 +142,7 @@ def write(out: Path, args, results: list) -> None:
             "Errors: injected (focal, floor position, size, timing). "
             "Fixed hypothesis order, no LLM. Tests the repair machinery only (PLAN.md 11.8).\n"
             "Reprojection error is a fraction of the image diagonal.\n\n")
-    (out / "results.md").write_text("# Repair benchmark\n\n" + note + "\n".join(rows) + "\n")
+    (out / "results.md").write_text("# Repair benchmark\n\n" + note + "\n".join(rows) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

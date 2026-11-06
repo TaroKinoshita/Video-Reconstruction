@@ -17,7 +17,7 @@ def test_smoke_render(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "smoke_render.py"), "--out", str(tmp_path)],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         timeout=600,
     )
     line = next((l for l in proc.stdout.splitlines() if l.startswith("SMOKE_RESULT ")), None)

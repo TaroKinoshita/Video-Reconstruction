@@ -33,7 +33,7 @@ def snap_num_frames(actual: int, max_frames: int) -> int:
 
 def git_commit(path: Path) -> str | None:
     try:
-        return subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD"], capture_output=True, text=True,
+        return subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD"], capture_output=True, encoding="utf-8", errors="replace",
                               check=True).stdout.strip()
     except Exception:
         return None
@@ -43,7 +43,7 @@ def probe(path: Path) -> dict:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames",
          "-show_entries", "stream=width,height,r_frame_rate,nb_read_frames", "-of", "json", str(path)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, encoding="utf-8", errors="replace", check=True,
     )
     s = json.loads(out.stdout)["streams"][0]
     num, den = (int(v) for v in s["r_frame_rate"].split("/"))
@@ -51,7 +51,7 @@ def probe(path: Path) -> dict:
 
 
 def plan_runs(jobs_file: Path, group: str | None, only: list[str] | None, seeds: list[int] | None) -> list[dict]:
-    spec = json.loads(jobs_file.read_text())
+    spec = json.loads(jobs_file.read_text(encoding="utf-8"))
     base = jobs_file.parent
     defaults = spec["defaults"]
     runs = []
@@ -253,15 +253,15 @@ def main() -> int:
             "finished_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             "env": env,
         }
-        (run_dir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
+        (run_dir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"done {r['run_id']} in {seconds:.0f} s", flush=True)
 
     summary = []
     for d in sorted(p for p in args.out.iterdir() if (p / "meta.json").is_file()):
-        m = json.loads((d / "meta.json").read_text())
+        m = json.loads((d / "meta.json").read_text(encoding="utf-8"))
         summary.append({k: m[k] for k in ("run_id", "seed", "num_frames", "seconds", "peak_gpu_memory_gb")}
                        | {"scene": m["job"]["scene"], "control_kind": m["job"]["control_kind"]})
-    (args.out / "results_manifest.json").write_text(json.dumps({"env": env, "runs": summary}, indent=2) + "\n")
+    (args.out / "results_manifest.json").write_text(json.dumps({"env": env, "runs": summary}, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {args.out / 'results_manifest.json'}")
     return 0
 

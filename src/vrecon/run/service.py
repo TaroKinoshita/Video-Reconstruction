@@ -19,7 +19,7 @@ from .manager import AcceptRule, Proposal, RunManager
 
 
 def _config(run_dir: Path) -> dict:
-    return json.loads((run_dir / "config.json").read_text())
+    return json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
 
 
 def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min_gain: float = 0.0) -> dict:
@@ -32,7 +32,7 @@ def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min
     cfg = {"project": str(Path(project).resolve()), "masks": str(Path(masks).resolve()), "mask_source": "gt_stand_in",
            "video": str(video.resolve()) if video.is_file() else None,
            "rule": {"primary": "silhouette_loss", "min_gain": min_gain}, "max_attempts": max_attempts}
-    (rd / "config.json").write_text(json.dumps(cfg, indent=2) + "\n")
+    (rd / "config.json").write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
     return cfg
 
 
@@ -157,7 +157,7 @@ def history(run_dir: str, last: int = 20) -> list[dict]:
     path = Path(run_dir) / "history.jsonl"
     if not path.exists():
         return []
-    rows = [json.loads(x) for x in path.read_text().splitlines()][-last:]
+    rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()][-last:]
     return [{"proposal": r["proposal"]["id"], "hypothesis": r["proposal"]["hypothesis"],
              "source": r["proposal"]["source"], **{k: r["outcome"][k] for k in ("status", "reasons", "revision")},
              "after": (r["outcome"].get("metrics_after") or {}).get("silhouette_loss")} for r in rows]

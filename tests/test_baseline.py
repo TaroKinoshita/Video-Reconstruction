@@ -29,7 +29,7 @@ def finish(run: Path, clip: Path):
         [sys.executable, str(ROOT / "baselines/b_llm_mcp/finish_run.py"), "--run", str(run), "--clip", str(clip),
          "--model", "test-model", "--mcp-version", "2.2.6", "--start", "s", "--end", "e", "--exit-code", "0",
          "--minutes", "60", "--turns", "200"],
-        capture_output=True, text=True, timeout=600,
+        capture_output=True, encoding="utf-8", errors="replace", timeout=600,
     )
 
 

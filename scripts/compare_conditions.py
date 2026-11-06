@@ -27,12 +27,12 @@ def load_runs(results: Path) -> dict:
     for score in sorted(results.glob("*/*/*/score.json")):
         attempt = score.parent
         clip, cond = attempt.parent.name, attempt.parent.parent.name
-        rep = json.loads(score.read_text())
+        rep = json.loads(score.read_text(encoding="utf-8"))
         row = dict(rep.get("summary", {}))
         row["error"] = rep.get("error")
         run = attempt / "run.json"
         if run.is_file():
-            r = json.loads(run.read_text())
+            r = json.loads(run.read_text(encoding="utf-8"))
             res = (r.get("agent") or {}).get("result") or {}
             row.update(valid=r.get("valid", True), cost=res.get("total_cost_usd"),
                        seconds=(res.get("duration_ms") or 0) / 1000 or None)
@@ -78,7 +78,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 
-    th = json.loads(args.thresholds.read_text())
+    th = json.loads(args.thresholds.read_text(encoding="utf-8"))
     if args.split == "held_out" and th.get("status") != "frozen":
         print("WARNING: scoring held-out clips while thresholds.yaml is not frozen (PLAN.md 11.6)")
     clips = None if args.split == "all" else th["clips"][args.split]
@@ -104,7 +104,7 @@ def main() -> int:
         lines.append(f"| {c} | {fmt(median(r.get('cost') for r in rs))} | {fmt(median(r.get('seconds') for r in rs))} |")
     text = "\n".join(lines) + "\n"
     if args.out:
-        args.out.write_text(text)
+        args.out.write_text(text, encoding="utf-8")
     print(text)
     return 0
 

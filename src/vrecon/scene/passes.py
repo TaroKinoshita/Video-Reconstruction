@@ -78,7 +78,7 @@ def _setup_data_render(scene) -> dict:
         "percent": scene.render.resolution_percentage,
     }
     scene.render.engine = "CYCLES"
-    scene.cycles.device = "CPU"
+    scene.cycles.device = "CPU"  # measured: faster than the GPU for this 1-sample render, same index values
     scene.cycles.samples = 1
     scene.cycles.use_denoising = False
     scene.cycles.filter_width = 0.01  # no anti-aliasing: every pixel is one surface
@@ -146,7 +146,7 @@ def render_passes(out_dir: str | Path, shot_frames: list[int] | None = None, sha
     _restore(scene, prev)
     np.savez_compressed(out / "depth.npz", depth=depth)
     np.savez_compressed(out / "index.npz", index=index)
-    (out / "id_map.json").write_text(json.dumps({str(k): v for k, v in id_map.items()}, indent=2) + "\n")
+    (out / "id_map.json").write_text(json.dumps({str(k): v for k, v in id_map.items()}, indent=2) + "\n", encoding="utf-8")
 
     if shaded:
         _render_shaded(scene, out / "shaded", shot_frames)

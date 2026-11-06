@@ -20,6 +20,12 @@ RUN_SMOKE=1
 
 log() { printf '\n[setup] %s\n' "$*"; }
 
+# A Windows venv keeps its python somewhere else (run this with Git Bash there; WSL would make a Linux venv).
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) PY=.venv/Scripts/python.exe; ACTIVATE=".venv\\Scripts\\Activate.ps1" ;;
+  *) PY=.venv/bin/python; ACTIVATE="source .venv/bin/activate" ;;
+esac
+
 # 1. Software OpenGL (Linux, no GPU) ------------------------------------------
 if [[ "$(uname -s)" == "Linux" ]]; then
   if ldconfig -p 2>/dev/null | grep -q 'libEGL.so.1' \
@@ -43,7 +49,7 @@ if ! command -v uv >/dev/null 2>&1; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
-if [[ -x .venv/bin/python ]] && .venv/bin/python -c 'import sys; sys.exit(sys.version_info[:2] != (3, 13))'; then
+if [[ -x "$PY" ]] && "$PY" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 13))'; then
   log ".venv (Python 3.13) already exists"
 else
   log "Creating .venv with Python 3.13"
@@ -53,13 +59,13 @@ fi
 
 # 3. Install package ------------------------------------------------------------
 log "Installing vrecon[blender,control,mcp,dev] (bpy is ~400 MB on first install)"
-uv pip install --python .venv/bin/python -q -e ".[blender,control,mcp,dev]"
-.venv/bin/python -c 'import bpy; print("[setup] Blender", bpy.app.version_string)'
+uv pip install --python "$PY" -q -e ".[blender,control,mcp,dev]"
+"$PY" -c 'import bpy; print("[setup] Blender", bpy.app.version_string)'
 
 # 4. Smoke test -------------------------------------------------------------------
 if [[ "$RUN_SMOKE" -eq 1 ]]; then
   log "Running render smoke test"
-  .venv/bin/python scripts/smoke_render.py --out runs/smoke
+  "$PY" scripts/smoke_render.py --out runs/smoke
 fi
 
-log "Done. Activate with: source .venv/bin/activate"
+log "Done. Activate with: $ACTIVATE"

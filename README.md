@@ -29,9 +29,14 @@ uv pip install --python .venv\Scripts\python.exe -e ".[blender,control,mcp,dev]"
 .venv\Scripts\python.exe -m pytest -q
 ```
 
-Bash scripts (`scripts/*.sh`, `gpu/`, `baselines/`) need WSL or Git Bash.
+Bash scripts (`scripts/*.sh`, `gpu/`, `baselines/`) need Git Bash. In PowerShell, plain `bash` starts WSL,
+which is a separate Linux environment with its own `.venv` needs.
+
+Cycles uses the GPU when there is one. Override with `VRECON_RENDER_DEVICE` (`auto`, `cpu`, `optix`, `cuda`).
 
 ## Usage (phase 0)
+
+Commands below use the Linux path. On Windows, use `.venv\Scripts\vrecon` instead of `.venv/bin/vrecon`.
 
 ```bash
 .venv/bin/vrecon new     clip.mp4 --out myproj                 # import a video, detect shots

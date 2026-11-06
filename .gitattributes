@@ -1,0 +1,2 @@
+# Bash fails on CRLF, and this repo is also checked out on Windows with core.autocrlf=true.
+*.sh text eol=lf

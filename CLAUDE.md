@@ -9,9 +9,13 @@ Research / non-commercial project: reconstruct reference video as an editable Bl
 - `docs/CONVENTIONS.md` (axes, units, rotations, intrinsics, time). Follow it in all code.
 
 ## Environment
-- Setup: `bash scripts/setup.sh --no-smoke` (idempotent; skip if `.venv/bin/python -c "import bpy"` works).
-- Python 3.13 venv in `.venv` (bpy 5.2.3 needs 3.13). Run tests: `.venv/bin/python -m pytest -q`.
-- No GPU in cloud sessions. Render small (e.g. 320x180, Cycles CPU, few samples).
+- Main machine: Windows 11, i7-13700H, 32 GB RAM, RTX 4060 Laptop (8 GB VRAM), Blender 5.2 GUI installed. Cloud sessions (Linux, CPU only) are no longer the default.
+- Python 3.13 venv in `.venv` (bpy 5.2.3 needs 3.13). On Windows the python is `.venv/Scripts/python.exe` (Linux: `.venv/bin/python`). Run tests: `.venv/Scripts/python.exe -m pytest -q`.
+- Setup: `bash scripts/setup.sh --no-smoke` from Git Bash (idempotent). In PowerShell, plain `bash` starts WSL, which is a different (Linux) environment.
+- The repo path contains Japanese and is under OneDrive. Never pass paths to OpenCV file functions (`cv2.imread/imwrite/VideoCapture/VideoWriter` fail on non-ASCII paths on Windows): use `control/core.py` (`load_frames`, `read_video_rgb`, `encode_mp4`). Always pass `encoding="utf-8"` for text files and subprocess output (the Windows default is cp932).
+- Rendering: `render_frames` uses the GPU when there is one (`VRECON_RENDER_DEVICE` = auto|cpu|optix|cuda). Data passes in `scene/passes.py` stay on CPU: measured faster for 1 sample.
+- "Windows fatal exception: code 0xc0000139" in pytest output comes from DLL loading in `import bpy` / Cycles device listing; the process continues and it does not mean a test crashed.
+- 8 GB VRAM cannot run MiniMax-H3 (estimated to need about 80 GB): generation stays on a rented GPU.
 - Blender 5 animation API: read keyframes through `bpy_extras.anim_utils.action_get_channelbag_for_slot`, not `action.fcurves`.
 
 ## CLI

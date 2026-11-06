@@ -17,6 +17,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from vrecon.control.core import read_video_rgb
 from vrecon.metrics.poses import camera_pose, object_pose
 from vrecon.schema import Observation, Project, Provenance
 
@@ -29,14 +30,7 @@ class Tracks:
 
 
 def _frames(video: str | Path) -> list[np.ndarray]:
-    cap = cv2.VideoCapture(str(video))
-    out = []
-    while True:
-        ok, f = cap.read()
-        if not ok:
-            break
-        out.append(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY))
-    cap.release()
+    out = [cv2.cvtColor(f, cv2.COLOR_RGB2GRAY) for f in read_video_rgb(video)]
     if not out:
         raise ValueError(f"no frames read from {video}")
     return out

@@ -28,7 +28,7 @@ from vrecon.schema import Project, load_project
 
 
 def _load_map(path: Path) -> dict[int, str]:
-    return {int(k): v for k, v in json.loads(path.read_text()).items()}
+    return {int(k): v for k, v in json.loads(path.read_text(encoding="utf-8")).items()}
 
 
 def render_reconstruction_passes(rec: Project, shot_id: str | None, out_dir: Path):
@@ -52,7 +52,7 @@ def score(reference_dir: str | Path, rec: Project, shot_id: str | None = None,
     ref_index = np.load(ref_dir / "gt_passes" / "index.npz")["index"]
     ref_map = _load_map(ref_dir / "gt_passes" / "id_map.json")
     gt = load_project(ref_dir / "gt.json") if (ref_dir / "gt.json").is_file() else None
-    meta = json.loads((ref_dir / "meta.json").read_text()) if (ref_dir / "meta.json").is_file() else {}
+    meta = json.loads((ref_dir / "meta.json").read_text(encoding="utf-8")) if (ref_dir / "meta.json").is_file() else {}
     shot_id = shot_id or rec.shots[0].id
 
     if rec_passes is None:
