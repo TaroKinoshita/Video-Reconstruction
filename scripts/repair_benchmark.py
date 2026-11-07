@@ -20,8 +20,8 @@ import time
 from pathlib import Path
 
 from vrecon.evaluate import score
-from vrecon.optimize import combined_loss, gt_stand_in_masks
-from vrecon.optimize.tracks import track_points
+from vrecon.optimize import combined_loss, gt_stand_in_masks, load_masks
+from vrecon.optimize.tracks import load_tracks, track_points
 from vrecon.run import AcceptRule, RunManager
 from vrecon.run.policy import auto_repair
 from vrecon.run.service import auto_pairs
@@ -59,10 +59,11 @@ def summarize(rep):
     return {k: rep["summary"].get(k) for k in KEYS}
 
 
-def run_clip(clip: Path, out_root: Path, passes: int, evals: int) -> dict:
+def run_clip(clip: Path, out_root: Path, passes: int, evals: int, observed: Path | None = None) -> dict:
     gt = load_project(clip / "gt.json")
     wrong, injected = perturb(gt, seed=int(clip.name.split("_")[-1]))
-    obs = gt_stand_in_masks(clip)
+    masks_file = observed / clip.name / "masks.npz" if observed else None
+    obs = load_masks(masks_file) if masks_file and masks_file.is_file() else gt_stand_in_masks(clip)
     run_dir = out_root / clip.name
     if run_dir.exists():
         import shutil
@@ -73,7 +74,9 @@ def run_clip(clip: Path, out_root: Path, passes: int, evals: int) -> dict:
     pairs = auto_pairs(wrong, obs)
     set_ids = {o.id for o in wrong.reconstruction.objects if o.kind == "set"}
 
-    tracks = track_points(clip / "video.mp4")  # from the reference video itself (a real observation)
+    # from the reference video itself (a real observation); --observed swaps in externally computed files
+    tracks_file = observed / clip.name / "tracks.npz" if observed else None
+    tracks = load_tracks(tracks_file) if tracks_file and tracks_file.is_file() else track_points(clip / "video.mp4")
 
     set_pairs = {k: v for k, v in pairs.items() if v in set_ids}
 
@@ -109,6 +112,7 @@ def main() -> int:
     ap.add_argument("--passes", type=int, default=2)
     ap.add_argument("--evals", type=int, default=60)
     ap.add_argument("--out", default="evaluation/repair_benchmark")
+    ap.add_argument("--observed", help="folder with <clip>/tracks.npz and/or <clip>/masks.npz; missing files use the defaults")
     args = ap.parse_args()
     clips = sorted(p for p in Path(args.synthetic).iterdir() if (p / "gt.json").is_file())
     if args.clips:
@@ -117,7 +121,7 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     results = []
     for clip in clips:
-        r = run_clip(clip, Path("runs/repair_benchmark"), args.passes, args.evals)
+        r = run_clip(clip, Path("runs/repair_benchmark"), args.passes, args.evals, Path(args.observed) if args.observed else None)
         results.append(r)
         write(out, args, results)  # after every clip, so an interrupted run keeps what it finished
         print(f"{r['clip']}: loss {r['silhouette_loss'][0]:.3f} -> {r['silhouette_loss'][1]:.3f}, "

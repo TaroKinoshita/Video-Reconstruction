@@ -48,6 +48,17 @@ def gt_stand_in_masks(clip_dir: str | Path, obs_id: str = "obs_masks_gt_stand_in
     return MaskObservation(masks, id_map, obs)
 
 
+def load_masks(path: str | Path, obs_id: str = "obs_masks_file") -> MaskObservation:
+    """Masks written by an external segmenter (gpu/observe/run_sam3.py), which runs in its own env."""
+    with np.load(path) as d:
+        masks, labels, meta = d["masks"], json.loads(str(d["id_map"])), json.loads(str(d["meta"]))
+    id_map = {int(k): v for k, v in labels.items()}
+    obs = Observation(id=obs_id, kind="mask", shot_id="shot_001",
+                      summary={"labels": sorted(id_map.values()), "frames": int(masks.shape[0])},
+                      provenance=Provenance(tool=meta["tool"], params=meta))
+    return MaskObservation(masks, id_map, obs)
+
+
 # --- silhouette objective ----------------------------------------------------------------------------
 
 
@@ -168,7 +179,8 @@ def silhouette_metrics(project: Project, obs: MaskObservation, pairs: dict[str, 
 class Param:
     """kind: 'translation' (offset added to an object's rest and all keys, along axis 0-2),
     'size' (object size along axis), 'focal' (multiplier on all of a camera's focal lengths),
-    'time' (shift of all of an animated object's key times, in frames)."""
+    'time' (shift of all of an animated object's key times, in frames). A 'time' parameter searched with
+    others is scanned over TIME_SCAN_FRAMES, refitting the others at each shift."""
 
     kind: str
     target_id: str
@@ -243,6 +255,34 @@ def pattern_search(f, x0: np.ndarray, steps: np.ndarray, max_evals: int = 300, m
     return x, fx, evals
 
 
+TIME_SCAN_FRAMES = range(-8, 9, 2)
+
+
+def _scan_time(loss, params: list[Param], steps: np.ndarray, evals_per_shift: int):
+    """Try each timing shift and refit the other parameters there.
+
+    An earlier position search absorbs a timing error, so the correct shift alone looks worse than no
+    shift: searching timing by itself stays where it is.
+    """
+    t = next(i for i, p in enumerate(params) if p.kind == "time")
+    others = [i for i in range(len(params)) if i != t]
+    best, best_loss, total = None, np.inf, 0
+    for shift in TIME_SCAN_FRAMES:
+        def at_shift(y):
+            x = np.zeros(len(params))
+            x[t] = shift
+            x[others] = y
+            return loss(x)
+
+        y, fy, evals = pattern_search(at_shift, np.zeros(len(others)), steps[others], max_evals=evals_per_shift)
+        total += evals
+        if fy < best_loss:
+            best, best_loss = np.zeros(len(params)), fy
+            best[t] = shift
+            best[others] = y
+    return best, best_loss, total
+
+
 TRACK_WEIGHT = 50.0  # puts track loss (fraction of the diagonal, ~0.001) on the silhouette loss scale (~0.1)
 
 
@@ -270,7 +310,11 @@ def optimize(project: Project, obs: MaskObservation | None, pairs: dict[str, str
 
     x0 = np.zeros(len(params))
     before = loss(x0)
-    x, after, evals = pattern_search(loss, x0, np.array([p.step for p in params]), max_evals=max_evals)
+    steps = np.array([p.step for p in params])
+    if any(p.kind == "time" for p in params) and len(params) > 1:
+        x, after, evals = _scan_time(loss, params, steps, max_evals)
+    else:
+        x, after, evals = pattern_search(loss, x0, steps, max_evals=max_evals)
     if any(p.kind == "time" for p in params) and stride > 1:
         # timing is invisible between sampled frames: polish on every frame with small steps
         def fine(y):

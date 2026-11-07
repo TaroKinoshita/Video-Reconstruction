@@ -40,6 +40,25 @@ def test_unreadable_video_raises(tmp_path):
         read_video_rgb(bad)
 
 
+def test_load_external_observations(tmp_path):
+    import json
+
+    from vrecon.optimize import load_masks
+    from vrecon.optimize.tracks import load_tracks
+
+    xy = np.full((2, 5, 2), np.nan, np.float32)
+    xy[0, 1:] = 3.0
+    np.savez(tmp_path / "tracks.npz", xy=xy, size=np.array([64, 32]), meta=json.dumps({"tool": "t"}))
+    tracks = load_tracks(tmp_path / "tracks.npz")
+    assert tracks.size == (64, 32) and tracks.observation.provenance.tool == "t"
+    assert np.isnan(tracks.xy[0, 0, 0]) and tracks.xy[0, 1, 0] == 3.0
+
+    masks = np.zeros((5, 32, 64), np.uint16)
+    np.savez(tmp_path / "masks.npz", masks=masks, id_map=json.dumps({"1": "obs_1"}), meta=json.dumps({"tool": "m"}))
+    obs = load_masks(tmp_path / "masks.npz")
+    assert obs.id_map == {1: "obs_1"} and obs.masks.shape == (5, 32, 64)
+
+
 def test_track_points_under_non_ascii_path(tmp_path):
     cv2 = pytest.importorskip("cv2")
     from vrecon.optimize.tracks import track_points

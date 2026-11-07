@@ -11,6 +11,7 @@ says the point went measures camera motion, focal length and object motion toget
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,6 +70,16 @@ def track_points(video: str | Path, max_corners: int = 300, reseed: int = 12, sp
         summary={"tracks": int(len(xy)), "frames": t},
         provenance=Provenance(tool="opencv_lk", tool_version=cv2.__version__,
                               params={"max_corners": max_corners, "reseed": reseed, "span": span, "fb_max": fb_max}))
+    return Tracks(xy=xy, size=(w, h), observation=obs)
+
+
+def load_tracks(path: str | Path, obs_id: str = "obs_tracks_file") -> Tracks:
+    """Tracks written by an external tracker (gpu/observe/run_cotracker.py), which runs in its own env."""
+    with np.load(path) as d:
+        xy, (w, h), meta = d["xy"].astype(np.float32), d["size"].tolist(), json.loads(str(d["meta"]))
+    obs = Observation(id=obs_id, kind="point_track", shot_id="shot_001",
+                      summary={"tracks": int(len(xy)), "frames": int(xy.shape[1])},
+                      provenance=Provenance(tool=meta["tool"], params=meta))
     return Tracks(xy=xy, size=(w, h), observation=obs)
 
 

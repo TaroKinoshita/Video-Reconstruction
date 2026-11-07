@@ -25,7 +25,9 @@ def hypotheses(project) -> list[tuple[str, list[Param], str]]:
                    [Param("translation", o.id, 0, 0.25), Param("translation", o.id, 1, 0.25)], "all"))
         hs.append((f"{o.id} has the wrong size", [Param("size", o.id, a, 0.15) for a in range(3)], "all"))
         if o.keys:
-            hs.append((f"{o.id} moves at the wrong time", [Param("time", o.id, step=4.0)], "all"))
+            hs.append((f"{o.id} moves at the wrong time",  # with position: see optimize._scan_time
+                       [Param("time", o.id, step=4.0), Param("translation", o.id, 0, 0.25),
+                        Param("translation", o.id, 1, 0.25)], "all"))
     return hs
 
 

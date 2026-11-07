@@ -531,7 +531,10 @@ OSSは一度に集めない。その段階で必要な分だけ入れる。
 カメラの動きと、動く物の分離を同時に推定するモデルが出てきている（例：MoRe、CVPR 2026。動く物と静止した背景を分けて
 カメラを推定する）。
 
-- 最初の再構成は、**4D再構成モデル（MoRe、MegaSaM など）の出力**から作る。カメラの軌跡と、物の大まかな位置を出す。
+- 最初の再構成は、**4D再構成モデルの出力**から作る。カメラの軌跡と、物の大まかな位置を出す。
+- 【変更 2026-11-07】**4RC（ICML 2026）を最初に試し、MoReと比較する。MegaSaMは予備。** どれが使いやすいかは、Blenderへの変換まで通して判断する。合成映像で、変換後のカメラと物の位置の誤差を比べる。MoReはコードと重みの公開を確認できていない（入手できなければ、比較相手はMegaSaM）。
+- 箱の回転は、箱に属する3D点の動きから SciPy の `Rotation.align_vectors()` で計算する。回転だけを求める関数なので、先に点群の重心を引き、外れ値を除くか重みを下げる。
+- 箱や円柱で形が合わないときの追加候補として SAM 3D Objects を持つ。形のズレを測って効果がありそうなら試す。条件Cに入れるなら、基準を固定する前に決める。
 - LLMは、そこから仮説を立てて修理する役に専念する。
 - 部品外しの比較（11.1）に「4D再構成なしで、LLMが最初から作る」条件を加える。
 
@@ -539,12 +542,14 @@ OSSは一度に集めない。その段階で必要な分だけ入れる。
 
 | 用途 | 計画の候補（8章） | 更新後の第一候補 | 今あるもの |
 |---|---|---|---|
-| 物の領域分割 | SAM 2 など | **SAM 3**（文字で指示した物を、動画全体で分割・追跡できる） | 正解マスクの代用（合成映像だけ） |
-| 点の追跡 | CoTracker など | **CoTracker3** または **TAPNext++** | OpenCV Lucas-Kanade（重みなし。予備として残す） |
-| カメラと動く物 | MapAnything、MegaSaM | **MoRe** などの4D再構成モデルを追加 | なし |
+| 物の領域分割 | SAM 2 など | **SAM 3.1**（文字で指示した物を、動画全体で分割・追跡できる。複数の物の同時追跡が SAM 3 より速いとされる） | 正解マスクの代用（合成映像だけ） |
+| 点の追跡 | CoTracker など | **CoTracker3 Offline**（隠れた後の再検出が重要なら **TAPNext++** も比較） | OpenCV Lucas-Kanade（重みなし。予備として残す） |
+| カメラと動く物 | MapAnything、MegaSaM | **4RC**（比較：MoRe、予備：MegaSaM） | なし |
 
 どれも、`optimize/` が受け取る観測（`MaskObservation`、`Tracks`）と同じ形で返せば、今の修理ループにそのまま差し込める。
-CPUでの速度は未確認なので、まずローカルで、合成映像6本の修理ベンチマークを正解マスクの代用と比べる。
+まずローカルで、合成映像6本の修理ベンチマークを正解マスクの代用と比べる。
+
+`bpy` は Python 3.13 専用で、解析の道具は要求する版が違う（SAM 3.1 は3.12以上、4RC の手順は3.11）。道具ごとに環境を分け、結果はファイルで `vrecon` に渡す。
 
 ### 16.4 V2Vの制御方式に「プロキシの描画」を加える【変更】
 
@@ -580,5 +585,7 @@ ProxyUp、Shape-for-Motion などは、H3で編集が残らなかった場合の
 - ProxyUp：arXiv 2607.03732
 - GO-Renderer：arXiv 2603.23246
 - MoRe（CVPR 2026）：Motion-aware Feed-forward 4D Reconstruction Transformer
-- SAM 3（ICLR 2026）、CoTracker3（ICCV 2025）、TAPNext++（arXiv 2604.10582）
+- SAM 3 / SAM 3.1：<https://github.com/facebookresearch/sam3>、CoTracker3（ICCV 2025）：<https://github.com/facebookresearch/co-tracker>、TAPNext++（arXiv 2604.10582）
+- 4RC（ICML 2026、arXiv 2602.10094）：<https://github.com/Luo-Yihang/4RC>
+- SciPy：<https://github.com/scipy/scipy>
 - bpy（PyPI）：<https://pypi.org/project/bpy/>

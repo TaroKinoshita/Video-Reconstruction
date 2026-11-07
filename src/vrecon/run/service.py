@@ -50,7 +50,7 @@ def auto_pairs(project, obs: MaskObservation, shot_id: str = "shot_001") -> dict
     obs_map = {k: v for k, v in obs.id_map.items() if v not in sets}
     pairs = match_objects(obs.masks[frames], sil, obs_map, {i + 1: m for i, m in enumerate(movers)})
     # set pieces (floor, wall) pair by label when the observation provides them: they pin the camera
-    pairs.update({sid: sid for sid in sets if sid in obs.id_map.values()})
+    pairs.update({sid: sid for sid in sorted(sets) if sid in obs.id_map.values()})  # sorted: set order varies per process
     return pairs
 
 
