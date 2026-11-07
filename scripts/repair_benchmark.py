@@ -6,8 +6,8 @@ For each clip: take the ground truth, inject seeded errors (focal length; per mo
 position, size, motion timing), then run a FIXED hypothesis order through the optimizer and the run
 manager (no LLM). Score before/after against ground truth.
 
-What this does and does not show: masks are the ground-truth stand-in and the errors are synthetic,
-so this tests the repair machinery (search + adoption rules), not the research hypothesis (PLAN.md 11.8).
+What this does and does not show: masks are the ground-truth stand-in unless --observed gives SAM masks, and
+the errors are synthetic, so this tests the repair machinery (search + adoption rules), not the research hypothesis (PLAN.md 11.8).
 Outputs: evaluation/repair_benchmark/results.json and results.md; run folders under runs/ (ignored).
 """
 
@@ -93,7 +93,7 @@ def run_clip(clip: Path, out_root: Path, passes: int, evals: int, observed: Path
     outcomes = auto_repair(mgr, obs, pairs, tracks, passes, evals)
     seconds = time.time() - start
     after = summarize(score(clip, mgr.adopted))
-    return {"clip": clip.name, "pairs": pairs, "injected": injected, "before": before, "after": after,
+    return {"clip": clip.name, "masks_tool": obs.observation.provenance.tool, "tracks_tool": tracks.observation.provenance.tool, "pairs": pairs, "injected": injected, "before": before, "after": after,
             "silhouette_loss": [loss0, mgr.metrics["silhouette_loss"]],
             "accepted": sum(o["status"] == "accepted" for o in outcomes), "tried": len(outcomes),
             "seconds": round(seconds, 1), "outcomes": outcomes}
@@ -124,7 +124,7 @@ def main() -> int:
         r = run_clip(clip, Path("runs/repair_benchmark"), args.passes, args.evals, Path(args.observed) if args.observed else None)
         results.append(r)
         write(out, args, results)  # after every clip, so an interrupted run keeps what it finished
-        print(f"{r['clip']}: loss {r['silhouette_loss'][0]:.3f} -> {r['silhouette_loss'][1]:.3f}, "
+        print(f"{r['clip']} [{r['masks_tool']}, {r['tracks_tool']}]: loss {r['silhouette_loss'][0]:.3f} -> {r['silhouette_loss'][1]:.3f}, "
               f"accepted {r['accepted']}/{r['tried']}, {r['seconds']} s", flush=True)
     print((out / "results.md").read_text(encoding="utf-8"))
     return 0
@@ -142,7 +142,8 @@ def write(out: Path, args, results: list) -> None:
                     f"| {fmt(b['mask_iou_mean'])} → {fmt(a['mask_iou_mean'])} "
                     f"| {fmt(b['timing_abs_error_frames_mean'])} → {fmt(a['timing_abs_error_frames_mean'])} "
                     f"| {r['accepted']}/{r['tried']} |")
-    note = ("Masks: ground-truth stand-in. Point tracks: OpenCV Lucas-Kanade on the reference video. "
+    sources = "; ".join(f"{r['clip']} masks={r['masks_tool']} tracks={r['tracks_tool']}" for r in results)
+    note = (f"Sources: {sources}. "
             "Errors: injected (focal, floor position, size, timing). "
             "Fixed hypothesis order, no LLM. Tests the repair machinery only (PLAN.md 11.8).\n"
             "Reprojection error is a fraction of the image diagonal.\n\n")

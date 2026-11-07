@@ -45,10 +45,10 @@ def frame_count_and_size(path: str) -> tuple[int, int, int]:
     return t, h, w
 
 
-def segment(predictor, video: str, prompt: str, frames: tuple[int, int, int]) -> dict[int, np.ndarray]:
-    """obj id -> bool [T, H, W]."""
+def segment(predictor, video: str, prompt: str, frames: tuple[int, int, int], prompt_frame: int = 0) -> dict[int, np.ndarray]:
+    """obj id -> bool [T, H, W]. Tracking runs both ways from prompt_frame."""
     sid = predictor.handle_request({"type": "start_session", "resource_path": video, "offload_video_to_cpu": True})["session_id"]
-    predictor.handle_request({"type": "add_prompt", "session_id": sid, "frame_index": 0, "text": prompt})
+    predictor.handle_request({"type": "add_prompt", "session_id": sid, "frame_index": prompt_frame, "text": prompt})
     found: dict[int, np.ndarray] = {}
     for out in predictor.handle_stream_request({"type": "propagate_in_video", "session_id": sid}):
         res = out["outputs"]
@@ -64,6 +64,7 @@ def main() -> int:
     ap.add_argument("out")
     ap.add_argument("--movers", default="box", help="text prompt for separately labelled objects")
     ap.add_argument("--new-det-thresh", type=float, default=0.3, help="score needed to start a new object (sam3 default 0.65)")
+    ap.add_argument("--prompt-frame", type=int, default=0, help="frame where the movers prompt is given: pick one where they are apart")
     ap.add_argument("--det-thresh", type=float, default=0.2, help="score for a detection to count at all (sam3 default 0.4)")
     ap.add_argument("--max-objects", type=int, default=4, help="fewer tracked objects use less VRAM")
     ap.add_argument("--set", dest="sets", action="append", default=[], metavar="PROMPT=LABEL")
@@ -96,7 +97,7 @@ def main() -> int:
         id_map[number] = label
         for m in segment(predictor, args.video, prompt, frames).values():
             masks[m] = number
-    for oid, m in sorted(segment(predictor, args.video, args.movers, frames).items()):
+    for oid, m in sorted(segment(predictor, args.video, args.movers, frames, args.prompt_frame).items()):
         number = len(id_map) + 1
         id_map[number] = f"obs_{oid}"
         masks[m] = number

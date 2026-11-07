@@ -7,11 +7,25 @@ the "no LLM" ablation of condition C.
 
 from __future__ import annotations
 
-from vrecon.optimize import Param, optimize
+import numpy as np
+
+from vrecon.optimize import Param, apply_params, combined_loss, optimize
 
 from .manager import AcceptRule, RunManager
 
 CAMERA_RULE = AcceptRule(primary="camera_loss", min_gain=1e-4)
+FOCAL_PROBE = 0.1  # relative change of focal length used to test the evidence
+FOCAL_MIN_RISE = 0.001  # draft value: smallest loss rise on both sides that counts as evidence
+
+
+def focal_is_weak(loss, found: float, probe: float = FOCAL_PROBE, min_rise: float = FOCAL_MIN_RISE) -> bool:
+    """True when moving the found focal value by +-probe barely raises the loss on at least one side.
+
+    With a locked-off camera, tracks say nothing about focal length and only outlines remain, so tiny mask
+    errors can decide the minimum.
+    """
+    base = loss(found)
+    return min(loss((1 + found) * (1 - probe) - 1), loss((1 + found) * (1 + probe) - 1)) - base < min_rise
 
 
 def hypotheses(project) -> list[tuple[str, list[Param], str]]:
@@ -42,6 +56,16 @@ def auto_repair(mgr: RunManager, obs, pairs: dict[str, str], tracks=None, passes
             if judged_on == "set":
                 prop, info = optimize(mgr.adopted, obs, set_pairs, params, hyp, pid, max_evals=evals, tracks=tracks,
                                       track_ids=set_ids or None, use_silhouette=bool(set_pairs))
+                found = next(iter(info["values"].values()))
+
+                def camera_loss(v, project=mgr.adopted):
+                    return combined_loss(apply_params(project, params, np.array([v]))[0], obs, set_pairs, tracks, set_ids or None,
+                                         use_silhouette=bool(set_pairs))
+
+                if focal_is_weak(camera_loss, found):  # keep the focal length and leave the question open
+                    records.append({"pass": n, "hypothesis": hyp, "status": "held", "loss": info["loss_after"],
+                                    "reason": "camera loss barely changes with focal length", "uncertain": "focal_length"})
+                    continue
                 out = mgr.try_proposal(prop, rule=CAMERA_RULE)
             else:
                 prop, info = optimize(mgr.adopted, obs, pairs, params, hyp, pid, max_evals=evals, tracks=tracks)
