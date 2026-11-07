@@ -25,6 +25,9 @@ import numpy as np
 import torch
 import torch.nn.attention
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from select_movers import best, score_candidate  # noqa: E402
+
 
 def _install_edt_without_triton() -> None:
     """sam3.model.edt needs Triton (no official Windows build) only to mimic cv2.distanceTransform; use the original."""
@@ -62,9 +65,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("video")
     ap.add_argument("out")
-    ap.add_argument("--movers", default="box", help="text prompt for separately labelled objects")
+    ap.add_argument("--movers", default="box", help="text prompt for separately labelled objects; "
+                    "comma-separated alternatives are all tried and the best (select_movers.py, no ground truth) kept")
     ap.add_argument("--new-det-thresh", type=float, default=0.3, help="score needed to start a new object (sam3 default 0.65)")
-    ap.add_argument("--prompt-frame", type=int, default=0, help="frame where the movers prompt is given: pick one where they are apart")
+    ap.add_argument("--prompt-frame", default="0", help="frame where the movers prompt is given (one where they are apart), "
+                    "or 'auto' to try first, middle and last")
     ap.add_argument("--det-thresh", type=float, default=0.2, help="score for a detection to count at all (sam3 default 0.4)")
     ap.add_argument("--max-objects", type=int, default=4, help="fewer tracked objects use less VRAM")
     ap.add_argument("--set", dest="sets", action="append", default=[], metavar="PROMPT=LABEL")
@@ -97,11 +102,27 @@ def main() -> int:
         id_map[number] = label
         for m in segment(predictor, args.video, prompt, frames).values():
             masks[m] = number
-    for oid, m in sorted(segment(predictor, args.video, args.movers, frames, args.prompt_frame).items()):
+    words = [w.strip() for w in args.movers.split(",") if w.strip()]
+    if args.prompt_frame == "auto":
+        t = frames[0]
+        prompt_frames = sorted({0, t // 2, t - 1})
+    else:
+        prompt_frames = [int(args.prompt_frame)]
+    candidates = []
+    for word in words:
+        for pf in prompt_frames:
+            found = segment(predictor, args.video, word, frames, pf)
+            candidates.append(((word, pf, found), score_candidate(found)))
+            print(json.dumps({"movers": word, "prompt_frame": pf, **candidates[-1][1]}), flush=True)
+    (word, pf, found), chosen = best(candidates) if len(candidates) > 1 else candidates[0]
+    if len(candidates) > 1:
+        found = {k: found[k] for k in chosen["kept"]}
+    for oid, m in sorted(found.items()):
         number = len(id_map) + 1
         id_map[number] = f"obs_{oid}"
         masks[m] = number
-    meta = {"tool": "sam3.1_multiplex", "movers": args.movers, "new_det_thresh": args.new_det_thresh, "det_thresh": args.det_thresh, "sets": args.sets, "seconds": round(time.time() - start, 2),
+    meta = {"tool": "sam3.1_multiplex", "movers": word, "prompt_frame": pf,
+            "candidates": [{"movers": w, "prompt_frame": f, **s} for (w, f, _), s in candidates], "new_det_thresh": args.new_det_thresh, "det_thresh": args.det_thresh, "sets": args.sets, "seconds": round(time.time() - start, 2),
             "peak_vram_mb": round(torch.cuda.max_memory_allocated() / 2**20) if torch.cuda.is_available() else 0}
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "wb") as f:
