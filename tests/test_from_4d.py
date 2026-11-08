@@ -28,3 +28,33 @@ def test_upright_box_recovers_rotated_box():
     assert np.allclose(centre, [1.0, 2.0, 0.15], atol=0.01)
     assert abs(np.sin(got_yaw - yaw) ) < 0.02  # box axes are only defined up to 180 degrees
     assert np.allclose(size, [0.4, 0.1, 0.3], atol=0.01)
+
+
+def test_snap_still_ends_removes_wobble_before_and_after_the_move():
+    from vrecon.analysis.from_4d import _snap_still_ends
+
+    rng = np.random.default_rng(0)
+    frames = list(range(0, 60, 2))
+    x = np.clip((np.array(frames) - 20) / 20, 0, 1) * 2.0  # still until 20, moves 2 m until 40, then still
+    xy = np.c_[x, np.zeros_like(x)] + rng.normal(0, 0.01, (len(frames), 2))
+    f, p, y = _snap_still_ends(frames, xy, np.zeros(len(frames)))
+    assert 20 <= f[0] <= 22 and 38 <= f[-1] <= 40  # within one sample of the true onset and stop
+    assert np.allclose(p[0], [0, 0], atol=0.02) and np.allclose(p[-1], [2, 0], atol=0.02)
+
+
+def test_snap_still_ends_leaves_a_return_trip():
+    from vrecon.analysis.from_4d import _snap_still_ends
+
+    frames = list(range(30))
+    xy = np.c_[np.sin(np.linspace(0, np.pi, 30)), np.zeros(30)]
+    f, p, _ = _snap_still_ends(frames, xy, np.zeros(30))
+    assert f == frames and np.array_equal(p, xy)
+
+
+def test_deepen_extends_away_from_the_camera_keeping_the_front_face():
+    from vrecon.analysis.from_4d import _deepen
+
+    xy, size = _deepen(np.array([0.0, 1.0]), 0.0, (1.0, 0.1, 0.5))  # wide box facing the camera (+Y view)
+    assert np.isclose(size[1], 0.5) and np.isclose(xy[1] - size[1] / 2, 1.0 - 0.05)  # front face stays
+    xy2, size2 = _deepen(np.array([0.0, 1.0]), 0.0, (1.0, 0.8, 0.5))  # already deep: unchanged
+    assert size2 == (1.0, 0.8, 0.5) and np.allclose(xy2, [0.0, 1.0])

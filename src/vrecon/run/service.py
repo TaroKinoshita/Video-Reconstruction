@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 from vrecon.metrics import match_objects
-from vrecon.optimize import (MaskObservation, Param, combined_loss, gt_stand_in_masks, optimize, render_silhouettes,
+from vrecon.optimize import (MaskObservation, Param, combined_loss, gt_stand_in_masks, load_masks, optimize, render_silhouettes,
                              silhouette_metrics)
 from vrecon.schema import load_project
 
@@ -22,21 +22,70 @@ def _config(run_dir: Path) -> dict:
     return json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
 
 
-def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min_gain: float = 0.0) -> dict:
-    """Create a run. masks: a synthetic clip folder (ground-truth stand-in, until a segmenter is integrated)."""
+def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min_gain: float = 0.0,
+             video: str | None = None, from_4d: str | None = None, focal: bool | None = None) -> dict:
+    """Create a run.
+
+    masks: a synthetic clip folder (ground-truth stand-in) or a masks .npz from an external segmenter
+    (gpu/observe/run_sam3.py). video: reference video for point tracks (default: <clip>/video.mp4 for a clip
+    folder). from_4d: a 4RC output .npz; the starting scene is then built from it (analysis/from_4d.py) on
+    top of `project` (its source and shots), saved as <run_dir>/init.json. focal: whether the automatic
+    repair may change the focal length (default: no when starting from a 4D model, whose focal error the
+    search trades against other errors; yes otherwise).
+    """
     rd = Path(run_dir)
     if (rd / "config.json").exists():
         raise FileExistsError(f"{rd} already has a run")
+    observed = Path(masks).suffix == ".npz"
+    if video is None and not observed:
+        v = Path(masks) / "video.mp4"
+        video = str(v) if v.is_file() else None
     rd.mkdir(parents=True, exist_ok=True)
-    video = Path(masks) / "video.mp4"
-    cfg = {"project": str(Path(project).resolve()), "masks": str(Path(masks).resolve()), "mask_source": "gt_stand_in",
-           "video": str(video.resolve()) if video.is_file() else None,
+    start = str(Path(project).resolve())
+    report = None
+    if from_4d:
+        start, report = _start_from_4d(project, from_4d, masks, rd)
+    cfg = {"project": start, "masks": str(Path(masks).resolve()), "mask_source": "observed" if observed else "gt_stand_in",
+           "video": str(Path(video).resolve()) if video else None, "from_4d": str(Path(from_4d).resolve()) if from_4d else None,
+           "focal": (not from_4d) if focal is None else focal,
            "rule": {"primary": "silhouette_loss", "min_gain": min_gain}, "max_attempts": max_attempts}
     (rd / "config.json").write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
-    return cfg
+    return {**cfg, "init_report": report} if report else cfg
+
+
+def _start_from_4d(project: str, npz: str, masks: str, rd: Path) -> tuple[str, dict]:
+    """Starting scene from a 4RC run: cameras, floor, wall and object boxes. 4RC samples its input frames
+    evenly (np.linspace over the folder), so the sampled frames are recovered from the prediction count."""
+    import numpy as np
+
+    from vrecon.analysis.from_4d import initialize, load_4rc
+    from vrecon.schema import Observation, Provenance, save_project
+
+    if Path(masks).suffix != ".npz":
+        raise ValueError("--from-4d needs observed masks (.npz): the floor, wall and movers labels")
+    p = load_project(project)
+    with np.load(masks) as z:
+        m, id_map = z["masks"], {int(k): v for k, v in json.loads(str(z["id_map"])).items()}
+    with np.load(npz) as z:
+        n = int(z["n_frames"])
+    t, h, w = m.shape
+    frames = [int(f) for f in np.linspace(0, t - 1, n, dtype=int)]
+    shot = p.shots[0]
+    cams, objs, scale, report = initialize(load_4rc(npz, w, h, frames), m, id_map, w, h, shot.id, shot_start=shot.start,
+                                           fps=p.source.fps.num / p.source.fps.den, observation_id="obs_4rc")
+    p.observations = [o for o in p.observations if o.id != "obs_4rc"] + [Observation(
+        id="obs_4rc", kind="camera", shot_id=shot.id, summary={"frames": frames, "model": "4RC"},
+        provenance=Provenance(tool="4RC", params={"npz": str(Path(npz).resolve())}))]
+    p.reconstruction.cameras, p.reconstruction.objects, p.reconstruction.scale = cams, objs, scale
+    p.reconstruction.events = []
+    out = rd / "init.json"
+    save_project(p, out)
+    return str(out.resolve()), report
 
 
 def _observation(cfg: dict) -> MaskObservation:
+    if cfg.get("mask_source") == "observed":
+        return load_masks(cfg["masks"])
     return gt_stand_in_masks(cfg["masks"])
 
 
@@ -142,7 +191,8 @@ def auto(run_dir: str, passes: int = 2, max_evals: int = 60) -> dict:
 
     mgr, obs, _ = _manager(Path(run_dir))
     before = dict(mgr.metrics)
-    records = auto_repair(mgr, obs, auto_pairs(mgr.adopted, obs), mgr.tracks, passes, max_evals)
+    records = auto_repair(mgr, obs, auto_pairs(mgr.adopted, obs), mgr.tracks, passes, max_evals,
+                          focal=_config(Path(run_dir)).get("focal", True))
     return {"revision": mgr.adopted.revision, "metrics_before": before, "metrics_after": mgr.metrics,
             "accepted": sum(r["status"] == "accepted" for r in records), "tried": len(records), "attempts": records}
 

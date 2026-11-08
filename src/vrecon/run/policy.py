@@ -28,6 +28,10 @@ def focal_is_weak(loss, found: float, probe: float = FOCAL_PROBE, min_rise: floa
     return min(loss((1 + found) * (1 - probe) - 1), loss((1 + found) * (1 + probe) - 1)) - base < min_rise
 
 
+MOVE_STEP = 0.3  # first search step for position, as a share of the object's largest side
+SIZE_STEP = 0.2  # same for size
+
+
 def hypotheses(project) -> list[tuple[str, list[Param], str]]:
     hs = [("camera focal length is off (judged on the set: outlines + tracks)", [Param("focal", "cam_001", step=0.1)],
            "set")]
@@ -35,13 +39,17 @@ def hypotheses(project) -> list[tuple[str, list[Param], str]]:
     for o in project.reconstruction.objects:
         if o.kind == "set":
             continue
+        # steps scale with the object: a scene from a 4D model is in its own units, not metres
+        # (0.3 and 0.2 of the largest side give the former 0.25 m / 0.15 m for the ~0.8 m synthetic objects)
+        ref = max(o.size)
+        move, grow = MOVE_STEP * ref, SIZE_STEP * ref
         hs.append((f"{o.id} misplaced on the floor",
-                   [Param("translation", o.id, 0, 0.25), Param("translation", o.id, 1, 0.25)], "all"))
-        hs.append((f"{o.id} has the wrong size", [Param("size", o.id, a, 0.15) for a in range(3)], "all"))
+                   [Param("translation", o.id, 0, move), Param("translation", o.id, 1, move)], "all"))
+        hs.append((f"{o.id} has the wrong size", [Param("size", o.id, a, grow) for a in range(3)], "all"))
         if o.keys:
             hs.append((f"{o.id} moves at the wrong time",  # with position: see optimize._scan_time
-                       [Param("time", o.id, step=4.0), Param("translation", o.id, 0, 0.25),
-                        Param("translation", o.id, 1, 0.25)], "all"))
+                       [Param("time", o.id, step=4.0), Param("translation", o.id, 0, move),
+                        Param("translation", o.id, 1, move)], "all"))
     return hs
 
 

@@ -84,3 +84,22 @@ def test_rollback_and_resume(mgr, tmp_path):
     assert back.revision == 3 and back.reconstruction.objects[0].rest.pose.translation[0] == pytest.approx(1.0)
     again = RunManager(tmp_path / "project.json", tmp_path / "run", dist, AcceptRule(primary="err"), max_attempts=6)
     assert again.attempts == 2 and again.adopted.revision == 3
+
+
+def test_init_run_with_observed_masks(tmp_path):
+    import json
+
+    import numpy as np
+
+    from vrecon.run import service
+
+    masks = np.zeros((4, 8, 8), np.uint8)
+    masks[:, 2:5, 2:5] = 1
+    npz = tmp_path / "masks.npz"
+    np.savez(npz, masks=masks, id_map=json.dumps({"1": "obs_0"}), meta=json.dumps({"tool": "test"}))
+    project = tmp_path / "project.json"
+    save_project(make_project(), project)
+    cfg = service.init_run(str(project), str(tmp_path / "run"), str(npz))
+    assert cfg["mask_source"] == "observed" and cfg["video"] is None and cfg["focal"] is True
+    obs = service._observation(cfg)
+    assert obs.id_map == {1: "obs_0"} and obs.masks.shape == (4, 8, 8)

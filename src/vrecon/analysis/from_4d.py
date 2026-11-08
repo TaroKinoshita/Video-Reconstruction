@@ -100,6 +100,52 @@ def _touches_border(mask: np.ndarray) -> bool:
     return bool(mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any())
 
 
+MIN_DEPTH_RATIO = 0.5  # side facing away from the camera, at least this share of the other horizontal side
+
+
+def _deepen(xy: np.ndarray, yaw: float, size: tuple, ratio: float = MIN_DEPTH_RATIO):
+    """4RC points cover only the faces the camera sees, so the side along the view comes out thin.
+    The first camera looks along +Y (floor_frame). Of the box's two horizontal axes, the one closer to +Y
+    is extended to at least `ratio` of the other, away from the camera, keeping the front face in place.
+    A prior, not a measurement: the hidden depth is unknown."""
+    axes = np.array([[np.cos(yaw), np.sin(yaw)], [-np.sin(yaw), np.cos(yaw)]])
+    k = int(np.argmax(np.abs(axes[:, 1])))
+    want = ratio * size[1 - k]
+    if size[k] >= want:
+        return xy, size
+    d = axes[k] * np.sign(axes[k, 1])  # pointing away from the camera
+    new = list(size)
+    new[k] = want
+    return xy + d * (want - size[k]) / 2, tuple(new)
+
+
+STILL_PROGRESS = 0.1  # share of the start-to-end travel below which a key counts as still at an end
+
+
+def _snap_still_ends(frames: list[int], xy: np.ndarray, yaw: np.ndarray, n_end: int = 3):
+    """Per-frame boxes wobble while the object stands still, which reads as motion from the first frame.
+    Along the start-to-end travel, keys within STILL_PROGRESS of either end are replaced by one key at the
+    end's median pose, placed at the last still frame (start) and the first still frame (end).
+    Left unchanged when the path does not go from one place to another (travel small against the spread)."""
+    if len(frames) < 2 * n_end + 1:
+        return frames, xy, yaw
+    a, b = np.median(xy[:n_end], 0), np.median(xy[-n_end:], 0)
+    travel = float(np.linalg.norm(b - a))
+    spread = float(np.linalg.norm(xy - np.median(xy, 0), axis=1).max())
+    if travel < spread:  # e.g. goes and comes back: no single start and end
+        return frames, xy, yaw
+    s = (xy - a) @ (b - a) / travel**2
+    moving = np.nonzero((s > STILL_PROGRESS) & (s < 1 - STILL_PROGRESS))[0]
+    if len(moving) == 0:
+        return frames, xy, yaw
+    i0, i1 = max(moving[0] - 1, 0), min(moving[-1] + 1, len(frames) - 1)
+    ya, yb = np.median(yaw[:i0 + 1]), np.median(yaw[i1:])
+    f = [frames[i0]] + list(frames[i0 + 1:i1]) + [frames[i1]]
+    p = np.vstack([a, xy[i0 + 1:i1], b])
+    y = np.r_[ya, yaw[i0 + 1:i1], yb]
+    return f, p, y
+
+
 MOVE_FRACTION = 0.5  # an object moves when its per-frame box centres spread more than this share of its size
 
 
@@ -216,17 +262,27 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
             moving = bool(spread > MOVE_FRACTION * frame_size)
         if moving:
             size = tuple(float(v) for v in np.median([s for *_, s in per], 0))
-            keys, prev = [], None
-            for f, c, y, _ in per:
+            fs = [f for f, *_ in per]
+            xy = np.array([c[:2] for _, c, _, _ in per])
+            yaws, prev = [], None
+            for _, _, y, _ in per:
                 if prev is not None:  # box axes are defined up to half a turn: stay close to the last key
                     y = prev + (y - prev + np.pi / 2) % np.pi - np.pi / 2
                 prev = y
-                keys.append(TransformKey(time=(f - shot_start) / fps,
-                                         pose=Pose(translation=(float(c[0]), float(c[1]), size[2] / 2), rotation=_yaw_quat(y))))
+                yaws.append(y)
+            fs, xy, yaws = _snap_still_ends(fs, xy, np.array(yaws))
+            thin = size
+            moved = [_deepen(c, float(y), thin) for c, y in zip(xy, yaws)]
+            xy, size = np.array([c for c, _ in moved]), moved[0][1] if moved else size
+            keys = [TransformKey(time=(f - shot_start) / fps,
+                                 pose=Pose(translation=(float(c[0]), float(c[1]), size[2] / 2), rotation=_yaw_quat(float(y))))
+                    for f, c, y in zip(fs, xy, yaws)]
             obj = SceneObject(id=oid, kind="rigid", size=size, rest=keys[0], keys=keys, evidence=ev)
         else:
+            cxy, size = _deepen(np.asarray(centre[:2]), yaw, size)
             obj = SceneObject(id=oid, kind="rigid", size=size, evidence=ev,
-                              rest=TransformKey(time=0.0, pose=Pose(translation=tuple(float(v) for v in centre), rotation=_yaw_quat(yaw))))
+                              rest=TransformKey(time=0.0, pose=Pose(translation=(float(cxy[0]), float(cxy[1]), float(centre[2])),
+                                                                    rotation=_yaw_quat(yaw))))
         objects.append(obj)
         report["objects"][name] = {"id": oid, "points": int(len(p)), "size": [round(v, 4) for v in size],
                                    "moving": moving, "frames_with_box": len(per)}
