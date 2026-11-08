@@ -132,3 +132,21 @@ def test_run_auto(reference, tmp_path):  # noqa: F811
     out = service.auto(rd, passes=1, max_evals=30)
     assert out["accepted"] >= 1 and out["metrics_after"]["silhouette_loss"] < out["metrics_before"]["silhouette_loss"]
     assert main(["run", "history", rd, "--last", "1"]) == 0
+
+
+def test_height_change_keeps_bottom_face(reference):  # noqa: F811
+    import numpy as np
+
+    from vrecon.optimize import apply_params
+    from vrecon.schema import load_project
+
+    p = load_project(reference / "gt.json")
+    o = next(o for o in p.reconstruction.objects if o.kind != "set")
+    yaw = (float(np.cos(0.3)), 0.0, 0.0, float(np.sin(0.3)))  # upright box turned about Z: up stays +Z
+    o.rest = TransformKey(time=0.0, pose=Pose(translation=(1.0, 2.0, o.size[2] / 2), rotation=yaw))
+    o.keys = []
+    q, _ = apply_params(p, [Param("size", o.id, 2)], np.array([0.4]))
+    o2 = next(x for x in q.reconstruction.objects if x.id == o.id)
+    assert o2.size[2] == pytest.approx(o.size[2] + 0.4)
+    assert o2.rest.pose.translation[2] - o2.size[2] / 2 == pytest.approx(0.0, abs=1e-9)
+    assert o2.rest.pose.translation[:2] == pytest.approx((1.0, 2.0))

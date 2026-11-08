@@ -2,7 +2,8 @@
 
 Input (`load_4rc`): per sampled frame a camera-to-world pose (OpenCV axes, world = first camera), pinhole
 intrinsics and a world point map at the model's resolution. Output: cameras, a floor at z = 0 (Z up), a back
-wall when one is visible, and one upright box per masked object. Static scene only: objects get no keys.
+wall when one is visible, and one upright box per masked object. An object whose per-frame boxes move gets a
+key per sampled frame (position and yaw from that frame's points); otherwise one rest pose.
 Scale stays in the model's units (recorded as "estimated").
 """
 
@@ -90,6 +91,14 @@ def _confident(m: Model4D, sel: np.ndarray, keep: float) -> np.ndarray:
     return pts[conf >= np.quantile(conf, 1 - keep)] if len(conf) else pts
 
 
+def _confident_frame(m: Model4D, i: int, sel: np.ndarray, keep: float) -> np.ndarray:
+    pts, conf = m.pts[i][sel], m.conf[i][sel]
+    return pts[conf >= np.quantile(conf, 1 - keep)] if len(conf) else pts
+
+
+MOVE_FRACTION = 0.5  # an object moves when its per-frame box centres spread more than this share of its size
+
+
 def floor_frame(m: Model4D, floor_pts: np.ndarray) -> tuple[np.ndarray, dict]:
     """World alignment A (4x4): floor -> z = 0, +Z towards the cameras, +Y = first camera's view direction
     on the floor, origin = floor point under the first camera's view centre."""
@@ -131,7 +140,8 @@ def _yaw_quat(yaw: float):
 
 
 def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int, height: int,
-               shot_id: str, shot_start: int = 0, keep: float = 0.7, observation_id: str | None = None):
+               shot_id: str, shot_start: int = 0, keep: float = 0.7, observation_id: str | None = None,
+               fps: float = 24.0):
     """Returns (cameras, objects, scale, report). Labels: obj_floor, optional obj_wall, movers obs_*."""
     labels = labels_at_model_pixels(m, masks)
     by_name = {v: k for k, v in id_map.items()}
@@ -169,20 +179,48 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
                                        evidence=ev))
             report["wall_y"] = yw
     report["objects"] = {}
+    floor_tol = 0.01 * report["camera_height"]
     for num, name in sorted(id_map.items()):
         if not name.startswith("obs_"):
             continue
+        oid = "obj_" + name.removeprefix("obs_").zfill(2)
         p = _confident(m, labels == num, keep)
         if len(p) < 50:
             report["objects"][name] = {"skipped": f"{len(p)} points"}
             continue
         p = aligned(p)
-        p = p[p[:, 2] > -0.01 * report["camera_height"]]  # drop points that fell through the floor
+        p = p[p[:, 2] > -floor_tol]  # drop points that fell through the floor
         centre, yaw, size = upright_box(p)
-        oid = "obj_" + name.removeprefix("obs_").zfill(2)
-        objects.append(SceneObject(id=oid, kind="rigid", size=size,
-                                   rest=TransformKey(time=0.0, pose=Pose(translation=tuple(float(v) for v in centre), rotation=_yaw_quat(yaw))),
-                                   evidence=ev))
-        report["objects"][name] = {"id": oid, "points": int(len(p)), "size": [round(v, 4) for v in size]}
+        # per sampled frame: a box from that frame's points only (the object may move)
+        per = []
+        for i, f in enumerate(m.frames):
+            q = _confident_frame(m, i, labels[i] == num, keep)
+            if len(q) < 30:
+                continue
+            q = aligned(q)
+            q = q[q[:, 2] > -floor_tol]
+            if len(q) >= 30:
+                per.append((int(f), *upright_box(q)))
+        moving = False
+        if len(per) >= 2:
+            centres = np.array([c for _, c, _, _ in per])
+            spread = np.linalg.norm(centres[:, :2] - np.median(centres[:, :2], 0), axis=1).max()
+            moving = bool(spread > MOVE_FRACTION * max(size[:2]))
+        if moving:
+            size = tuple(float(v) for v in np.median([s for *_, s in per], 0))
+            keys, prev = [], None
+            for f, c, y, _ in per:
+                if prev is not None:  # box axes are defined up to half a turn: stay close to the last key
+                    y = prev + (y - prev + np.pi / 2) % np.pi - np.pi / 2
+                prev = y
+                keys.append(TransformKey(time=(f - shot_start) / fps,
+                                         pose=Pose(translation=(float(c[0]), float(c[1]), size[2] / 2), rotation=_yaw_quat(y))))
+            obj = SceneObject(id=oid, kind="rigid", size=size, rest=keys[0], keys=keys, evidence=ev)
+        else:
+            obj = SceneObject(id=oid, kind="rigid", size=size, evidence=ev,
+                              rest=TransformKey(time=0.0, pose=Pose(translation=tuple(float(v) for v in centre), rotation=_yaw_quat(yaw))))
+        objects.append(obj)
+        report["objects"][name] = {"id": oid, "points": int(len(p)), "size": [round(v, 4) for v in size],
+                                   "moving": moving, "frames_with_box": len(per)}
     scale = Scale(source="estimated", note="4RC model units (first camera at the origin); not checked against a known size")
     return cameras, objects, scale, report

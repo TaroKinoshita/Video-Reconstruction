@@ -20,6 +20,7 @@ import numpy as np
 
 from vrecon.metrics.poses import camera_pose, object_pose, project_points
 from vrecon.run import Change, Proposal
+from vrecon.scene.convert import quat_to_matrix
 from vrecon.schema import Observation, Pose, Project, Provenance, TransformKey
 
 _CORNERS = np.array([[x, y, z] for x in (-0.5, 0.5) for y in (-0.5, 0.5) for z in (-0.5, 0.5)])
@@ -209,9 +210,24 @@ def apply_params(project: Project, params: list[Param], x: np.ndarray) -> tuple[
         elif prm.kind == "size":
             o = objs[prm.target_id]
             sz = list(o.size or (1, 1, 1))
-            sz[prm.axis] = max(sz[prm.axis] + float(v), 0.01)
+            old = sz[prm.axis]
+            sz[prm.axis] = max(old + float(v), 0.01)
             o.size = tuple(sz)
             touched[(o.id, "size")] = o.size
+            if prm.axis == 2 and o.kind != "set":
+                # keep the bottom face where it was (a box standing on the floor stays on it):
+                # move the centre half the height change along the box's own up axis
+                half = (sz[2] - old) / 2
+
+                def lift(k: TransformKey, half=half) -> TransformKey:
+                    up = np.array(quat_to_matrix(k.pose.rotation))[:, 2]
+                    t = tuple(float(a) for a in np.array(k.pose.translation) + half * up)
+                    return k.model_copy(update={"pose": Pose(translation=t, rotation=k.pose.rotation)})
+
+                o.rest = lift(o.rest)
+                o.keys = [lift(k) for k in o.keys]
+                touched[(o.id, "rest")] = o.rest
+                touched[(o.id, "keys")] = o.keys
         elif prm.kind == "time":
             o = objs[prm.target_id]
             if not o.keys:
