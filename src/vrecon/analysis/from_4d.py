@@ -96,6 +96,10 @@ def _confident_frame(m: Model4D, i: int, sel: np.ndarray, keep: float) -> np.nda
     return pts[conf >= np.quantile(conf, 1 - keep)] if len(conf) else pts
 
 
+def _touches_border(mask: np.ndarray) -> bool:
+    return bool(mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any())
+
+
 MOVE_FRACTION = 0.5  # an object moves when its per-frame box centres spread more than this share of its size
 
 
@@ -194,6 +198,8 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
         # per sampled frame: a box from that frame's points only (the object may move)
         per = []
         for i, f in enumerate(m.frames):
+            if _touches_border(masks[f] == num):  # cut off by the frame: the visible part's box drifts
+                continue
             q = _confident_frame(m, i, labels[i] == num, keep)
             if len(q) < 30:
                 continue
