@@ -4,7 +4,7 @@
     "clips": null,
     "passes": 2,
     "evals": 60,
-    "out": "C:\\Users\\kinos\\AppData\\Local\\Temp/claude/64689de4c7fd6cea/7c477399-94f6-407f-abfc-09262091c9fe/scratchpad/bench_steps",
+    "out": "C:\\Users\\kinos\\AppData\\Local/vrecon/work/bench_guard03",
     "observed": null
   },
   "results": [
@@ -38,65 +38,77 @@
       },
       "after": {
         "camera_focal_rel_mean": 0.0014775839242558144,
-        "reprojection_error_mean": 0.002249265677044138,
-        "mask_iou_mean": 0.9252674003004182,
-        "timing_abs_error_frames_mean": 1.0
+        "reprojection_error_mean": 0.0028011999257244674,
+        "mask_iou_mean": 0.9380095965944026,
+        "timing_abs_error_frames_mean": 0.0
       },
       "silhouette_loss": [
         0.14678821913978768,
-        0.040789654245042745
+        0.041579093050807536
       ],
-      "accepted": 6,
-      "tried": 8,
-      "seconds": 121.0,
+      "accepted": 8,
+      "tried": 10,
+      "seconds": 186.4,
       "outcomes": [
         {
           "pass": 0,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "accepted",
-          "loss": 0.04895476575688672
+          "loss": 0.04406961637488607
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.08340610541611762
+          "loss": 0.08311997941390181
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.06545054385538814
+          "loss": 0.06468872603273085
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.06320119162935718
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.0451177442687199
+          "loss": 0.04650284890836362
         },
         {
           "pass": 1,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "rejected",
-          "loss": 0.04895476575688672
+          "loss": 0.04406961637488607
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 misplaced on the floor",
-          "status": "rejected",
-          "loss": 0.04496609062575488
+          "status": "accepted",
+          "loss": 0.04503175783563843
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.04150768906649173
+          "loss": 0.043861792671634744
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.041579093050807536
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 moves at the wrong time",
-          "status": "accepted",
-          "loss": 0.040811892887691985
+          "status": "rejected",
+          "loss": 0.041583874100306506
         }
       ]
     },
@@ -141,101 +153,125 @@
       },
       "after": {
         "camera_focal_rel_mean": 0.0005871683370066394,
-        "reprojection_error_mean": 0.008186155161813691,
-        "mask_iou_mean": 0.8578619700936604,
+        "reprojection_error_mean": 0.006987863487092606,
+        "mask_iou_mean": 0.8685571066788784,
         "timing_abs_error_frames_mean": 0.5
       },
       "silhouette_loss": [
         0.5540591018209864,
-        0.08101473564202216
+        0.08310337765220258
       ],
-      "accepted": 12,
-      "tried": 14,
-      "seconds": 281.5,
+      "accepted": 13,
+      "tried": 18,
+      "seconds": 390.6,
       "outcomes": [
         {
           "pass": 0,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "accepted",
-          "loss": 0.056363950039800846
+          "loss": 0.05637957197587915
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.3444139464005013
+          "loss": 0.3443672100281525
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.3422977813909266
+          "loss": 0.3415849125278633
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.3395550981541104
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.3169045592054679
+          "loss": 0.31389739414957757
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.1823340572710985
+          "loss": 0.17840519946607686
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 has the wrong size",
           "status": "accepted",
-          "loss": 0.16859085343996047
+          "loss": 0.16495417670983445
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 faces the wrong way",
+          "status": "rejected",
+          "loss": 0.16487697114554536
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.11762133675195165
+          "loss": 0.11972567431468698
         },
         {
           "pass": 1,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "rejected",
-          "loss": 0.056363950039800846
+          "loss": 0.05637957197587915
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.11501565392681305
+          "loss": 0.11726302911421069
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.10468950395690896
+          "loss": 0.10425811249802505
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "rejected",
+          "loss": 0.10419320289476891
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.10066384622815992
+          "loss": 0.10094307745969211
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 misplaced on the floor",
           "status": "rejected",
-          "loss": 0.0974071400085832
+          "loss": 0.09797099720652222
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 has the wrong size",
           "status": "accepted",
-          "loss": 0.0880789075961207
+          "loss": 0.08617023714232222
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 faces the wrong way",
+          "status": "rejected",
+          "loss": 0.08616411495115794
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.08414673581379936
+          "loss": 0.07908566558321922
         }
       ]
     },
@@ -269,65 +305,77 @@
       },
       "after": {
         "camera_focal_rel_mean": 0.0016261081369758014,
-        "reprojection_error_mean": 0.0031782689125156335,
-        "mask_iou_mean": 0.9411657355998363,
-        "timing_abs_error_frames_mean": 1.0
+        "reprojection_error_mean": 0.002308117729019011,
+        "mask_iou_mean": 0.9606623176687528,
+        "timing_abs_error_frames_mean": 0.0
       },
       "silhouette_loss": [
         0.32203583402305425,
-        0.06582205950787316
+        0.05895798472317305
       ],
-      "accepted": 4,
-      "tried": 8,
-      "seconds": 117.5,
+      "accepted": 6,
+      "tried": 10,
+      "seconds": 209.3,
       "outcomes": [
         {
           "pass": 0,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "accepted",
-          "loss": 0.0840129263038572
+          "loss": 0.07410926440561498
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.15238496271274282
+          "loss": 0.15224258127131832
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.1433682964272279
+          "loss": 0.1433166391223777
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "rejected",
+          "loss": 0.1432957354538887
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.06648960566259192
+          "loss": 0.06983614162549284
         },
         {
           "pass": 1,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "rejected",
-          "loss": 0.08395849026001456
+          "loss": 0.07405647554505126
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "rejected",
-          "loss": 0.06582205950787316
+          "loss": 0.06811875556765111
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 has the wrong size",
+          "status": "accepted",
+          "loss": 0.062086327483360446
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 faces the wrong way",
           "status": "rejected",
-          "loss": 0.06573276152476618
+          "loss": 0.062057622593623005
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 moves at the wrong time",
-          "status": "rejected",
-          "loss": 0.06648960566259192
+          "status": "accepted",
+          "loss": 0.059714885924230285
         }
       ]
     },
@@ -372,101 +420,125 @@
       },
       "after": {
         "camera_focal_rel_mean": 0.0025970565687445037,
-        "reprojection_error_mean": 0.007240121674489208,
-        "mask_iou_mean": 0.7138108610137905,
+        "reprojection_error_mean": 0.005724468669485769,
+        "mask_iou_mean": 0.8684507276255635,
         "timing_abs_error_frames_mean": 0.0
       },
       "silhouette_loss": [
         0.49802087684870794,
-        0.2347272707580697
+        0.15644017502008656
       ],
-      "accepted": 12,
-      "tried": 14,
-      "seconds": 273.6,
+      "accepted": 16,
+      "tried": 18,
+      "seconds": 450.4,
       "outcomes": [
         {
           "pass": 0,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "accepted",
-          "loss": 0.12184852087417468
+          "loss": 0.1193018787275056
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.36114011000178725
+          "loss": 0.3607177587318168
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.3431741370486938
+          "loss": 0.3506155494818324
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.3449297952466784
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.2979069632934351
+          "loss": 0.3031252040248771
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.279641542397904
+          "loss": 0.26689896040534955
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 has the wrong size",
           "status": "accepted",
-          "loss": 0.25886652707789287
+          "loss": 0.22521840744144475
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.22288782278671548
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.243158436310343
+          "loss": 0.19289404959532513
         },
         {
           "pass": 1,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "rejected",
-          "loss": 0.12184852087417468
+          "loss": 0.1193018787275056
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.24376316439905488
+          "loss": 0.19210398082393698
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.2406318134697717
+          "loss": 0.17434500416646426
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.17365351779944244
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.24048757356802153
+          "loss": 0.17314766063183934
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 misplaced on the floor",
           "status": "rejected",
-          "loss": 0.24041946734110237
+          "loss": 0.17291921516879277
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 has the wrong size",
           "status": "accepted",
-          "loss": 0.23829289027556566
+          "loss": 0.15863872217375757
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.1582991230493006
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.23477423562141875
+          "loss": 0.15634676285503868
         }
       ]
     },
@@ -522,137 +594,173 @@
       },
       "after": {
         "camera_focal_rel_mean": 0.0019481059128380047,
-        "reprojection_error_mean": 0.009134233687050186,
-        "mask_iou_mean": 0.8218589139125454,
-        "timing_abs_error_frames_mean": 0.3333333333333333
+        "reprojection_error_mean": 0.007302803306984838,
+        "mask_iou_mean": 0.8439745479908017,
+        "timing_abs_error_frames_mean": 0.0
       },
       "silhouette_loss": [
         0.6282420440240332,
-        0.1964501330052737
+        0.18280726443397005
       ],
-      "accepted": 18,
-      "tried": 20,
-      "seconds": 492.9,
+      "accepted": 21,
+      "tried": 26,
+      "seconds": 612.5,
       "outcomes": [
         {
           "pass": 0,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "accepted",
-          "loss": 0.2380063254536673
+          "loss": 0.18890655833241907
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.4474699304191826
+          "loss": 0.45123123862012615
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.4159134147757966
+          "loss": 0.4082804831077852
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "rejected",
+          "loss": 0.4082792665663442
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.410739410006969
+          "loss": 0.4024494881044075
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.38627376714275513
+          "loss": 0.38138105844218073
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 has the wrong size",
           "status": "accepted",
-          "loss": 0.38205425178952646
+          "loss": 0.3757437190816374
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.37547829496205243
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.35625050359320015
+          "loss": 0.3519601279345247
         },
         {
           "pass": 0,
           "hypothesis": "obj_03 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.3007677667909057
+          "loss": 0.30373421520256694
         },
         {
           "pass": 0,
           "hypothesis": "obj_03 has the wrong size",
           "status": "accepted",
-          "loss": 0.2759100491994204
+          "loss": 0.2676004702340016
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_03 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.2647307630084076
         },
         {
           "pass": 0,
           "hypothesis": "obj_03 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.2320580911083121
+          "loss": 0.2164621553408443
         },
         {
           "pass": 1,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "rejected",
-          "loss": 0.2380063254536673
+          "loss": 0.18890655833241907
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.23344499528417656
+          "loss": 0.2159056850155322
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.22582515769533362
+          "loss": 0.20893133847019585
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.20800999440196147
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.2124819034184095
+          "loss": 0.18940267158479368
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 misplaced on the floor",
-          "status": "accepted",
-          "loss": 0.20990021554404786
+          "status": "rejected",
+          "loss": 0.19419210121267527
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 has the wrong size",
           "status": "accepted",
-          "loss": 0.2084552319589404
+          "loss": 0.1913804027746172
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.1910929265632218
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 moves at the wrong time",
-          "status": "accepted",
-          "loss": 0.20747350792877334
+          "status": "rejected",
+          "loss": 0.18573436568309243
         },
         {
           "pass": 1,
           "hypothesis": "obj_03 misplaced on the floor",
-          "status": "rejected",
-          "loss": 0.2081354373172925
+          "status": "accepted",
+          "loss": 0.18986663599004322
         },
         {
           "pass": 1,
           "hypothesis": "obj_03 has the wrong size",
           "status": "accepted",
-          "loss": 0.20421394920466185
+          "loss": 0.18295088434721862
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_03 faces the wrong way",
+          "status": "rejected",
+          "loss": 0.18289048090180643
         },
         {
           "pass": 1,
           "hypothesis": "obj_03 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.19354589956674118
+          "loss": 0.17784391867922197
         }
       ]
     },
@@ -697,101 +805,125 @@
       },
       "after": {
         "camera_focal_rel_mean": 0.003100450589969967,
-        "reprojection_error_mean": 0.005898761242656561,
-        "mask_iou_mean": 0.94150983654017,
+        "reprojection_error_mean": 0.003913914920218335,
+        "mask_iou_mean": 0.9571171105545604,
         "timing_abs_error_frames_mean": 0.0
       },
       "silhouette_loss": [
         0.28610431232551226,
-        0.038385426879282966
+        0.02911410185646185
       ],
-      "accepted": 13,
-      "tried": 14,
-      "seconds": 287.0,
+      "accepted": 18,
+      "tried": 18,
+      "seconds": 2110.6,
       "outcomes": [
         {
           "pass": 0,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "accepted",
-          "loss": 0.0955673995283875
+          "loss": 0.09510321939234785
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.19288225941408624
+          "loss": 0.1928583781089149
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.17941245871794728
+          "loss": 0.17809544620915188
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.17776860320627236
         },
         {
           "pass": 0,
           "hypothesis": "obj_01 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.1290319085423222
+          "loss": 0.13516946523319134
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.08118366608625063
+          "loss": 0.08740866443484412
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 has the wrong size",
           "status": "accepted",
-          "loss": 0.08047553064914577
+          "loss": 0.0859762262585419
+        },
+        {
+          "pass": 0,
+          "hypothesis": "obj_02 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.08526545422783066
         },
         {
           "pass": 0,
           "hypothesis": "obj_02 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.06215723100599305
+          "loss": 0.05394622713647872
         },
         {
           "pass": 1,
           "hypothesis": "camera focal length is off (judged on the set: outlines + tracks)",
           "status": "accepted",
-          "loss": 0.09543680703399017
+          "loss": 0.09498055033747142
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.061295818305047815
+          "loss": 0.05556099799072005
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 has the wrong size",
           "status": "accepted",
-          "loss": 0.05767943223842801
+          "loss": 0.0494939478831801
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_01 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.04628280363115408
         },
         {
           "pass": 1,
           "hypothesis": "obj_01 moves at the wrong time",
-          "status": "rejected",
-          "loss": 0.05828186123875235
+          "status": "accepted",
+          "loss": 0.04612774338400556
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 misplaced on the floor",
           "status": "accepted",
-          "loss": 0.056427001106153445
+          "loss": 0.045672506442608264
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 has the wrong size",
           "status": "accepted",
-          "loss": 0.04140646281952209
+          "loss": 0.03305547008626905
+        },
+        {
+          "pass": 1,
+          "hypothesis": "obj_02 faces the wrong way",
+          "status": "accepted",
+          "loss": 0.03278784289855943
         },
         {
           "pass": 1,
           "hypothesis": "obj_02 moves at the wrong time",
           "status": "accepted",
-          "loss": 0.03901565681373355
+          "loss": 0.029743579569479706
         }
       ]
     }

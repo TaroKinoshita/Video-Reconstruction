@@ -126,4 +126,4 @@ def test_camera_rule_guards_overall_loss():
     from vrecon.run.policy import CAMERA_RULE
 
     assert CAMERA_RULE.judge({"camera_loss": 1.0, "silhouette_loss": 0.5}, {"camera_loss": 0.9, "silhouette_loss": 0.6})
-    assert not CAMERA_RULE.judge({"camera_loss": 1.0, "silhouette_loss": 0.5}, {"camera_loss": 0.9, "silhouette_loss": 0.5})
+    assert not CAMERA_RULE.judge({"camera_loss": 1.0, "silhouette_loss": 0.5}, {"camera_loss": 0.9, "silhouette_loss": 0.52})

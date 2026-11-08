@@ -12,13 +12,14 @@
 set -euo pipefail
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 RUN="$(abspath "$1")"; shift
-MODEL="claude-opus-5-5"; TURNS=60; MINUTES=30; CLIP=""
+MODEL="claude-opus-5-5"; TURNS=60; MINUTES=30; CLIP=""; USE_BUDGET=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --model) MODEL="$2"; shift ;;
     --turns) TURNS="$2"; shift ;;
     --minutes) MINUTES="$2"; shift ;;
     --clip) CLIP="$(abspath "$2")"; shift ;;
+    --use-budget) USE_BUDGET=1 ;;
     *) echo "unknown option $1"; exit 2 ;;
   esac
   shift
@@ -26,6 +27,15 @@ done
 REPO="$(abspath "$(dirname "${BASH_SOURCE[0]}")/..")"
 PY="$REPO/.venv/bin/python"; [[ -x "$REPO/.venv/Scripts/python.exe" ]] && PY="$REPO/.venv/Scripts/python.exe"
 LOG="$RUN/llm"; mkdir -p "$LOG"
+if [[ $USE_BUDGET == 1 ]]; then
+  # --use-budget: the first trials stopped after 6-12 of 30 attempts; the fixed order tries every
+  # hypothesis twice. A rejected attempt costs only budget, so keep going.
+  STOP_RULE="Keep working until the budget is used up. A rejected attempt is not a failure: it only costs one
+attempt. When the obvious hypotheses are done, revisit every object's position, size, timing and orientation
+again (earlier fits were made with other parts still wrong), and try the camera focal length again."
+else
+  STOP_RULE="Stop when it is used up or when two diagnoses in a row suggest nothing that is likely to help."
+fi
 
 cat > "$LOG/mcp.json" <<EOF
 {"mcpServers": {"vrecon": {"command": "$PY", "args": ["-m", "vrecon.mcp_server"],
@@ -37,9 +47,10 @@ You are repairing a 3D reconstruction of a short video. The run directory is: $R
 Use only the vrecon tools. Each repair attempt is a hypothesis about ONE thing that is wrong (the camera
 focal length, or one object's floor position, size, timing or orientation) tested with run_optimize; the
 run manager adopts it only if the loss improves. Read run_state and run_diagnose first, and diagnose again
-after each adopted change. The attempt budget is fixed in the run; stop when it is used up or when two
-diagnoses in a row suggest nothing that is likely to help. Finish with a short summary of what you
-changed and what still looks wrong.
+after each adopted change. The attempt budget is fixed in the run (run_state shows attempts and
+max_attempts).
+${STOP_RULE}
+Finish with a short summary of what you changed and what still looks wrong.
 EOF
 
 START=$(date -u +%Y-%m-%dT%H:%M:%SZ)

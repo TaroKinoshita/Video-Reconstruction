@@ -15,7 +15,11 @@ from .manager import AcceptRule, RunManager
 
 # camera proposals are judged on camera evidence, and may not make the whole fit worse: otherwise a focal
 # change that pulls objects off their observations is adopted (syn_04, condition C trial 2026-11-09)
-CAMERA_RULE = AcceptRule(primary="camera_loss", min_gain=1e-4, guards={"silhouette_loss": 0.0})
+# Tolerance: with objects still misplaced, the correct focal can first raise the whole loss a little (up to
+# +0.024 on the injected-error benchmark, syn_06); the harmful LLM focal changes raised it by about +0.1.
+# 0.03 is a draft value chosen on those six synthetic clips.
+CAMERA_GUARD = 0.03
+CAMERA_RULE = AcceptRule(primary="camera_loss", min_gain=1e-4, guards={"silhouette_loss": CAMERA_GUARD})
 FOCAL_PROBE = 0.1  # relative change of focal length used to test the evidence
 FOCAL_MIN_RISE = 0.001  # draft value: smallest loss rise on both sides that counts as evidence
 
