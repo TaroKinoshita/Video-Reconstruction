@@ -205,7 +205,9 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
         if len(per) >= 2:
             centres = np.array([c for _, c, _, _ in per])
             spread = np.linalg.norm(centres[:, :2] - np.median(centres[:, :2], 0), axis=1).max()
-            moving = bool(spread > MOVE_FRACTION * max(size[:2]))
+            # compare with one frame's box: the box over all frames stretches over the whole path
+            frame_size = np.median([max(s[:2]) for *_, s in per])
+            moving = bool(spread > MOVE_FRACTION * frame_size)
         if moving:
             size = tuple(float(v) for v in np.median([s for *_, s in per], 0))
             keys, prev = [], None
