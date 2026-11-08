@@ -13,7 +13,9 @@ from vrecon.optimize import Param, apply_params, combined_loss, optimize
 
 from .manager import AcceptRule, RunManager
 
-CAMERA_RULE = AcceptRule(primary="camera_loss", min_gain=1e-4)
+# camera proposals are judged on camera evidence, and may not make the whole fit worse: otherwise a focal
+# change that pulls objects off their observations is adopted (syn_04, condition C trial 2026-11-09)
+CAMERA_RULE = AcceptRule(primary="camera_loss", min_gain=1e-4, guards={"silhouette_loss": 0.0})
 FOCAL_PROBE = 0.1  # relative change of focal length used to test the evidence
 FOCAL_MIN_RISE = 0.001  # draft value: smallest loss rise on both sides that counts as evidence
 

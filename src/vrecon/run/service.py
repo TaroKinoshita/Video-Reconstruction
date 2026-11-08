@@ -23,7 +23,8 @@ def _config(run_dir: Path) -> dict:
 
 
 def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min_gain: float = 0.0,
-             video: str | None = None, from_4d: str | None = None, focal: bool | None = None) -> dict:
+             video: str | None = None, from_4d: str | None = None, focal: bool | None = None,
+             edit_set: bool = False) -> dict:
     """Create a run.
 
     masks: a synthetic clip folder (ground-truth stand-in) or a masks .npz from an external segmenter
@@ -31,7 +32,11 @@ def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min
     folder). from_4d: a 4RC output .npz; the starting scene is then built from it (analysis/from_4d.py) on
     top of `project` (its source and shots), saved as <run_dir>/init.json. focal: whether the automatic
     repair may change the focal length (default: no when starting from a 4D model, whose focal error the
-    search trades against other errors; yes otherwise).
+    search trades against other errors; yes otherwise). edit_set: let proposals change the floor and wall
+    (default no: they are the camera's evidence, and moving them hides camera errors).
+
+    The pairing of observed labels with reconstruction objects is computed once here and kept: re-pairing
+    on every call let a proposal lower the loss by pulling an object off every observation.
     """
     rd = Path(run_dir)
     if (rd / "config.json").exists():
@@ -49,6 +54,9 @@ def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min
            "video": str(Path(video).resolve()) if video else None, "from_4d": str(Path(from_4d).resolve()) if from_4d else None,
            "focal": (not from_4d) if focal is None else focal,
            "rule": {"primary": "silhouette_loss", "min_gain": min_gain}, "max_attempts": max_attempts}
+    start_project = load_project(start)
+    cfg["pairs"] = auto_pairs(start_project, _observation(cfg))
+    cfg["fixed"] = [] if edit_set else sorted(o.id for o in start_project.reconstruction.objects if o.kind == "set")
     (rd / "config.json").write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
     return {**cfg, "init_report": report} if report else cfg
 
@@ -115,7 +123,7 @@ def _manager(run_dir: Path):
     cfg = _config(run_dir)
     obs = _observation(cfg)
     tracks = _tracks(cfg)
-    pairs_cache: dict = {}
+    pairs_cache: dict = {"pairs": cfg["pairs"]} if "pairs" in cfg else {}  # runs made before pairs were kept
 
     def evaluate(p):
         pairs = pairs_cache.setdefault("pairs", auto_pairs(p, obs))
@@ -125,7 +133,7 @@ def _manager(run_dir: Path):
                 "camera_loss": combined_loss(p, obs, set_pairs, tracks, sets or None, use_silhouette=bool(set_pairs))}
 
     rule = AcceptRule(**cfg["rule"])
-    mgr = RunManager(cfg["project"], run_dir, evaluate, rule, max_attempts=cfg["max_attempts"])
+    mgr = RunManager(cfg["project"], run_dir, evaluate, rule, max_attempts=cfg["max_attempts"], fixed=cfg.get("fixed"))
     mgr.tracks = tracks
     return mgr, obs, pairs_cache
 
@@ -144,8 +152,8 @@ def state(run_dir: str) -> dict:
 
 def diagnose(run_dir: str) -> dict:
     """Per-object silhouette loss and mean image offset (where the reconstruction sits vs the observation)."""
-    mgr, obs, _ = _manager(Path(run_dir))
-    pairs = auto_pairs(mgr.adopted, obs)
+    mgr, obs, pc = _manager(Path(run_dir))
+    pairs = pc["pairs"]  # fixed for the run (filled when the manager evaluated the adopted state)
     m = silhouette_metrics(mgr.adopted, obs, pairs)
     m["pairs"] = pairs
     if mgr.tracks is not None:
@@ -163,7 +171,7 @@ def diagnose(run_dir: str) -> dict:
 def run_optimizer(run_dir: str, params: list[str], hypothesis: str, max_evals: int = 120) -> dict:
     """params like 'focal:cam_001', 'translation:obj_01:0', 'size:obj_01:2', 'time:obj_01', 'yaw:obj_01',
     'spin:obj_01' (optional ':axis:step'; the axis is ignored for focal, time, yaw and spin)."""
-    mgr, obs, _ = _manager(Path(run_dir))
+    mgr, obs, pc = _manager(Path(run_dir))
     parsed = []
     for s in params:
         parts = s.split(":")
@@ -171,7 +179,7 @@ def run_optimizer(run_dir: str, params: list[str], hypothesis: str, max_evals: i
         axis = int(parts[2]) if len(parts) > 2 and kind not in ("focal", "time", "yaw", "spin") else 0
         step = float(parts[3]) if len(parts) > 3 else {"focal": 0.1, "time": 4.0, "yaw": 0.3, "spin": 0.3}.get(kind, 0.2)
         parsed.append(Param(kind, target, axis, step))
-    pairs = auto_pairs(mgr.adopted, obs)
+    pairs = pc["pairs"]  # fixed for the run (filled when the manager evaluated the adopted state)
     pid = f"opt_{mgr.attempts + 1:03d}"
     camera_only = all(p.kind == "focal" for p in parsed)
     if camera_only:  # judge camera hypotheses on camera evidence only: set outlines + tracks on the set
@@ -179,7 +187,9 @@ def run_optimizer(run_dir: str, params: list[str], hypothesis: str, max_evals: i
         set_pairs = {k: v for k, v in pairs.items() if v in sets}
         prop, info = optimize(mgr.adopted, obs, set_pairs, parsed, hypothesis, pid, max_evals=max_evals,
                               tracks=mgr.tracks, track_ids=sets or None, use_silhouette=bool(set_pairs))
-        out = mgr.try_proposal(prop, rule=AcceptRule(primary="camera_loss", min_gain=1e-4))
+        from .policy import CAMERA_RULE
+
+        out = mgr.try_proposal(prop, rule=CAMERA_RULE)
     else:
         prop, info = optimize(mgr.adopted, obs, pairs, parsed, hypothesis, pid, max_evals=max_evals, tracks=mgr.tracks)
         out = mgr.try_proposal(prop)
@@ -190,9 +200,9 @@ def auto(run_dir: str, passes: int = 2, max_evals: int = 60) -> dict:
     """Fixed hypothesis order (camera first, then each object's position, size, timing); no LLM."""
     from .policy import auto_repair
 
-    mgr, obs, _ = _manager(Path(run_dir))
+    mgr, obs, pc = _manager(Path(run_dir))
     before = dict(mgr.metrics)
-    records = auto_repair(mgr, obs, auto_pairs(mgr.adopted, obs), mgr.tracks, passes, max_evals,
+    records = auto_repair(mgr, obs, pc["pairs"], mgr.tracks, passes, max_evals,
                           focal=_config(Path(run_dir)).get("focal", True))
     return {"revision": mgr.adopted.revision, "metrics_before": before, "metrics_after": mgr.metrics,
             "accepted": sum(r["status"] == "accepted" for r in records), "tried": len(records), "attempts": records}

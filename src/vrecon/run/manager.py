@@ -100,8 +100,10 @@ def _covers(scope: str, field: str) -> bool:
     return scope == "*" or field == scope or field.startswith(scope + ".")
 
 
-def check_constraints(adopted: Project, candidate: Project, proposal: Proposal) -> list[str]:
-    """Violations: locked fields, changes outside the declared scope, project-level edits."""
+def check_constraints(adopted: Project, candidate: Project, proposal: Proposal,
+                      fixed: frozenset[str] = frozenset()) -> list[str]:
+    """Violations: locked fields, targets the run keeps fixed, changes outside the declared scope,
+    project-level edits."""
     scope = proposal.declared or [(c.target_id, c.field) for c in proposal.changes]
     problems = []
     for tid, field in changed_fields(adopted, candidate):
@@ -110,6 +112,8 @@ def check_constraints(adopted: Project, candidate: Project, proposal: Proposal) 
             continue
         if adopted.is_locked(tid, field):
             problems.append(f"{tid}.{field} is locked")
+        if tid in fixed:
+            problems.append(f"{tid} is kept fixed in this run")
         if not any(t == tid and _covers(f, field) for t, f in scope):
             problems.append(f"{tid}.{field} changed but was not declared")
     return problems
@@ -145,7 +149,10 @@ class RunManager:
     """Owns the adopted project file, the budget and the history for one repair run."""
 
     def __init__(self, project_path: str | Path, run_dir: str | Path, evaluate: Callable[[Project], Metrics],
-                 rule: AcceptRule, max_attempts: int = 20):
+                 rule: AcceptRule, max_attempts: int = 20, fixed: list[str] | None = None):
+        """fixed: target ids no proposal may change in this run (e.g. floor and wall, which serve as the
+        camera's evidence). Unlike a human lock it is a run setting and is not stored in the project."""
+        self.fixed = frozenset(fixed or [])
         self.project_path = Path(project_path)
         self.run_dir = Path(run_dir)
         (self.run_dir / "snapshots").mkdir(parents=True, exist_ok=True)
@@ -181,7 +188,7 @@ class RunManager:
         except Exception as exc:
             return self._log(Outcome(proposal_id=proposal.id, status="error", revision=rev,
                                      reasons=[f"could not build candidate: {exc}"]), proposal)
-        problems = check_constraints(self.adopted, work, proposal)
+        problems = check_constraints(self.adopted, work, proposal, self.fixed)
         if problems:
             return self._log(Outcome(proposal_id=proposal.id, status="rejected", revision=rev, reasons=problems),
                              proposal)

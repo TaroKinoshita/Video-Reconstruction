@@ -103,3 +103,27 @@ def test_init_run_with_observed_masks(tmp_path):
     assert cfg["mask_source"] == "observed" and cfg["video"] is None and cfg["focal"] is True
     obs = service._observation(cfg)
     assert obs.id_map == {1: "obs_0"} and obs.masks.shape == (4, 8, 8)
+
+
+def test_fixed_targets_reject_changes(tmp_path):
+    from vrecon.run.manager import AcceptRule, Change, Proposal, RunManager
+    from vrecon.schema import load_project, save_project
+
+    from pathlib import Path
+
+    src = Path("evaluation/synthetic/syn_01/gt.json")
+    p = load_project(src)
+    save_project(p, tmp_path / "project.json")
+    mgr = RunManager(tmp_path / "project.json", tmp_path / "run", lambda q: {"loss": 1.0 - 0.01 * q.revision},
+                     AcceptRule(primary="loss"), fixed=["obj_floor"])
+    floor = next(o for o in p.reconstruction.objects if o.id == "obj_floor")
+    out = mgr.try_proposal(Proposal(id="p1", hypothesis="move floor",
+                                    changes=[Change(target_id="obj_floor", field="size", value=[s * 2 for s in floor.size])]))
+    assert out.status == "rejected" and any("kept fixed" in r for r in out.reasons)
+
+
+def test_camera_rule_guards_overall_loss():
+    from vrecon.run.policy import CAMERA_RULE
+
+    assert CAMERA_RULE.judge({"camera_loss": 1.0, "silhouette_loss": 0.5}, {"camera_loss": 0.9, "silhouette_loss": 0.6})
+    assert not CAMERA_RULE.judge({"camera_loss": 1.0, "silhouette_loss": 0.5}, {"camera_loss": 0.9, "silhouette_loss": 0.5})

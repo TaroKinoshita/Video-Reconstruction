@@ -127,7 +127,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     a = args.run_cmd
     if a == "init":
         out = service.init_run(args.project, args.run_dir, args.masks, args.max_attempts, video=args.video,
-                               from_4d=args.from_4d, focal=args.focal)
+                               from_4d=args.from_4d, focal=args.focal, edit_set=args.edit_set)
     elif a == "state":
         out = service.state(args.run_dir)
     elif a == "diagnose":
@@ -218,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     x.add_argument("--from-4d", help="4RC output .npz: build the starting scene from it (needs --masks .npz)")
     x.add_argument("--focal", action=argparse.BooleanOptionalAction, default=None,
                    help="let auto repair change the focal length (default: off with --from-4d, on otherwise)")
+    x.add_argument("--edit-set", action="store_true", help="let proposals change the floor and wall (default: kept fixed)")
     x.add_argument("--max-attempts", type=int, default=30)
     for name in ("state", "diagnose"):
         rs.add_parser(name).add_argument("run_dir")
