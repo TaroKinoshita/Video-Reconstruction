@@ -20,7 +20,7 @@ import numpy as np
 
 from vrecon.metrics.poses import camera_pose, object_pose, project_points
 from vrecon.run import Change, Proposal
-from vrecon.scene.convert import quat_to_matrix
+from vrecon.scene.convert import matrix_to_quat, quat_to_matrix
 from vrecon.schema import Observation, Pose, Project, Provenance, TransformKey
 
 _CORNERS = np.array([[x, y, z] for x in (-0.5, 0.5) for y in (-0.5, 0.5) for z in (-0.5, 0.5)])
@@ -180,7 +180,8 @@ def silhouette_metrics(project: Project, obs: MaskObservation, pairs: dict[str, 
 class Param:
     """kind: 'translation' (offset added to an object's rest and all keys, along axis 0-2),
     'size' (object size along axis), 'focal' (multiplier on all of a camera's focal lengths),
-    'time' (shift of all of an animated object's key times, in frames). A 'time' parameter searched with
+    'time' (shift of all of an animated object's key times, in frames), 'yaw' (turn about the world up axis,
+    radians, rest and keys), 'spin' (a turn spread linearly over the keys). A 'time' parameter searched with
     others is scanned over TIME_SCAN_FRAMES, refitting the others at each shift."""
 
     kind: str
@@ -234,6 +235,26 @@ def apply_params(project: Project, params: list[Param], x: np.ndarray) -> tuple[
                 raise ValueError(f"{o.id} is not animated; 'time' needs keys")
             dt = float(v) * p.source.fps.den / p.source.fps.num
             o.keys = [k.model_copy(update={"time": k.time + dt}) for k in o.keys]
+            touched[(o.id, "keys")] = o.keys
+        elif prm.kind in ("yaw", "spin"):
+            # 'yaw': turn about the world up axis by v radians (rest and all keys);
+            # 'spin': turn the keys by v * (key index / last index), i.e. a turn spread over the motion
+            o = objs[prm.target_id]
+
+            def turn(k: TransformKey, a: float) -> TransformKey:
+                rz = np.array([[np.cos(a), -np.sin(a), 0.0], [np.sin(a), np.cos(a), 0.0], [0.0, 0.0, 1.0]])
+                r = rz @ np.array(quat_to_matrix(k.pose.rotation))
+                return k.model_copy(update={"pose": Pose(translation=k.pose.translation, rotation=matrix_to_quat(r.tolist()))})
+
+            if prm.kind == "yaw":
+                o.rest = turn(o.rest, float(v))
+                o.keys = [turn(k, float(v)) for k in o.keys]
+                touched[(o.id, "rest")] = o.rest
+            else:
+                if not o.keys:
+                    raise ValueError(f"{o.id} is not animated; 'spin' needs keys")
+                n = max(len(o.keys) - 1, 1)
+                o.keys = [turn(k, float(v) * i / n) for i, k in enumerate(o.keys)]
             touched[(o.id, "keys")] = o.keys
         elif prm.kind == "focal":
             c = cams[prm.target_id]

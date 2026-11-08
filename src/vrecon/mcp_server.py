@@ -15,7 +15,8 @@ server = MCPServer(
     name="vrecon",
     instructions=(
         "Repair loop for a video reconstruction. Typical cycle: run_state -> run_diagnose -> pick ONE hypothesis "
-        "(camera focal, one object's position or size) -> run_optimize with matching params -> run_history. "
+        "(camera focal, one object's position, size, timing or orientation) -> run_optimize with matching params "
+        "-> run_history. "
         "You cannot edit the project directly; proposals are tried on a copy and adopted only if the "
         "silhouette loss improves and no locked field changes."
     ),
@@ -42,7 +43,8 @@ def run_diagnose(run_dir: str) -> dict:
 
 @server.tool()
 def run_optimize(run_dir: str, params: list[str], hypothesis: str, max_evals: int = 120) -> dict:
-    """Numeric search over params ('focal:cam_001', 'translation:obj_01:0', 'size:obj_01:2'), then try to adopt."""
+    """Numeric search over params ('focal:cam_001', 'translation:obj_01:0', 'size:obj_01:2', 'time:obj_01',
+    'yaw:obj_01' turn about the up axis, 'spin:obj_01' turn spread over the motion), then try to adopt."""
     return service.run_optimizer(run_dir, params, hypothesis, max_evals)
 
 

@@ -150,3 +150,28 @@ def test_height_change_keeps_bottom_face(reference):  # noqa: F811
     assert o2.size[2] == pytest.approx(o.size[2] + 0.4)
     assert o2.rest.pose.translation[2] - o2.size[2] / 2 == pytest.approx(0.0, abs=1e-9)
     assert o2.rest.pose.translation[:2] == pytest.approx((1.0, 2.0))
+
+
+def test_yaw_and_spin_turn_about_up_axis(reference):  # noqa: F811
+    import numpy as np
+
+    from vrecon.optimize import apply_params
+    from vrecon.scene.convert import quat_to_matrix
+    from vrecon.schema import load_project
+
+    p = load_project(reference / "gt.json")
+    o = next(o for o in p.reconstruction.objects if o.kind != "set")
+    o.keys = [TransformKey(time=float(i), pose=Pose(translation=(float(i), 0.0, 0.5))) for i in range(3)]
+
+    def yaw_of(k):
+        r = np.array(quat_to_matrix(k.pose.rotation))
+        assert r[:, 2] == pytest.approx([0, 0, 1], abs=1e-9)  # stays upright
+        return float(np.arctan2(r[1, 0], r[0, 0]))
+
+    q, _ = apply_params(p, [Param("yaw", o.id)], np.array([0.4]))
+    o2 = next(x for x in q.reconstruction.objects if x.id == o.id)
+    assert [yaw_of(k) for k in o2.keys] == pytest.approx([0.4] * 3)
+    assert o2.keys[1].pose.translation == o.keys[1].pose.translation
+    q, _ = apply_params(p, [Param("spin", o.id)], np.array([0.6]))
+    o3 = next(x for x in q.reconstruction.objects if x.id == o.id)
+    assert [yaw_of(k) for k in o3.keys] == pytest.approx([0.0, 0.3, 0.6])

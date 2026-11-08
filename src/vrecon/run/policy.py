@@ -28,8 +28,19 @@ def focal_is_weak(loss, found: float, probe: float = FOCAL_PROBE, min_rise: floa
     return min(loss((1 + found) * (1 - probe) - 1), loss((1 + found) * (1 + probe) - 1)) - base < min_rise
 
 
-MOVE_STEP = 0.3  # first search step for position, as a share of the object's largest side
-SIZE_STEP = 0.2  # same for size
+MOVE_STEP = 0.035  # first search step for position, as a share of the camera-to-object distance
+SIZE_STEP = 0.02  # same for size
+YAW_STEP = 0.3  # first search step for orientation, radians (about 17 degrees)
+
+
+def _distance(project, o) -> float:
+    """Distance from the first camera to the object at shot frame 0 (the scene's own units)."""
+    from vrecon.metrics.poses import camera_pose, object_pose
+
+    cam = project.reconstruction.cameras[0]
+    _, centre, _ = camera_pose(cam, 0)
+    _, t, _ = object_pose(project, o, cam.shot_id, 0)
+    return float(np.linalg.norm(np.asarray(t) - centre))
 
 
 def hypotheses(project) -> list[tuple[str, list[Param], str]]:
@@ -39,13 +50,18 @@ def hypotheses(project) -> list[tuple[str, list[Param], str]]:
     for o in project.reconstruction.objects:
         if o.kind == "set":
             continue
-        # steps scale with the object: a scene from a 4D model is in its own units, not metres
-        # (0.3 and 0.2 of the largest side give the former 0.25 m / 0.15 m for the ~0.8 m synthetic objects)
-        ref = max(o.size)
+        # steps scale with the scene, not metres: a scene from a 4D model is in its own units. The distance to
+        # the camera, not the object's size: a small object can be as misplaced as a large one (syn_04).
+        # 0.035 / 0.02 of the ~7 m synthetic distances give the former fixed 0.25 m / 0.15 m.
+        ref = _distance(project, o)
         move, grow = MOVE_STEP * ref, SIZE_STEP * ref
         hs.append((f"{o.id} misplaced on the floor",
                    [Param("translation", o.id, 0, move), Param("translation", o.id, 1, move)], "all"))
         hs.append((f"{o.id} has the wrong size", [Param("size", o.id, a, grow) for a in range(3)], "all"))
+        # orientation: a box seen mostly from the front gets its facing from few points, and a moving one
+        # may turn more (or less) than its per-frame boxes say
+        turn = [Param("yaw", o.id, step=YAW_STEP)] + ([Param("spin", o.id, step=YAW_STEP)] if o.keys else [])
+        hs.append((f"{o.id} faces the wrong way", turn, "all"))
         if o.keys:
             hs.append((f"{o.id} moves at the wrong time",  # with position: see optimize._scan_time
                        [Param("time", o.id, step=4.0), Param("translation", o.id, 0, move),

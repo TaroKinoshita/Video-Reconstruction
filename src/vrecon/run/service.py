@@ -161,14 +161,15 @@ def diagnose(run_dir: str) -> dict:
 
 
 def run_optimizer(run_dir: str, params: list[str], hypothesis: str, max_evals: int = 120) -> dict:
-    """params like 'focal:cam_001', 'translation:obj_01:0', 'size:obj_01:2', 'time:obj_01' (optional ':axis:step')."""
+    """params like 'focal:cam_001', 'translation:obj_01:0', 'size:obj_01:2', 'time:obj_01', 'yaw:obj_01',
+    'spin:obj_01' (optional ':axis:step'; the axis is ignored for focal, time, yaw and spin)."""
     mgr, obs, _ = _manager(Path(run_dir))
     parsed = []
     for s in params:
         parts = s.split(":")
         kind, target = parts[0], parts[1]
-        axis = int(parts[2]) if len(parts) > 2 and kind not in ("focal", "time") else 0
-        step = float(parts[3]) if len(parts) > 3 else {"focal": 0.1, "time": 4.0}.get(kind, 0.2)
+        axis = int(parts[2]) if len(parts) > 2 and kind not in ("focal", "time", "yaw", "spin") else 0
+        step = float(parts[3]) if len(parts) > 3 else {"focal": 0.1, "time": 4.0, "yaw": 0.3, "spin": 0.3}.get(kind, 0.2)
         parsed.append(Param(kind, target, axis, step))
     pairs = auto_pairs(mgr.adopted, obs)
     pid = f"opt_{mgr.attempts + 1:03d}"

@@ -61,6 +61,15 @@ def main() -> int:
     from vggt.utils.load_fn import load_and_preprocess_images
     from vggt.utils.pose_enc import pose_encoding_to_extri_intri
     from vggt.utils.geometry import unproject_depth_map_to_point_map
+    from vggt.models import aggregator as agg
+
+    # the released aggregator (f330a34) passes save_attn to _process_global_attention, which does not take it
+    orig_global = agg.Aggregator._process_global_attention
+
+    def _global(self, *a, save_attn=0, **k):
+        return orig_global(self, *a, **k)
+
+    agg.Aggregator._process_global_attention = _global
 
     video = read_video(args.video)
     t, src_h, src_w = video.shape[:3]
