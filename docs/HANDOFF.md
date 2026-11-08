@@ -124,6 +124,8 @@
      - `%LOCALAPPDATA%` は Claude Code の実行環境から見ると仮想化された別の場所で、WSLからは見えない。WSLとのファイルのやりとりは標準入出力で行った。一時フォルダ（scratchpad）は途中で中身が消えたので、実験データは `%LOCALAPPDATA%\vrecon\work` に置く。
    以下は元の計画：4RC を最初に試して MoRe と比べる（MegaSaM は予備）。Blenderへの変換まで通して判断する。箱の回転は SciPy の `align_vectors()`。形が合わないときの追加候補は SAM 3D Objects。
 4. **基準点Bを1本回す**（`baselines/b_llm_mcp/README.md`。GUI版Blenderが要る）。
+   - 【2026-11-09】初回は他のMCP（Notion、Google Docs など）までエージェントに見えていたので中止し、`--strict-mcp-config` を追加。ユーザーの希望で、MCPは固定していた mcp-for-blender 2.2.6 ではなく**ユーザーの blend-ai**（`~/Claude/blend-ai` `34a1149`、ユーザーが起動したBlenderの9876番に接続）を使った：`run_baseline.sh ... --mcp blend-ai`。**条件Bの中身が計画（mcp-for-blender固定）から変わった**ことに注意。
+   - syn_01 1回（`runs/B/syn_01_blendai_r2`、claude-opus-5-5、23分、73ターン、API換算$3.1、`valid: true`）：物のIoU **.945**、焦点距離の誤差 3.7%、タイミング誤差 0フレーム。条件C（LLM .848、決め打ち順 .840）より大幅に良い。エージェントはBashでPythonを書き、床の市松模様と壁の縞から消失点で焦点距離と傾きを出し、背景差分で箱のマスクを作って、自前のシルエット当てはめで箱とカメラを合わせた。**合成映像は市松模様・縞で校正しやすく、条件Bに有利な可能性**。条件Cは4RC＋SAMマスクからの出発で、エージェントにシェルを渡していない点も違う。比較の公平さ（Cにも同じ自由度を与えるか、実写で比べるか）を決める必要がある。
 5. **AIに仮説を選ばせる**：`vrecon-mcp` を Claude Code に繋いで、`run_diagnose` → 仮説 → `run_optimize` を回させる。
 6. **H3で1本だけ生成してみる**（`gpu/h3_control/README.md`。手元のGPUでは足りないのでレンタルGPUで）。奥行き・輪郭・グレー（プロキシの描画）の3種類を比べる（計画書16.4）。
 7. 本物のテスト映像を集める。評価データの候補に BVB と CineRecon も加える（計画書16.1）。

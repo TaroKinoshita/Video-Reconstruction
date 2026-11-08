@@ -5,6 +5,9 @@
 #
 #   CLIP_DIR  a reference clip folder (needs video.mp4; for scoring also gt_passes/, gt.json, meta.json)
 #   RUN_DIR   new, empty folder for this run (one model x clip x attempt)
+#   --mcp blend-ai   use the blend-ai server (BLEND_AI_DIR, default ~/Claude/blend-ai) instead of the pinned
+#                    mcp-for-blender; it attaches to a Blender you started yourself with its add-on server
+#                    running on BLENDER_PORT (no Blender is launched or killed by this script)
 #
 # Needs on this machine: full Blender 5.2.x (GUI build; blender-mcp does not work in `blender -b`),
 # uv/uvx, the `claude` CLI, ffmpeg, and this repo's .venv for scoring. On a headless Linux box,
@@ -15,7 +18,8 @@ set -euo pipefail
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 
 CLIP="$(abspath "$1")"; RUN="$2"; shift 2
-MODEL="claude-opus-5-5"; MINUTES=60; TURNS=200
+MODEL="claude-opus-5-5"; MINUTES=60; TURNS=200; MCP="mcp-for-blender"
+BLEND_AI_DIR="${BLEND_AI_DIR:-$HOME/Claude/blend-ai}"
 PORT="${BLENDER_PORT:-9876}"
 MCP_VERSION="2.2.6"          # mcp-for-blender (blender-mcp) version used for every run
 WIN_BLENDER="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
@@ -27,6 +31,7 @@ while [[ $# -gt 0 ]]; do
     --model) MODEL="$2"; shift ;;
     --minutes) MINUTES="$2"; shift ;;
     --turns) TURNS="$2"; shift ;;
+    --mcp) MCP="$2"; shift ;;
     *) echo "unknown option $1"; exit 2 ;;
   esac
   shift
@@ -47,6 +52,16 @@ cp "$CLIP/video.mp4" "$WS/input/reference.mp4"
 sed -e "s#<VIDEO_PATH>#$WS/input/reference.mp4#" -e "s#<OUTPUT_DIR>#$WS/output#g" \
   "$HERE/prompt_L1.txt" > "$RUN/prompt.txt"
 
+if [[ "$MCP" == "blend-ai" ]]; then
+  BLEND_AI_WIN="$(abspath "$BLEND_AI_DIR")"
+  UV="$(command -v uv)"; command -v cygpath >/dev/null && UV="$(cygpath -m "$UV")"  # a path native programs understand
+  cat > "$RUN/mcp.json" <<EOF
+{"mcpServers": {"blender": {"command": "$UV", "args": ["run", "--directory", "$BLEND_AI_WIN", "blend-ai"]}}}
+EOF
+  MCP_VERSION="blend-ai-$(git -C "$BLEND_AI_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  echo "attached (user-started Blender)" > "$RUN/logs/blender_version.txt"
+  (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null || { echo "no Blender add-on server on port $PORT: start it in Blender first"; exit 1; }
+else
 cat > "$RUN/mcp.json" <<EOF
 {"mcpServers": {"blender": {"command": "uvx", "args": ["mcp-for-blender==$MCP_VERSION"],
   "env": {"BLENDER_HOST": "127.0.0.1", "BLENDER_PORT": "$PORT", "BLENDER_MCP_DISABLE_TELEMETRY": "1"}}}}
@@ -71,12 +86,14 @@ for _ in $(seq 1 60); do
 done
 (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null || { echo "blender-mcp server did not start on port $PORT (see logs/blender.log)"; exit 1; }
 
+fi
+
 # --- The agent ------------------------------------------------------------------------------------
 START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 set +e
 (cd "$WS" && timeout "${MINUTES}m" claude -p "$(cat "$RUN/prompt.txt")" \
   --model "$MODEL" --max-turns "$TURNS" \
-  --mcp-config "$RUN/mcp.json" \
+  --mcp-config "$RUN/mcp.json" --strict-mcp-config \
   --allowedTools "mcp__blender__*" "Bash" "Read" "Write" "Edit" "Glob" "Grep" \
   --output-format stream-json --verbose) > "$RUN/logs/agent.jsonl" 2> "$RUN/logs/agent.stderr"
 EXIT=$?

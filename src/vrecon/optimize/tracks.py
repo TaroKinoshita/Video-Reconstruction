@@ -110,11 +110,13 @@ def _ray_boxes(origin, dirs, boxes):
 
 
 def track_metrics(project: Project, tracks: Tracks, shot_id: str = "shot_001", ids: list[str] | None = None,
-                  horizon: int = 12, max_tracks: int = 400) -> dict:
+                  horizon: int = 12, max_tracks: int = 400, skip: np.ndarray | None = None) -> dict:
     """Mean re-projection error of tracked points (fraction of the image diagonal).
 
     ids: which reconstruction objects tracks may pin to (default: all). Restricting to set pieces gives
     a camera-only signal. Tracks that hit nothing are ignored and counted.
+    skip: optional bool [T, H, W]; a track whose first pixel is True there is not used (e.g. it starts on a
+    moving object, whose ray could otherwise pass through and pin to the wall behind it).
     """
     w, h = tracks.size
     diag = float(np.hypot(w, h))
@@ -129,16 +131,17 @@ def track_metrics(project: Project, tracks: Tracks, shot_id: str = "shot_001", i
         r_c, c_c, k = camera_pose(cam, int(s))
         uv = xy[sel, s]
         dirs = np.stack([(uv[:, 0] - k[0, 2]) / k[0, 0], (uv[:, 1] - k[1, 2]) / k[1, 1], np.ones(len(sel))], 1) @ r_c.T
-        # cast against every object and keep only rays whose nearest hit is one of `ids`: otherwise a point
-        # on a moving box could pass through it and be pinned to the wall behind it
-        order = ids + [o for o in objs if o not in ids]
         boxes = []
-        for oid in order:
+        for oid in ids:
             r, t, sc = object_pose(project, objs[oid], shot_id, int(s))
             boxes.append((r, t, np.array(objs[oid].size or (1, 1, 1)) * sc / 2))
         which, local = _ray_boxes(c_c, dirs, boxes)
         missed += int((which < 0).sum())
-        which[which >= len(ids)] = -1  # nearest hit is an object outside `ids`: not counted as missed
+        if skip is not None and int(s) < len(skip):
+            hh, ww = skip.shape[1:]
+            ui = np.clip(np.rint(uv[:, 0]).astype(int), 0, ww - 1)
+            vi = np.clip(np.rint(uv[:, 1]).astype(int), 0, hh - 1)
+            which[skip[int(s), vi, ui]] = -1
         for f in range(int(s) + 1, min(int(s) + horizon, xy.shape[1])):
             seen = ~np.isnan(xy[sel, f, 0]) & (which >= 0)
             if not seen.any():

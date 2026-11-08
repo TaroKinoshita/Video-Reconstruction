@@ -331,7 +331,14 @@ def combined_loss(project: Project, obs: MaskObservation | None, pairs: dict[str
     if tracks is not None:
         from .tracks import track_metrics
 
-        total += TRACK_WEIGHT * track_metrics(project, tracks, ids=track_ids)["track_loss"]
+        skip = None
+        if track_ids is not None and obs is not None:
+            # camera evidence: drop tracks that start on an observed object other than the set pieces.
+            # Decided from the masks, not from the reconstruction's boxes, so the set of points used does not
+            # change with the parameters being searched (a box-based test did, and bent the focal search)
+            keep = [n for n, label in obs.id_map.items() if pairs.get(label) in track_ids]
+            skip = (obs.masks != 0) & ~np.isin(obs.masks, keep)
+        total += TRACK_WEIGHT * track_metrics(project, tracks, ids=track_ids, skip=skip)["track_loss"]
     return total
 
 
