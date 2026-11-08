@@ -74,7 +74,7 @@ def track_points(video: str | Path, max_corners: int = 300, reseed: int = 12, sp
 
 
 def load_tracks(path: str | Path, obs_id: str = "obs_tracks_file") -> Tracks:
-    """Tracks written by an external tracker (gpu/observe/run_cotracker.py), which runs in its own env."""
+    """Tracks written by an external tracker (gpu/observe/run_tapnextpp.py), which runs in its own env."""
     with np.load(path) as d:
         xy, (w, h), meta = d["xy"].astype(np.float32), d["size"].tolist(), json.loads(str(d["meta"]))
     obs = Observation(id=obs_id, kind="point_track", shot_id="shot_001",
@@ -129,12 +129,16 @@ def track_metrics(project: Project, tracks: Tracks, shot_id: str = "shot_001", i
         r_c, c_c, k = camera_pose(cam, int(s))
         uv = xy[sel, s]
         dirs = np.stack([(uv[:, 0] - k[0, 2]) / k[0, 0], (uv[:, 1] - k[1, 2]) / k[1, 1], np.ones(len(sel))], 1) @ r_c.T
+        # cast against every object and keep only rays whose nearest hit is one of `ids`: otherwise a point
+        # on a moving box could pass through it and be pinned to the wall behind it
+        order = ids + [o for o in objs if o not in ids]
         boxes = []
-        for oid in ids:
+        for oid in order:
             r, t, sc = object_pose(project, objs[oid], shot_id, int(s))
             boxes.append((r, t, np.array(objs[oid].size or (1, 1, 1)) * sc / 2))
         which, local = _ray_boxes(c_c, dirs, boxes)
         missed += int((which < 0).sum())
+        which[which >= len(ids)] = -1  # nearest hit is an object outside `ids`: not counted as missed
         for f in range(int(s) + 1, min(int(s) + horizon, xy.shape[1])):
             seen = ~np.isnan(xy[sel, f, 0]) & (which >= 0)
             if not seen.any():

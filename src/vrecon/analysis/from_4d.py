@@ -43,14 +43,18 @@ def load_4rc(path, src_w: int, src_h: int, frames: list[int]) -> Model4D:
     assert n == len(frames), f"{n} predictions for {len(frames)} frames"
     pts = np.stack([z[f"pred_{i}_pts"][0] for i in range(n)])
     h, w = pts.shape[1:3]
-    s, ox, oy = model_to_source(h, w, src_w, src_h)
+    if "model_to_source" in z:  # other models (e.g. MoRe/VGGT: width to 518, height to a multiple of 14)
+        sx, sy, ox, oy = (float(v) for v in z["model_to_source"])
+    else:
+        s, ox, oy = model_to_source(h, w, src_w, src_h)
+        sx = sy = s
     K = np.stack([z[f"pred_{i}_intrinsic"] for i in range(n)]).astype(np.float64)
-    K[:, 0, 0] /= s
-    K[:, 1, 1] /= s
-    K[:, 0, 2] = (K[:, 0, 2] + 0.5 + ox) / s - 0.5
-    K[:, 1, 2] = (K[:, 1, 2] + 0.5 + oy) / s - 0.5
+    K[:, 0, 0] /= sx
+    K[:, 1, 1] /= sy
+    K[:, 0, 2] = (K[:, 0, 2] + 0.5 + ox) / sx - 0.5
+    K[:, 1, 2] = (K[:, 1, 2] + 0.5 + oy) / sy - 0.5
     u, v = np.meshgrid(np.arange(w), np.arange(h))
-    src_uv = np.stack([(u + 0.5 + ox) / s - 0.5, (v + 0.5 + oy) / s - 0.5], -1)
+    src_uv = np.stack([(u + 0.5 + ox) / sx - 0.5, (v + 0.5 + oy) / sy - 0.5], -1)
     return Model4D(np.asarray(frames), np.stack([z[f"pred_{i}_extrinsic"] for i in range(n)]).astype(np.float64),
                    K, pts.astype(np.float64), np.stack([z[f"pred_{i}_conf"][0] for i in range(n)]), src_uv)
 
