@@ -45,13 +45,18 @@ def hypotheses(project) -> list[tuple[str, list[Param], str]]:
     return hs
 
 
-def auto_repair(mgr: RunManager, obs, pairs: dict[str, str], tracks=None, passes: int = 2, evals: int = 60) -> list[dict]:
-    """Run the fixed hypothesis order through the run manager. Returns one record per attempt."""
+def auto_repair(mgr: RunManager, obs, pairs: dict[str, str], tracks=None, passes: int = 2, evals: int = 60,
+                focal: bool = True) -> list[dict]:
+    """Run the fixed hypothesis order through the run manager. Returns one record per attempt.
+    focal=False skips the focal-length hypothesis (e.g. when the start comes from a 4D model whose focal
+    error the repair tends to trade against other errors)."""
     set_ids = sorted(o.id for o in mgr.adopted.reconstruction.objects if o.kind == "set")
     set_pairs = {k: v for k, v in pairs.items() if v in set_ids}
     records = []
     for n in range(passes):
         for i, (hyp, params, judged_on) in enumerate(hypotheses(mgr.adopted)):
+            if judged_on == "set" and not focal:
+                continue
             pid = f"auto{n}_{i:02d}_{mgr.attempts + 1:03d}"
             if judged_on == "set":
                 prop, info = optimize(mgr.adopted, obs, set_pairs, params, hyp, pid, max_evals=evals, tracks=tracks,
