@@ -24,7 +24,7 @@ def _config(run_dir: Path) -> dict:
 
 def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min_gain: float = 0.0,
              video: str | None = None, from_4d: str | None = None, focal: bool | None = None,
-             edit_set: bool = False) -> dict:
+             edit_set: bool = False, tracks: str | None = None) -> dict:
     """Create a run.
 
     masks: a synthetic clip folder (ground-truth stand-in) or a masks .npz from an external segmenter
@@ -51,7 +51,8 @@ def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min
     if from_4d:
         start, report = _start_from_4d(project, from_4d, masks, rd)
     cfg = {"project": start, "masks": str(Path(masks).resolve()), "mask_source": "observed" if observed else "gt_stand_in",
-           "video": str(Path(video).resolve()) if video else None, "from_4d": str(Path(from_4d).resolve()) if from_4d else None,
+           "video": str(Path(video).resolve()) if video else None,
+           "tracks": str(Path(tracks).resolve()) if tracks else None, "from_4d": str(Path(from_4d).resolve()) if from_4d else None,
            "focal": (not from_4d) if focal is None else focal,
            "rule": {"primary": "silhouette_loss", "min_gain": min_gain}, "max_attempts": max_attempts}
     start_project = load_project(start)
@@ -114,7 +115,10 @@ def auto_pairs(project, obs: MaskObservation, shot_id: str = "shot_001") -> dict
 def _tracks(cfg: dict):
     if not cfg.get("video"):
         return None
-    from vrecon.optimize.tracks import track_points
+    from vrecon.optimize.tracks import load_tracks, track_points
+
+    if cfg.get("tracks"):  # tracks from an external tracker (e.g. gpu/observe/run_tapnextpp.py)
+        return load_tracks(cfg["tracks"])
 
     return track_points(cfg["video"])  # OpenCV LK on the reference video, about a second
 
