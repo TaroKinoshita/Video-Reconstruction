@@ -61,6 +61,9 @@ def segment(predictor, video: str, prompt: str, frames: tuple[int, int, int], pr
     return found
 
 
+QUICK_OK = 0.9  # draft: px_8693908 gave quality 1.0 / steadiness 0.947 on all six tries
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("video")
@@ -72,6 +75,8 @@ def main() -> int:
                     "or 'auto' to try first, middle and last")
     ap.add_argument("--det-thresh", type=float, default=0.2, help="score for a detection to count at all (sam3 default 0.4)")
     ap.add_argument("--max-objects", type=int, default=4, help="fewer tracked objects use less VRAM")
+    ap.add_argument("--quick", action="store_true", help="stop trying mover prompts at the first clean candidate "
+                    "(at least one track, quality and steadiness >= QUICK_OK): each try is a full tracking pass")
     ap.add_argument("--set", dest="sets", action="append", default=[], metavar="PROMPT=LABEL")
     args = ap.parse_args()
 
@@ -114,15 +119,21 @@ def main() -> int:
             found = segment(predictor, args.video, word, frames, pf)
             candidates.append(((word, pf, found), score_candidate(found)))
             print(json.dumps({"movers": word, "prompt_frame": pf, **candidates[-1][1]}), flush=True)
+            sc = candidates[-1][1]
+            if args.quick and sc["tracks"] >= 1 and sc["quality"] >= QUICK_OK and sc["steadiness"] >= QUICK_OK:
+                break
+        else:
+            continue
+        break
     (word, pf, found), chosen = best(candidates) if len(candidates) > 1 else candidates[0]
-    if len(candidates) > 1:
+    if len(candidates) > 1 or args.quick:
         found = {k: found[k] for k in chosen["kept"]}
     for oid, m in sorted(found.items()):
         number = len(id_map) + 1
         id_map[number] = f"obs_{oid}"
         masks[m] = number
     meta = {"tool": "sam3.1_multiplex", "movers": word, "prompt_frame": pf,
-            "candidates": [{"movers": w, "prompt_frame": f, **s} for (w, f, _), s in candidates], "new_det_thresh": args.new_det_thresh, "det_thresh": args.det_thresh, "sets": args.sets, "seconds": round(time.time() - start, 2),
+            "candidates": [{"movers": w, "prompt_frame": f, **s} for (w, f, _), s in candidates], "new_det_thresh": args.new_det_thresh, "det_thresh": args.det_thresh, "sets": args.sets, "quick": args.quick, "seconds": round(time.time() - start, 2),
             "peak_vram_mb": round(torch.cuda.max_memory_allocated() / 2**20) if torch.cuda.is_available() else 0}
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "wb") as f:

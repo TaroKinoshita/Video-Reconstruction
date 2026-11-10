@@ -150,7 +150,9 @@ def _snap_still_ends(frames: list[int], xy: np.ndarray, yaw: np.ndarray, n_end: 
     return f, p, y
 
 
-MOVE_FRACTION = 0.5  # an object moves when its per-frame box centres spread more than this share of its size
+MIN_FLOOR_POINTS = 500  # draft: fewer floor-mask points than this and the floor plane is not trusted
+
+MOVE_FRACTION = 0.5 # an object moves when its per-frame box centres spread more than this share of its size
 
 
 def floor_frame(m: Model4D, floor_pts: np.ndarray) -> tuple[np.ndarray, dict]:
@@ -199,8 +201,19 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
     """Returns (cameras, objects, scale, report). Labels: obj_floor, optional obj_wall, movers obs_*."""
     labels = labels_at_model_pixels(m, masks)
     by_name = {v: k for k, v in id_map.items()}
-    floor = _confident(m, labels == by_name["obj_floor"], keep)
+    floor_sel = labels == by_name["obj_floor"] if "obj_floor" in by_name else np.zeros(labels.shape, bool)
+    source = "floor mask"
+    if floor_sel.sum() < MIN_FLOOR_POINTS:
+        # the floor prompt found nothing (px_6077402: "floor" on a basketball court): use the largest plane of
+        # the background, which is the floor in a floor-level shot. Recorded in the report as a guess.
+        movers = [k for k, v in id_map.items() if v.startswith("obs_")]
+        floor_sel = ~np.isin(labels, movers)
+        source = "background (no floor mask)"
+        if floor_sel.sum() < MIN_FLOOR_POINTS:
+            raise ValueError(f"no floor: {int(floor_sel.sum())} background points at model pixels")
+    floor = _confident(m, floor_sel, keep)
     A, report = floor_frame(m, floor)
+    report["floor_source"] = source
     report["frames"] = [int(f) for f in m.frames]
 
     def aligned(p):
@@ -218,6 +231,8 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
     cameras = [Camera(id="cam_001", shot_id=shot_id, intrinsics=intr, keys=keys, evidence=ev)]
 
     fp = aligned(floor)
+    if source != "floor mask":  # background points: keep those on the fitted plane
+        fp = fp[np.abs(fp[:, 2]) < 0.02 * abs(report["camera_height"])]
     ext = np.quantile(fp[:, :2], [0.02, 0.98], axis=0)
     span = ext[1] - ext[0]
     objects = [SceneObject(id="obj_floor", kind="set", size=(float(span[0] * 1.5), float(span[1] * 1.5), 0.002),

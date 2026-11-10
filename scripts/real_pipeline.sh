@@ -3,7 +3,8 @@
 #   project (vrecon new) -> masks (SAM 3.1) -> first scene (4RC) -> fixed-order repair -> .blend + renders
 #
 #   bash scripts/real_pipeline.sh VIDEO OUT_DIR [--movers "toy car,box"] [--floor table] [--wall wall]
-#                                 [--prompt-frame auto] [--skip-sam] [--skip-4rc]
+#                                 [--prompt-frame auto] [--quick] [--skip-sam] [--skip-4rc]
+#   --quick  SAM stops at the first clean mover prompt instead of trying every word x 3 frames
 #   SAM_ARGS="--det-thresh 0.4" passes extra options to gpu/observe/run_sam3.py (e.g. when it runs out of memory)
 #
 # Tool envs (see docs/HANDOFF.md 2.1): VRECON_ENVS (default %LOCALAPPDATA%/vrecon/envs) with observe/ (SAM)
@@ -13,13 +14,14 @@
 set -euo pipefail
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 VIDEO="$1"; OUT="$2"; shift 2
-MOVERS="object"; FLOOR="table"; WALL="wall"; PROMPT_FRAME="auto"; SKIP_SAM=0; SKIP_4RC=0
+MOVERS="object"; FLOOR="table"; WALL="wall"; PROMPT_FRAME="auto"; SKIP_SAM=0; SKIP_4RC=0; QUICK=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --movers) MOVERS="$2"; shift ;;
     --floor) FLOOR="$2"; shift ;;
     --wall) WALL="$2"; shift ;;
     --prompt-frame) PROMPT_FRAME="$2"; shift ;;
+    --quick) QUICK="--quick" ;;
     --skip-sam) SKIP_SAM=1 ;;
     --skip-4rc) SKIP_4RC=1 ;;
     *) echo "unknown option $1"; exit 2 ;;
@@ -46,7 +48,7 @@ log "project: $OUT/project/project.json"
 if [[ $SKIP_SAM == 0 || ! -f "$OUT/masks.npz" ]]; then
   log "SAM 3.1: movers='$MOVERS' floor='$FLOOR' wall='$WALL' (can take 10-90 minutes)"
   (cd "$REPO" && "$OBS_PY" gpu/observe/run_sam3.py "$VIDEO" "$OUT/masks.npz" --movers "$MOVERS" \
-     --prompt-frame "$PROMPT_FRAME" --set "$FLOOR=obj_floor" --set "$WALL=obj_wall" ${SAM_ARGS:-}) > "$OUT/sam.log" 2>&1
+     --prompt-frame "$PROMPT_FRAME" --set "$FLOOR=obj_floor" --set "$WALL=obj_wall" $QUICK ${SAM_ARGS:-}) > "$OUT/sam.log" 2>&1
 fi
 log "masks: $OUT/masks.npz"
 
