@@ -132,7 +132,9 @@
    - syn_01 1回（`runs/B/syn_01_blendai_r2`、claude-opus-5-5、23分、73ターン、API換算$3.1、`valid: true`）：物のIoU **.945**、焦点距離の誤差 3.7%、タイミング誤差 0フレーム。条件C（LLM .848、決め打ち順 .840）より大幅に良い。エージェントはBashでPythonを書き、床の市松模様と壁の縞から消失点で焦点距離と傾きを出し、背景差分で箱のマスクを作って、自前のシルエット当てはめで箱とカメラを合わせた。**合成映像は市松模様・縞で校正しやすく、条件Bに有利な可能性**。条件Cは4RC＋SAMマスクからの出発で、エージェントにシェルを渡していない点も違う。比較の公平さ（Cにも同じ自由度を与えるか、実写で比べるか）を決める必要がある。
 5. **AIに仮説を選ばせる**：`vrecon-mcp` を Claude Code に繋いで、`run_diagnose` → 仮説 → `run_optimize` を回させる。
 6. **H3で1本だけ生成してみる**（`gpu/h3_control/README.md`。手元のGPUでは足りないのでレンタルGPUで）。奥行き・輪郭・グレー（プロキシの描画）の3種類を比べる（計画書16.4）。
-7. 本物のテスト映像を集める。評価データの候補に BVB と CineRecon も加える（計画書16.1）。
+7. 本物のテスト映像を集める。
+   - 【2026-11-10】実写1本を AIなしで最後まで通すスクリプト：`bash scripts/real_pipeline.sh VIDEO OUT_DIR --movers "toy car,box" --floor table --wall wall`（vrecon new → SAM 3.1（言葉とフレームは自動選択）→ 4RC → `run init --from-4d` → `run auto` → `scene.blend` と3フレームの描画、`OUT_DIR/summary.txt`）。机の実写で確認（SAMと4RCは既存の結果を `--skip-sam --skip-4rc` で再利用、修理は24回中19回採用、損失0.416）。SAMと4RCを含めると1本 約20〜100分。選び方は `evaluation/clips/SELECTION.md`。
+   - 以下は元のメモ：評価データの候補に BVB と CineRecon も加える（計画書16.1）。
 
 **研究の新規性は RQ1（診断・数値探し・採用ルール）に置く**（計画書16.1）。RQ2 に近い先行研究（Shape-for-Motion、ProxyUp）がある。
 
