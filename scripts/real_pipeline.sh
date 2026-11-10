@@ -5,6 +5,8 @@
 #   bash scripts/real_pipeline.sh VIDEO OUT_DIR [--movers "toy car,box"] [--floor table] [--wall wall]
 #                                 [--prompt-frame auto] [--quick] [--skip-sam] [--skip-4rc]
 #   --quick  SAM stops at the first clean mover prompt instead of trying every word x 3 frames
+#   --floor/--wall default "none": no SAM pass for them (each pass takes as long as the movers, up to 2 hours
+#            for a floor filling the frame on 8 GB); the floor plane then comes from the 4RC background points
 #   SAM_ARGS="--det-thresh 0.4" passes extra options to gpu/observe/run_sam3.py (e.g. when it runs out of memory)
 #
 # Tool envs (see docs/HANDOFF.md 2.1): VRECON_ENVS (default %LOCALAPPDATA%/vrecon/envs) with observe/ (SAM)
@@ -14,7 +16,7 @@
 set -euo pipefail
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 VIDEO="$1"; OUT="$2"; shift 2
-MOVERS="object"; FLOOR="table"; WALL="wall"; PROMPT_FRAME="auto"; SKIP_SAM=0; SKIP_4RC=0; QUICK=""
+MOVERS="object"; FLOOR="none"; WALL="none"; PROMPT_FRAME="auto"; SKIP_SAM=0; SKIP_4RC=0; QUICK=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --movers) MOVERS="$2"; shift ;;
@@ -46,9 +48,10 @@ log "project: $OUT/project/project.json"
 
 # 2. masks: movers by text (best prompt chosen without ground truth), floor and wall as set pieces
 if [[ $SKIP_SAM == 0 || ! -f "$OUT/masks.npz" ]]; then
+  SETS=(); [[ $FLOOR != none ]] && SETS+=(--set "$FLOOR=obj_floor"); [[ $WALL != none ]] && SETS+=(--set "$WALL=obj_wall")
   log "SAM 3.1: movers='$MOVERS' floor='$FLOOR' wall='$WALL' (can take 10-90 minutes)"
   (cd "$REPO" && "$OBS_PY" gpu/observe/run_sam3.py "$VIDEO" "$OUT/masks.npz" --movers "$MOVERS" \
-     --prompt-frame "$PROMPT_FRAME" --set "$FLOOR=obj_floor" --set "$WALL=obj_wall" $QUICK ${SAM_ARGS:-}) > "$OUT/sam.log" 2>&1
+     --prompt-frame "$PROMPT_FRAME" "${SETS[@]}" $QUICK ${SAM_ARGS:-}) > "$OUT/sam.log" 2>&1
 fi
 log "masks: $OUT/masks.npz"
 
