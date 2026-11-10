@@ -4,6 +4,7 @@
 #
 #   bash scripts/real_pipeline.sh VIDEO OUT_DIR [--movers "toy car,box"] [--floor table] [--wall wall]
 #                                 [--prompt-frame auto] [--skip-sam] [--skip-4rc]
+#   SAM_ARGS="--det-thresh 0.4" passes extra options to gpu/observe/run_sam3.py (e.g. when it runs out of memory)
 #
 # Tool envs (see docs/HANDOFF.md 2.1): VRECON_ENVS (default %LOCALAPPDATA%/vrecon/envs) with observe/ (SAM)
 # and 4rc/, VRECON_SRC (default %LOCALAPPDATA%/vrecon/src) with 4RC/. Outputs in OUT_DIR:
@@ -45,7 +46,7 @@ log "project: $OUT/project/project.json"
 if [[ $SKIP_SAM == 0 || ! -f "$OUT/masks.npz" ]]; then
   log "SAM 3.1: movers='$MOVERS' floor='$FLOOR' wall='$WALL' (can take 10-90 minutes)"
   (cd "$REPO" && "$OBS_PY" gpu/observe/run_sam3.py "$VIDEO" "$OUT/masks.npz" --movers "$MOVERS" \
-     --prompt-frame "$PROMPT_FRAME" --set "$FLOOR=obj_floor" --set "$WALL=obj_wall") > "$OUT/sam.log" 2>&1
+     --prompt-frame "$PROMPT_FRAME" --set "$FLOOR=obj_floor" --set "$WALL=obj_wall" ${SAM_ARGS:-}) > "$OUT/sam.log" 2>&1
 fi
 log "masks: $OUT/masks.npz"
 
