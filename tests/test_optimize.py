@@ -175,3 +175,23 @@ def test_yaw_and_spin_turn_about_up_axis(reference):  # noqa: F811
     q, _ = apply_params(p, [Param("spin", o.id)], np.array([0.6]))
     o3 = next(x for x in q.reconstruction.objects if x.id == o.id)
     assert [yaw_of(k) for k in o3.keys] == pytest.approx([0.0, 0.3, 0.6])
+
+
+def test_ray_keys_restore_an_under_moving_path(reference):  # noqa: F811
+    import numpy as np
+
+    from vrecon.optimize.rays import ray_keys
+
+    obs = gt_stand_in_masks(reference)
+    truth = gt_project()
+    a = next(o for o in truth.reconstruction.objects if o.id == "obj_a")
+    true_xy = np.array([k.pose.translation[:2] for k in a.keys])
+    p = gt_project()
+    b = next(o for o in p.reconstruction.objects if o.id == "obj_a")
+    first = np.array(b.keys[0].pose.translation)
+    b.keys = [k.model_copy(update={"pose": Pose(translation=tuple(first + 0.3 * (np.array(k.pose.translation) - first)),
+                                                 rotation=k.pose.rotation)}) for k in b.keys]  # moves 30% of the way
+    before = np.abs(np.array([k.pose.translation[:2] for k in b.keys]) - true_xy).mean()
+    keys = ray_keys(p, obs, PAIRS, "obj_a")
+    after = np.abs(np.array([k.pose.translation[:2] for k in keys]) - true_xy).mean()
+    assert after < before / 3

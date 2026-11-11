@@ -76,14 +76,26 @@ def hypotheses(project) -> list[tuple[str, list[Param], str]]:
 
 
 def auto_repair(mgr: RunManager, obs, pairs: dict[str, str], tracks=None, passes: int = 2, evals: int = 60,
-                focal: bool = True) -> list[dict]:
+                focal: bool = True, rays: bool = False) -> list[dict]:
     """Run the fixed hypothesis order through the run manager. Returns one record per attempt.
     focal=False skips the focal-length hypothesis (e.g. when the start comes from a 4D model whose focal
-    error the repair tends to trade against other errors)."""
+    error the repair tends to trade against other errors). rays=True first proposes, for each moving object,
+    a path from its mask centres (optimize.rays), judged by the usual accept rule."""
     set_ids = sorted(o.id for o in mgr.adopted.reconstruction.objects if o.kind == "set")
     set_pairs = {k: v for k, v in pairs.items() if v in set_ids}
     records = []
     for n in range(passes):
+        if rays:
+            from vrecon.optimize.rays import ray_proposal
+
+            for o in [o for o in mgr.adopted.reconstruction.objects if o.keys]:
+                prop = ray_proposal(mgr.adopted, obs, pairs, o.id, f"auto{n}_ray_{mgr.attempts + 1:03d}")
+                if prop is None:
+                    continue
+                out = mgr.try_proposal(prop)
+                records.append({"pass": n, "hypothesis": prop.hypothesis, "status": out.status})
+                if out.status == "budget_exhausted":
+                    return records
         for i, (hyp, params, judged_on) in enumerate(hypotheses(mgr.adopted)):
             if judged_on == "set" and not focal:
                 continue

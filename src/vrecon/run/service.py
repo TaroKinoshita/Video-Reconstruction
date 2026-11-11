@@ -200,14 +200,14 @@ def run_optimizer(run_dir: str, params: list[str], hypothesis: str, max_evals: i
     return {"outcome": out.model_dump(mode="json"), "search": info}
 
 
-def auto(run_dir: str, passes: int = 2, max_evals: int = 60) -> dict:
+def auto(run_dir: str, passes: int = 2, max_evals: int = 60, rays: bool = False) -> dict:
     """Fixed hypothesis order (camera first, then each object's position, size, timing); no LLM."""
     from .policy import auto_repair
 
     mgr, obs, pc = _manager(Path(run_dir))
     before = dict(mgr.metrics)
     records = auto_repair(mgr, obs, pc["pairs"], mgr.tracks, passes, max_evals,
-                          focal=_config(Path(run_dir)).get("focal", True))
+                          focal=_config(Path(run_dir)).get("focal", True), rays=rays)
     return {"revision": mgr.adopted.revision, "metrics_before": before, "metrics_after": mgr.metrics,
             "accepted": sum(r["status"] == "accepted" for r in records), "tried": len(records), "attempts": records}
 
