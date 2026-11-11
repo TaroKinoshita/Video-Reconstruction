@@ -150,6 +150,8 @@ def _snap_still_ends(frames: list[int], xy: np.ndarray, yaw: np.ndarray, n_end: 
     return f, p, y
 
 
+TOP_DOWN = 0.3  # view direction within about 17 degrees of straight down: heading from the image's up instead
+ROUND_RATIO = 0.8  # draft: footprint sides within this ratio -> no facing (a ball's turn is its roll, not a yaw)
 MIN_FLOOR_POINTS = 500  # draft: fewer floor-mask points than this and the floor plane is not trusted
 
 MOVE_FRACTION = 0.5 # an object moves when its per-frame box centres spread more than this share of its size
@@ -163,6 +165,9 @@ def floor_frame(m: Model4D, floor_pts: np.ndarray) -> tuple[np.ndarray, dict]:
     if cam0[:3, 3] @ n + d < 0:
         n, d = -n, -d
     fwd = cam0[:3, 2] - (cam0[:3, 2] @ n) * n
+    if np.linalg.norm(fwd) < TOP_DOWN:  # looking almost straight down: the view direction gives no heading,
+        up = -cam0[:3, 1]  # so use the image's up direction on the floor (px_8979136)
+        fwd = up - (up @ n) * n
     y = fwd / np.linalg.norm(fwd)
     x = np.cross(y, n)
     R = np.stack([x, y, n])  # rows: new axes in old coords
@@ -289,6 +294,8 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
                     y = prev + (y - prev + np.pi / 2) % np.pi - np.pi / 2
                 prev = y
                 yaws.append(y)
+            if min(size[:2]) > ROUND_RATIO * max(size[:2]):  # round footprint: per-frame yaw is noise
+                yaws = [float(np.median(yaws))] * len(yaws)
             fs, xy, yaws = _snap_still_ends(fs, xy, np.array(yaws))
             thin = size
             moved = [_deepen(c, float(y), thin) for c, y in zip(xy, yaws)]
