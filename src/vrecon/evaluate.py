@@ -132,3 +132,38 @@ def score_blend(reference_dir: str | Path, blend: str | Path) -> dict:
     report["reconstruction"] = str(blend)
     report["import_warnings"] = warnings
     return report
+
+
+def score_novel(reference_dir: str | Path, rec: Project, shot_id: str | None = None, root: str | Path | None = None,
+                pairs: dict[str, str] | None = None) -> dict:
+    """Scores from the novel views of a synthetic clip (gt_passes/novel/*, metrics/novel.py). pairs: ground-truth
+    id -> reconstruction id (default: matched on the source view, as score() does)."""
+    from vrecon.metrics.novel import carry_relative, novel_scores
+    from vrecon.scene.builder import build_scene
+    from vrecon.scene.passes import render_passes
+    from vrecon.schema import Camera
+
+    ref_dir = Path(reference_dir)
+    gt = load_project(ref_dir / "gt.json")
+    shot_id = shot_id or rec.shots[0].id
+    if pairs is None:
+        pairs = score(ref_dir, rec, shot_id)["pairs"]
+    set_ids = {o.id for o in gt.reconstruction.objects if o.kind == "set"}
+    out = {"views": {}}
+    for view in sorted((ref_dir / "gt_passes" / "novel").glob("*")):
+        info = json.loads((view / "camera.json").read_text(encoding="utf-8"))
+        cam = carry_relative(Camera.model_validate(info["camera"]), gt.reconstruction.cameras[0],
+                             rec.reconstruction.cameras[0])
+        r = rec.model_copy(deep=True)
+        r.reconstruction.cameras = [cam.model_copy(update={"id": rec.reconstruction.cameras[0].id})]
+        build_scene(r, shot_id, root=root)
+        with tempfile.TemporaryDirectory() as tmp:
+            render_passes(tmp, shot_frames=info["frames"], shaded=False)
+            rec_index, rec_map = np.load(Path(tmp) / "index.npz")["index"], _load_map(Path(tmp) / "id_map.json")
+        ref_index, ref_map = np.load(view / "index.npz")["index"], _load_map(view / "id_map.json")
+        out["views"][view.name] = novel_scores(ref_index, ref_map, rec_index, rec_map, pairs, set_ids)
+    vals = [v["iou_movers"] for v in out["views"].values() if v["iou_movers"] is not None]
+    out["summary"] = {"iou_movers_mean": float(np.mean(vals)) if vals else None,
+                      "covered_mean": float(np.mean([v["covered"] for v in out["views"].values()])),
+                      "extra_mean": float(np.mean([v["extra"] for v in out["views"].values()]))}
+    return out

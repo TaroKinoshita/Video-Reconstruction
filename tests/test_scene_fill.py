@@ -87,3 +87,21 @@ def test_builder_sets_look_attribute(tmp_path):
     box = bpy.data.objects["obj_box"].data.color_attributes[LOOK_ATTR]
     assert tuple(bg.data[1].color)[:3] == pytest.approx((0, 1, 0))
     assert tuple(box.data[0].color)[:3] == pytest.approx((0.2, 0.4, 0.6))
+
+
+def test_novel_camera_carried_relative_to_source():
+    from vrecon.metrics.novel import carry_relative
+    from vrecon.metrics.poses import camera_pose
+    from vrecon.schema import Camera, CameraKey, Intrinsics
+
+    intr = Intrinsics(width=64, height=48, fx=50, fy=50, cx=32, cy=24)
+    look_y = (0.7071068, -0.7071068, 0.0, 0.0)  # OpenCV camera looking along +y (x right, y down = -z)
+
+    def cam(c, q=look_y):
+        return Camera(id="cam_001", shot_id="shot_001", intrinsics=intr, keys=[CameraKey(shot_frame=0, pose=Pose(translation=c, rotation=q))])
+
+    gt_src, novel = cam((0.0, -5.0, 2.0)), cam((1.0, -5.0, 2.0))  # novel: 1 m to the right
+    rec_src = cam((10.0, 0.0, 0.2))  # another world, 10x smaller (camera height 0.2 vs 2)
+    out = carry_relative(novel, gt_src, rec_src)
+    _, c, _ = camera_pose(out, 0)
+    assert c == pytest.approx([10.1, 0.0, 0.2], abs=1e-6)
