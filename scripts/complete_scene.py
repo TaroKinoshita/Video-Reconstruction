@@ -4,7 +4,8 @@ from those cameras to see what got filled.
     python scripts/complete_scene.py PROJECT.json OUT_DIR [--orbits 30,-30] [--frames 0,120,240] [--step 13]
 
 Rules applied (no judgement, no ground truth): every flat set piece without a mesh file (floor, stands, walls)
-is grown in its plane to fill each new camera's view (extend_set_to_view, all sampled frames). The cameras are
+is grown in its plane to fill each new camera's view (extend_set_to_view, all sampled frames), but not into
+the source camera's picture (protect=source camera: the extension must not cover what was observed). The cameras are
 orbits about the main character (scripts/coverage_scene.orbit), standing for the camera move a user asks for.
 Writes OUT_DIR/project.json (completed; changed objects are status "assumed" with a "rule:" note),
 OUT_DIR/<before|after>/<view>/ coverage renders, OUT_DIR/completion.json (operations; per view the share of the
@@ -63,7 +64,7 @@ def main() -> int:
     done, ops = p, []
     for name, v in views.items():
         for o in [o for o in done.reconstruction.objects if o.kind == "set" and o.asset is None]:
-            done, r = extend_set_to_view(done, o.id, v, frames=src)
+            done, r = extend_set_to_view(done, o.id, v, frames=src, protect=cam, protect_frames=src)
             ops.append({"view": name, **r})
     save_project(done, out / "project.json")
 

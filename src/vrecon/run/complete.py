@@ -38,14 +38,19 @@ def _view_rays(cam: Camera, frame: int, samples: int = 9):
 
 
 def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[int] | None = None,
-                       max_factor: float = 20.0, margin: float = 0.05, sideways_only: bool | None = None) -> tuple[Project, dict]:
+                       max_factor: float = 20.0, margin: float = 0.05, sideways_only: bool | None = None,
+                       protect: Camera | None = None, protect_frames: list[int] | None = None) -> tuple[Project, dict]:
     """Grow a flat set piece in its plane so that it covers what `cam` sees of that plane (rays through a grid of
     the picture hitting the plane). The thin axis and the plane's position stay; the far side is capped at
     max_factor times the current size (a floor seen up to the horizon would grow without end).
     Standing pieces (normal more than 45 deg from vertical) do not grow below the floor (z = 0): grown down its
     slope, the tennis stands plane ran under the floor and in front of the camera and filled the whole view
     (2026-11-13). sideways_only: grow only along the plane's horizontal axis (off by default: on the synthetic
-    clips it lost the wall's top in views from further back)."""
+    clips it lost the wall's top in views from further back).
+    protect: the source camera. Growth stops where it would show in that camera's picture (protect_frames): what
+    the source saw is the observed reconstruction, and an assumed extension must not cover it (the tennis stands
+    grown down to the floor hid the observed wall, 2026-11-13). Each of the four in-plane directions is cut back
+    on its own (bisection on the new strip)."""
     p = project.model_copy(deep=True)
     o = next(x for x in p.reconstruction.objects if x.id == obj_id)
     thin, n, other, r = _plane_axes(o)
@@ -73,6 +78,7 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     cap = max_factor * size / 2
     lo, hi = np.maximum(lo, -cap), np.minimum(hi, cap)
     lo[thin], hi[thin] = -size[thin] / 2, size[thin] / 2
+    keep = max(other, key=lambda ax: abs(r[2, ax]))
     if sideways_only:
         keep = max(other, key=lambda ax: abs(r[2, ax]))  # the in-plane axis closest to vertical keeps its extent
         lo[keep], hi[keep] = -size[keep] / 2, size[keep] / 2
@@ -80,6 +86,38 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     span[thin] = size[thin]
     mid = (hi + lo) / 2
     mid[thin] = 0.0
+    cut = {}
+    if protect is not None:
+        # drop the view's hits that the source camera shows (outside the current piece): what the source saw is the
+        # observed reconstruction. Then grow each in-plane axis only from hits beside the current piece (within its
+        # extent on the other axis), so hits in one direction do not stretch the rectangle into a protected one.
+        pf = protect_frames or sorted({k.shot_frame for k in protect.keys})
+        pw, ph = protect.intrinsics.width, protect.intrinsics.height
+        vis = np.zeros(len(pts), bool)
+        for f in pf:
+            rr, cc, kk = camera_pose(protect, f)
+            q = (pts - cc) @ np.asarray(rr)
+            z = np.where(q[:, 2] > 1e-9, q[:, 2], np.nan)
+            uu, vv = kk[0, 0] * q[:, 0] / z + kk[0, 2], kk[1, 1] * q[:, 1] / z + kk[1, 2]
+            vis |= (uu >= 0) & (uu < pw) & (vv >= 0) & (vv < ph)
+        inside = np.all(np.abs(local) <= size / 2 + 1e-9, axis=1)
+        free = ~vis | inside
+        ax2 = [x for x in range(3) if x != thin]
+        lo, hi = -size / 2, size / 2
+        lo, hi = lo.copy(), hi.copy()
+        for A, B in (ax2, ax2[::-1]):
+            sel = free & (np.abs(local[:, B]) <= size[B] / 2)
+            if sel.any():
+                lo[A] = max(min(lo[A], local[sel, A].min()), -cap[A])
+                hi[A] = min(max(hi[A], local[sel, A].max()), cap[A])
+            cut["dropped_hits"] = int((vis & ~inside).sum())
+        if sideways_only:
+            lo[keep], hi[keep] = -size[keep] / 2, size[keep] / 2
+        grow = (hi - lo) - size  # margin only on the grown part, so it does not creep into the source view
+        span = size + grow * (1 + margin)
+        span[thin] = size[thin]
+        mid = (hi + lo) / 2
+        mid[thin] = 0.0
     new_centre = centre + r @ mid
     o.size = tuple(float(x) for x in span)
     o.rest = o.rest.model_copy(update={"pose": o.rest.pose.model_copy(update={"translation": tuple(map(float, new_centre))})})
@@ -87,7 +125,7 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     o.evidence = list(o.evidence) + [Evidence(note=f"rule: extend_set_to_view from camera {cam.id}, size {np.round(size, 4).tolist()} "
                                                    f"-> {np.round(span, 4).tolist()}")]
     return p, {"op": "extend_set_to_view", "target": obj_id, "changed": True, "size_before": size.tolist(),
-               "size_after": span.tolist(), "capped": bool(np.any((np.abs(lo) >= cap - 1e-9) | (np.abs(hi) >= cap - 1e-9)))}
+               "size_after": span.tolist(), "protect_cut": cut, "capped": bool(np.any((np.abs(lo) >= cap - 1e-9) | (np.abs(hi) >= cap - 1e-9)))}
 
 
 def _reflect_pose(t: np.ndarray, rmat: np.ndarray, point: np.ndarray, normal: np.ndarray):
