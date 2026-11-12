@@ -113,6 +113,13 @@ def render_color_pass(kind: str, out_dir: str | Path, shot_frames: list[int], co
         sh.light, sh.color_type, sh.show_shadows = "FLAT", "VERTEX", False
         sh.background_color = (0.0, 0.0, 0.0)
         scene.view_settings.view_transform = "Standard"  # identity colours as given, no filmic curve
+    elif kind == "coverage":  # scene/coverage.py wrote the attribute; flat, so the classes read as given
+        from .coverage import COVERAGE_ATTR
+
+        _activate(COVERAGE_ATTR)
+        sh.light, sh.color_type, sh.show_shadows = "FLAT", "VERTEX", False
+        sh.background_color = (0.0, 0.0, 0.0)
+        scene.view_settings.view_transform = "Standard"
     elif kind == "look":
         _activate(LOOK_ATTR)
         sh.light, sh.color_type, sh.show_shadows = "STUDIO", "VERTEX", True

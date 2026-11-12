@@ -91,6 +91,17 @@ def export_controls(
             (out / "legend.json").write_text(json.dumps(colors, indent=2) + "\n", encoding="utf-8")
             files["id"]["legend"] = "legend.json"
 
+    if "coverage" in kinds:  # which faces the source video saw (scene/coverage.py), from this same camera
+        from .coverage import render_coverage
+
+        step = max(n_frames // 24, 1)
+        paths, summary = render_coverage(project, out / "passes" / "coverage", list(range(0, n_frames, step)),
+                                         view_frames=list(range(n_frames)), root=root)
+        path = encode_mp4(load_frames(paths), out / "control_coverage.mp4", fps=FPS)
+        files["coverage"] = {"path": path.name, "sha256": _sha256(path), "params": {"source_frames_step": step},
+                             "summary": summary, "note": "not a V2V control: shows what the video saw (green), saw "
+                                                         "edge-on (yellow), never saw (red)"}
+
     previews = []
     if preview:
         # A small shaded render of the first, middle and last frame, for a quick look.

@@ -71,15 +71,45 @@ def _new_object(name: str, data, vrecon_id: str) -> bpy.types.Object:
     return obj
 
 
-def _proxy_mesh(name: str, size: tuple[float, float, float]) -> bpy.types.Mesh:
-    """Axis-aligned box centred on the origin."""
-    sx, sy, sz = (s / 2 for s in size)
-    verts = [(x * sx, y * sy, z * sz) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
-    faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+def _proxy_mesh(name: str, size: tuple[float, float, float], cells: int = 1) -> bpy.types.Mesh:
+    """Axis-aligned box centred on the origin. cells: grid cells along the longest edge (shorter edges in
+    proportion), so per-face data such as coverage (scene/coverage.py) can vary over a large face."""
+    import numpy as np
+
+    half = np.array(size, float) / 2
+    n = [max(1, round(cells * s / max(max(size), 1e-12))) for s in size]
+    verts, faces, index = [], [], {}
+
+    def vid(p):
+        key = tuple(np.round(p, 9))
+        if key not in index:
+            index[key] = len(verts)
+            verts.append(tuple(p))
+        return index[key]
+
+    for axis in range(3):
+        u, v = [a for a in range(3) if a != axis]
+        for sign in (-1, 1):
+            for i in range(n[u]):
+                for j in range(n[v]):
+                    quad = []
+                    for di, dj in ((0, 0), (1, 0), (1, 1), (0, 1)):
+                        p = np.zeros(3)
+                        p[axis] = sign * half[axis]
+                        p[u] = -half[u] + 2 * half[u] * (i + di) / n[u]
+                        p[v] = -half[v] + 2 * half[v] * (j + dj) / n[v]
+                        quad.append(vid(p))
+                    # (u, v) is right-handed about +axis for x and z, left-handed for y
+                    outward = sign * (-1 if axis == 1 else 1) > 0
+                    faces.append(quad if outward else quad[::-1])
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
     mesh.update()
     return mesh
+
+
+PROXY_CELLS = {"set": 32}  # floor / wall planes are large; other proxies use DEFAULT_CELLS
+DEFAULT_CELLS = 6
 
 
 LOOK_ATTR = "look"  # colour attribute with the rough appearance (passes: scene/color_passes.py)
@@ -131,7 +161,7 @@ def _build_object(project: Project, obj: SceneObject, shot: Shot, report: BuildR
         report.warnings.append(f"{obj.id}: asset import not implemented yet; using a proxy box")
     if mesh is None:
         size = obj.size or (1.0, 1.0, 1.0)
-        mesh = _proxy_mesh(obj.id, size)
+        mesh = _proxy_mesh(obj.id, size, PROXY_CELLS.get(obj.kind, DEFAULT_CELLS))
         set_look(mesh, obj.look.get("all", DEFAULT_LOOK))
     bobj = _new_object(obj.name or obj.id, mesh, obj.id)
 

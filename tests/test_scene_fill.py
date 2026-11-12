@@ -105,3 +105,23 @@ def test_novel_camera_carried_relative_to_source():
     out = carry_relative(novel, gt_src, rec_src)
     _, c, _ = camera_pose(out, 0)
     assert c == pytest.approx([10.1, 0.0, 0.2], abs=1e-6)
+
+
+def test_coverage_front_seen_back_unseen():
+    pytest.importorskip("bpy")
+    from vrecon.scene.builder import build_scene
+    from vrecon.scene.coverage import compute_coverage
+    from vrecon.schema import Camera, CameraKey, Intrinsics
+    import bpy
+
+    look_y = (0.7071068, -0.7071068, 0.0, 0.0)  # OpenCV camera looking along +y
+    cam = Camera(id="cam_001", shot_id="shot_001", intrinsics=Intrinsics(width=64, height=48, fx=60, fy=60, cx=32, cy=24),
+                 keys=[CameraKey(shot_frame=0, pose=Pose(translation=(0.0, -5.0, 0.0), rotation=look_y))])
+    p = _project([SceneObject(id="obj_box", size=(1, 1, 1))])
+    p.reconstruction.cameras = [cam]
+    build_scene(p)
+    cov = compute_coverage([0])["obj_box"]
+    me = bpy.data.objects["obj_box"].data
+    ny = np.array([pl.normal[1] for pl in me.polygons])
+    assert (cov[ny < -0.9] == 2).all()  # facing the camera
+    assert (cov[ny > 0.9] == 0).all()  # the back
