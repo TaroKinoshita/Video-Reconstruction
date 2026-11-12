@@ -248,3 +248,15 @@ MCPで使う場合：`claude mcp add vrecon -- <repo>\.venv\Scripts\python.exe -
   が同じ。平らな画素の割合、点の追跡でも分けられなかった）ので「未決定」として残す。人・文字は検出器・OCRがないので「不明」。
 - 未着手：OCR（PaddleOCRなど、ダウンロードが要る）、2Dの実映像での確認、静止カメラの2D／3D判定（LLMに画像を見せる案）、
   人（RGBMocap）。
+
+## 人：GVHMR単体をWSLに導入（2026-11-13）
+- `gpu/observe/setup_gvhmr.sh`（WSL Ubuntu、`~/vrecon/`：micromamba、環境 gvhmr＝Python 3.10・torch 2.3.0+cu121、コード GVHMR `ee960bb`）。
+  ユーザーのminicondaとは別。pytorch3dの配布元（dl.fbaipublicfiles.com）の証明書が2026-11-11で切れていたため、GitHubの v0.7.6 を
+  GPUなしでビルド（推論には足りる。確認用の描画だけ「Not compiled with GPU support」で止まる）。chumpyはビルド分離なしで先に入れる。
+- 重み：作者のGoogle Driveはダウンロード上限で自動取得できず、ユーザーがブラウザで取得して配置。gvhmr 164MB、hmr2 2.7GB、
+  vitpose 2.5GB、yolov8x 137MB、dpvo 14MB。SMPL v1.1.0（3種）・SMPL-X v1.1 npz（3種）はユーザー登録で取得（非商用）。
+  ライセンス：GVHMR 教育・研究・非営利のみ、YOLOv8 AGPL-3.0、ViTPose Apache-2.0、HMR2 MIT。
+- 動作確認：付属の tennis.mp4（812×720、約30fps、312フレーム、10.4秒）を固定カメラ（`-s`）で、全体1分26秒、RAM最大約7GB。
+  出力 `hmr4d_results.pt`：SMPL-Xのパラメータ（body_pose 21関節×3、betas 10、global_orient、transl）をフレームごとに
+  カメラ座標（incam）と重力に揃えた世界座標（global）の両方、内部パラメータ K。VRAMの最大値は未計測。
+- 次：結果をvreconの「骨格」として読み込む変換（秒単位で時刻を合わせる）、4RCのカメラ・床との位置合わせ、人の正解つき試験映像。
