@@ -7,6 +7,9 @@ All state lives in the run directory; the server keeps none.
 
 from __future__ import annotations
 
+import json
+import os
+
 from mcp.server.mcpserver import MCPServer
 
 from vrecon.run import service
@@ -70,6 +73,27 @@ def run_history(run_dir: str, last: int = 20) -> list[dict]:
 def run_rollback(run_dir: str, revision: int) -> dict:
     """Adopt an earlier snapshot again (as a new revision)."""
     return service.rollback(run_dir, revision)
+
+
+if os.environ.get("VRECON_LOOKER") == "1":  # option 2 prototype; off so condition C keeps its tool set
+    from mcp.server.mcpserver import Image
+
+    from vrecon.run import look
+
+    @server.tool()
+    def run_look(run_dir: str, frames: list[int] | None = None) -> list:
+        """Picture of the reference video (left) next to the reconstruction's boxes over the same frames (right).
+        Look at it and name what is wrong, then call run_fix with one issue."""
+        r = look.compare_sheet(run_dir, frames)
+        info = {k: r[k] for k in ("revision", "frames", "legend", "how_to_read", "issues")}
+        return [json.dumps(info), Image(path=r["path"])]
+
+    @server.tool()
+    def run_fix(run_dir: str, issue: str, target: str = "", note: str = "") -> dict:
+        """Fix one thing you saw. issue: camera | misplaced | wrong_size | wrong_facing | wrong_timing.
+        target: object id (empty for camera). note: what you saw, in your own words. The tool finds the numbers;
+        the change is adopted only if the silhouette loss improves."""
+        return look.fix(run_dir, issue, target or None, note)
 
 
 if __name__ == "__main__":
