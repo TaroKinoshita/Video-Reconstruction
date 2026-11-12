@@ -18,7 +18,7 @@ set -euo pipefail
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 
 CLIP="$(abspath "$1")"; RUN="$2"; shift 2
-MODEL="claude-opus-5-5"; MINUTES=60; TURNS=200; MCP="mcp-for-blender"
+MODEL="claude-opus-5-5"; MINUTES=60; TURNS=200; MCP="mcp-for-blender"; REFINE=0
 BLEND_AI_DIR="${BLEND_AI_DIR:-$HOME/Claude/blend-ai}"
 PORT="${BLENDER_PORT:-9876}"
 MCP_VERSION="2.2.6"          # mcp-for-blender (blender-mcp) version used for every run
@@ -32,6 +32,7 @@ while [[ $# -gt 0 ]]; do
     --minutes) MINUTES="$2"; shift ;;
     --turns) TURNS="$2"; shift ;;
     --mcp) MCP="$2"; shift ;;
+    --refine) REFINE=1 ;;  # option 4: also give the agent vrecon's refine_scene tool
     *) echo "unknown option $1"; exit 2 ;;
   esac
   shift
@@ -88,13 +89,36 @@ done
 
 fi
 
+EXTRA_TOOLS=()
+if [[ $REFINE == 1 ]]; then
+  # option 4 (docs/DIRECTION_OPTIONS.md): the repair loop as one more tool. Its masks are the clip's
+  # ground-truth stand-in masks, the same observation condition C gets; the agent sees only losses.
+  "$VENV_PY" - "$RUN/mcp.json" "$VENV_PY" "$CLIP" "$RUN/refine" "$REPO" <<'PY'
+import json, sys
+path, py, clip, out, repo = sys.argv[1:]
+cfg = json.load(open(path, encoding="utf-8"))
+cfg["mcpServers"]["vrecon"] = {"command": py, "args": ["-m", "vrecon.mcp_server"], "cwd": repo,
+    "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "VRECON_REFINE_MASKS": clip, "VRECON_REFINE_DIR": out}}
+json.dump(cfg, open(path, "w", encoding="utf-8"), indent=1)
+PY
+  cat >> "$RUN/prompt.txt" <<'EOF'
+
+Extra tool: refine_scene (vrecon). After you have saved a first full scene (camera, floor, wall and one mesh
+object per moving thing, animated), call refine_scene with the path of the saved .blend. It fine-tunes the
+camera focal length and each moving object's position, size, facing and timing against the video's
+silhouettes, and writes a refined copy. Open the refined copy, check it against the video, keep improving
+it if needed, and save your final scene to the required output path.
+EOF
+  EXTRA_TOOLS=("mcp__vrecon__refine_scene")
+fi
+
 # --- The agent ------------------------------------------------------------------------------------
 START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 set +e
 (cd "$WS" && timeout "${MINUTES}m" claude -p "$(cat "$RUN/prompt.txt")" \
   --model "$MODEL" --max-turns "$TURNS" \
   --mcp-config "$RUN/mcp.json" --strict-mcp-config \
-  --allowedTools "mcp__blender__*" "Bash" "Read" "Write" "Edit" "Glob" "Grep" \
+  --allowedTools "mcp__blender__*" "${EXTRA_TOOLS[@]}" "Bash" "Read" "Write" "Edit" "Glob" "Grep" \
   --output-format stream-json --verbose) > "$RUN/logs/agent.jsonl" 2> "$RUN/logs/agent.stderr"
 EXIT=$?
 set -e

@@ -212,3 +212,6 @@ MCPで使う場合：`claude mcp add vrecon -- <repo>\.venv\Scripts\python.exe -
 - 6本：.940/.912/.954/.712/.710/.942、平均 .862（GPT C .830）。採点し直して一致、漏れなし。詳細は `docs/DIRECTION_OPTIONS.md`。
 - H1a は今のままでは成り立たない。Bはタイミングに弱く（12〜24f）、Cは物が多い映像（syn_04/05）で勝つ。
 - 見る係の試作（案2）は .836 で効果なし。方向の決定はユーザー待ち。
+- 案4（LLMなし）：GPTのBのシーンを道具で仕上げると平均 .881（B .862、C .830）。悪化0本。タイミングは直らない（未調査）。
+  焦点と点の追跡は切ること（入れると syn_04 が崩れる）。LLMあり版は `run_baseline.sh --refine` で準備済み、未実行。
+- GPTにBのばらつき測定を依頼する文：`baselines/gpt_codex/INSTRUCTIONS_B_repeat_for_GPT.md`。

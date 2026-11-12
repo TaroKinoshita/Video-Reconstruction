@@ -96,5 +96,28 @@ if os.environ.get("VRECON_LOOKER") == "1":  # option 2 prototype; off so conditi
         return look.fix(run_dir, issue, target or None, note)
 
 
+if os.environ.get("VRECON_REFINE_MASKS"):  # option 4: B agent + the repair loop. Masks and output folder are
+    from pathlib import Path   # fixed by the launcher (env), not chosen by the agent.
+
+    @server.tool()
+    def refine_scene(blend_path: str) -> dict:
+        """Refine a saved .blend with vrecon's repair loop: camera focal length, then each moving object's position,
+        size, facing and timing, each change kept only if the silhouettes match the video better. Writes a
+        refined copy (meshes and materials kept; transforms, camera and object scale replaced) and returns
+        its path, the changes kept and the silhouette loss before/after. Save your scene first. Static
+        flat meshes are treated as floor/wall; give moving objects their own mesh objects."""
+        from vrecon.optimize import gt_stand_in_masks, load_masks
+        from vrecon.run.refine import refine_blend
+
+        masks = os.environ["VRECON_REFINE_MASKS"]
+        obs = load_masks(masks) if masks.endswith(".npz") else gt_stand_in_masks(masks)
+        _, h, w = obs.masks.shape
+        root = Path(os.environ["VRECON_REFINE_DIR"])
+        n = len(list(root.glob("refine_*"))) + 1 if root.exists() else 1
+        rec = refine_blend(blend_path, masks, root / f"refine_{n:02d}", (w, h))
+        return {k: rec[k] for k in ("refined_blend", "renamed", "objects", "accepted", "tried", "metrics_before",
+                                    "metrics_after", "changes", "export_notes", "import_warnings") if k in rec}
+
+
 if __name__ == "__main__":
     server.run()
