@@ -74,7 +74,7 @@ def box_proxy(p: np.ndarray):
 
 FITS = {"plane": plane_proxy, "board": board_proxy, "box": box_proxy}
 
-__all__ = ["FITS", "ground_box", "near_band", "board_proxy", "box_proxy", "plane_proxy"]
+__all__ = ["FITS", "ground_box", "near_band", "standing_figure", "board_proxy", "box_proxy", "plane_proxy"]
 
 
 def _ray(r, c, k, u, v):
@@ -113,3 +113,34 @@ def ground_box(mask: np.ndarray, r: np.ndarray, c: np.ndarray, k: np.ndarray, de
     centre[2] = top / 2
     yaw = float(np.arctan2(side[1], side[0]))
     return centre, yaw, (float(width), float(width * depth_ratio), float(max(top, 1e-3)))
+
+
+def standing_figure(width: float, depth: float, height: float):
+    """A blocky standing person (head, torso, arms, legs) filling a box of this size, centred at the origin
+    (z from -height/2 to height/2), facing -y. For people too small or too cut off for a pose estimate: it tells
+    a generator "a person stands here" better than a box. Returns (verts [V,3], faces [F,3])."""
+    H = height
+    sw = min(width, 0.36 * H)  # across the arms
+    d = min(depth, 0.16 * H) if depth > 0 else 0.12 * H
+    lw, aw = 0.11 * H, 0.08 * H
+    parts = [  # (x0, x1, z0, z1, share of the depth); z from the feet
+        (-sw / 2 + aw, sw / 2 - aw, 0.47 * H, 0.82 * H, 1.0),       # torso
+        (-0.065 * H, 0.065 * H, 0.84 * H, 1.0 * H, 0.9),           # head
+        (-sw / 2, -sw / 2 + aw, 0.45 * H, 0.81 * H, 0.7),           # arms
+        (sw / 2 - aw, sw / 2, 0.45 * H, 0.81 * H, 0.7),
+        (-sw / 2 + aw, -sw / 2 + aw + lw, 0.0, 0.48 * H, 0.8),      # legs
+        (sw / 2 - aw - lw, sw / 2 - aw, 0.0, 0.48 * H, 0.8),
+    ]
+    vs, fs = [], []
+    quad = [(0, 1, 2), (0, 2, 3)]
+    box_faces = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    for x0, x1, z0, z1, ds in parts:
+        y0, y1 = -d * ds / 2, d * ds / 2
+        base = len(vs)
+        for z in (z0, z1):
+            vs += [(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)]
+        for f in box_faces:
+            fs += [(base + f[a], base + f[b], base + f[c]) for a, b, c in quad]
+    v = np.array(vs, float)
+    v[:, 2] -= H / 2
+    return v, np.array(fs, int)

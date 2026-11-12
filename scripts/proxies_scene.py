@@ -37,7 +37,7 @@ def main() -> int:
 
     from vrecon.analysis.background import background_mesh
     from vrecon.analysis.from_4d import _confident, _yaw_quat, initialize, labels_at_model_pixels, load_4rc
-    from vrecon.analysis.proxies import FITS, ground_box, near_band
+    from vrecon.analysis.proxies import FITS, ground_box, near_band, standing_figure
     from vrecon.metrics.poses import camera_pose
     from vrecon.control.core import read_video_rgb
     from vrecon.schema import Evidence, Pose, SceneObject, TransformKey, load_project, save_project
@@ -151,6 +151,14 @@ def main() -> int:
         rep["people"]["ground"][v] = r
         if o is not None:
             pobjs = [x for x in pobjs if x.id != oid] + [o]
+
+    # people without a pose: a blocky standing figure in their box instead of a plain box
+    from vrecon.schema import FileRef
+
+    for o in pobjs:
+        fv, ff = standing_figure(*o.size)
+        np.savez_compressed(out / f"{o.id}.npz", verts=fv, faces=ff)
+        o.asset = FileRef(id="file_" + o.id.removeprefix("obj_"), path=f"{o.id}.npz", media_type="application/x-vrecon-mesh+npz")
 
     def target(lab):
         if lab == main_person:
