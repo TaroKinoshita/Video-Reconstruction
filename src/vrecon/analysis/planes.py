@@ -102,10 +102,46 @@ def split_planes(p: np.ndarray, tol: float, cell: float, min_points: int = 150, 
             pieces.append({"centre": centre, "rotation": matrix_to_quat(np.c_[a, b, n].tolist()),
                            "size": (ext[0], ext[1], thickness or tol), "normal": n, "points": int(len(sel)),
                            "index": sel, "tilt_deg": float(np.degrees(np.arccos(min(1.0, abs(n[2])))))})
+    pieces = _merge_coplanar(p, pieces, tol, thickness)
     taken = np.zeros(len(p), bool)
     for pc in pieces:
         taken[pc["index"]] = True
     return pieces, ~taken
+
+
+def _piece(p: np.ndarray, sel: np.ndarray, n: np.ndarray, tol: float, thickness: float | None) -> dict:
+    n, a, b = plane_axes(n)
+    q = p[sel]
+    ctr = q.mean(0)
+    la, lb = (q - ctr) @ a, (q - ctr) @ b
+    (a0, b0), (a1, b1) = np.quantile(np.c_[la, lb], [0.02, 0.98], axis=0)
+    return {"centre": ctr + a * (a0 + a1) / 2 + b * (b0 + b1) / 2, "rotation": matrix_to_quat(np.c_[a, b, n].tolist()),
+            "size": (float(a1 - a0), float(b1 - b0), thickness or tol), "normal": n, "points": int(len(sel)),
+            "index": sel, "tilt_deg": float(np.degrees(np.arccos(min(1.0, abs(n[2])))))}
+
+
+def _merge_coplanar(p: np.ndarray, pieces: list[dict], tol: float, thickness: float | None, max_deg: float = 8.0) -> list[dict]:
+    """Pieces of one wall found by different RANSAC rounds (same plane, a gap between) are merged: two coplanar
+    boxes z-fight wherever an extension makes them overlap (tennis, 2026-11-13)."""
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(pieces)):
+            for j in range(i + 1, len(pieces)):
+                ni, nj = pieces[i]["normal"], pieces[j]["normal"]
+                if abs(ni @ nj) < np.cos(np.radians(max_deg)):
+                    continue
+                if abs((pieces[j]["centre"] - pieces[i]["centre"]) @ ni) > 2 * tol:
+                    continue
+                sel = np.r_[pieces[i]["index"], pieces[j]["index"]]
+                n = ni * pieces[i]["points"] + np.sign(ni @ nj) * nj * pieces[j]["points"]
+                pieces[i] = _piece(p, sel, n / np.linalg.norm(n), tol, thickness)
+                pieces.pop(j)
+                merged = True
+                break
+            if merged:
+                break
+    return pieces
 
 
 __all__ = ["plane_axes", "split_planes"]

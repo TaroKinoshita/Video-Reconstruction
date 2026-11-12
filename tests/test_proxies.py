@@ -53,3 +53,18 @@ def test_split_planes_two_walls():
     normals = sorted(tuple(np.round(np.abs(p["normal"]), 1)) for p in pieces)
     assert normals == [(0.0, 1.0, 0.0), (1.0, 0.0, 0.0)]
     assert rest[-300:].mean() > 0.8
+
+
+def test_seated_figure_and_steps():
+    from vrecon.analysis.proxies import seated_figure, stepped_mesh
+
+    v, f = seated_figure(0.5, 0.6, 1.3)
+    assert abs(v[:, 2].min() + 0.65) < 1e-9 and abs(v[:, 2].max() - 0.65) < 1e-9 and f.max() < len(v)
+    # stands rising 35 deg, 10 wide, 8 up the slope: steps of about 0.45 m
+    t = np.radians(35)
+    a, b = np.array([1.0, 0, 0]), np.array([0, np.cos(t), np.sin(t)])
+    r = np.c_[a, b, np.cross(a, b)]
+    v, f, rows = stepped_mesh(r, (10.0, 8.0, 0.1), 0.45)
+    assert rows == round(8 * np.sin(t) / 0.45)
+    w = v @ r.T  # local -> world offsets
+    assert abs(np.ptp(w[:, 2]) - 8 * np.sin(t)) < 1e-6

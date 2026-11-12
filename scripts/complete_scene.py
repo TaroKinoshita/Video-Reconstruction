@@ -88,10 +88,21 @@ def main() -> int:
 
     grow = [o.id for o in p.reconstruction.objects if o.kind == "set" and o.asset is None and boundary(o)]
     skipped = [o.id for o in p.reconstruction.objects if o.kind == "set" and o.asset is None and o.id not in grow]
+    # what the source camera saw, as depth: extensions may not stand in front of it (run/complete.protect_depth)
+    import tempfile
+
+    from vrecon.scene.builder import build_scene
+    from vrecon.scene.passes import render_passes
+
+    build_scene(p, root=root)
+    with tempfile.TemporaryDirectory() as tmp:
+        render_passes(tmp, shot_frames=src, shaded=False)
+        dep = np.load(Path(tmp) / "depth.npz")["depth"]
+    pdepth = {f: dep[i] for i, f in enumerate(src)}
     done, ops = p, [{"op": "boundary_check", "grow": grow, "not_boundary": skipped}]
     for name, v in views.items():
         for o in [o for o in done.reconstruction.objects if o.id in grow]:
-            done, r = extend_set_to_view(done, o.id, v, frames=src, protect=cam, protect_frames=src)
+            done, r = extend_set_to_view(done, o.id, v, frames=src, protect=cam, protect_frames=src, protect_depth=pdepth)
             ops.append({"view": name, **r})
     save_project(done, out / "project.json")
 

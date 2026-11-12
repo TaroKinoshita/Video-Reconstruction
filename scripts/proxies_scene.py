@@ -31,6 +31,8 @@ def main() -> int:
         ap.add_argument(x)
     ap.add_argument("--kinds", default="obj_net=board,obj_chair=ground,obj_stands=plane")
     ap.add_argument("--check", default="0,60,120,180,240,300")
+    ap.add_argument("--person", action="append", default=[],
+                    help="LABEL=SKELETON.npz: a GVHMR skeleton for another person (e.g. obs_1=left/gvhmr_skeleton.npz)")
     a = ap.parse_args()
 
     import cv2
@@ -78,24 +80,21 @@ def main() -> int:
         per, capped = [], 0
         for i, f in enumerate(frames):
             r_, c_, k_ = camera_pose(cam0, f)
-            g = ground_box(largest_part(masks[f] == num), np.asarray(r_), np.asarray(c_), k_, depth_ratio)
+            r_, c_ = np.asarray(r_), np.asarray(c_)
+            mk = largest_part(masks[f] == num)
+            q = aligned(m.pts[i][labels[i] == num])
+            d4 = float(np.median(np.linalg.norm(q[:, :2] - c_[:2], axis=1))) if len(q) >= 20 else None
+            g = ground_box(mk, r_, c_, k_, depth_ratio)
+            # far away the ray to the feet runs almost along the floor, so a small floor error moves the foot point
+            # metres (tennis line judges landed 1-4 m behind the wall); above the horizon (spectators in the
+            # stands) it never meets the floor. Then the foot point goes at the 4RC points' distance instead.
+            if d4 is not None and (g is None or np.linalg.norm(g[0][:2] - c_[:2]) > 1.2 * d4):
+                g2 = ground_box(mk, r_, c_, k_, depth_ratio, distance=d4)
+                if g2 is not None:
+                    g, capped = g2, capped + 1
             if g is None:
                 continue
-            # far away the ray to the feet runs almost along the floor, so a small floor error moves the foot point
-            # metres (tennis line judges landed 1-4 m behind the wall). Cap the distance at the 4RC points' depth.
-            q = aligned(m.pts[i][labels[i] == num])
             ctr, yw, sz = g
-            c_ = np.asarray(c_)
-            if len(q) >= 20:
-                d4 = float(np.median(np.linalg.norm(q[:, :2] - c_[:2], axis=1)))
-                dg = float(np.linalg.norm(ctr[:2] - c_[:2]))
-                if dg > 1.2 * d4:
-                    # scale about the camera: the picture stays the same, the person stands above the floor
-                    # (spectators in the stands)
-                    k = d4 / dg
-                    ctr = c_ + (ctr - c_) * k
-                    sz = tuple(v * k for v in sz)
-                    capped += 1
             per.append((f, ctr, yw, sz))
         if len(per) < 3:
             return None, {"skipped": f"floor contact seen in {len(per)} sampled frames"}
@@ -155,7 +154,22 @@ def main() -> int:
         hits[v] = cnt
     main_person = max(hits, key=hits.get)
     rep["people"] = {"joint_hits": hits, "gvhmr_is": main_person}
-    others = {k: v for k, v in people.items() if v != main_person}
+    posed = dict(x.split("=", 1) for x in a.person)
+    others = {k: v for k, v in people.items() if v != main_person and v not in posed}
+    extra_chars = []
+    from vrecon.analysis.appearance import character_look
+    from vrecon.analysis.place_person import place_in_scene
+
+    for j, (lab, sk_path) in enumerate(posed.items(), 2):
+        oid = f"obj_person_{j:02d}"
+        shutil.copyfile(sk_path, out / f"skeleton_{lab}.npz")
+        ch, rp = place_in_scene(out / f"skeleton_{lab}.npz", f"skeleton_{lab}.npz", cam0, obj_id=oid, name=f"person {lab}")
+        sk2 = np.load(out / f"skeleton_{lab}.npz")
+        pc2, kg2 = sk2["joints_cam"], sk2["K"]
+        uv2 = np.stack([(pc2[i, :, :2] / pc2[i, :, 2:]) * [kg2[i][0, 0], kg2[i][1, 1]] + [kg2[i][0, 2], kg2[i][1, 2]] for i in range(t)])
+        ch.look = character_look(video, uv2, [str(x) for x in sk2["joint_names"]], [int(x) for x in sk2["parents"]], frames=range(0, t, 3))
+        extra_chars.append(ch)
+        rep["people"].setdefault("posed", {})[lab] = {"id": oid, "scale": rp.get("scale_units_per_metre")}
     _, pobjs, _, prep = initialize(m, masks, others, w, h, "shot_001", fps=fps, alignment=A)
     pobjs = [o for o in pobjs if o.id not in ("obj_floor", "obj_wall")]
     for o in pobjs:
@@ -172,14 +186,30 @@ def main() -> int:
     # people without a pose: a blocky standing figure in their box instead of a plain box
     from vrecon.schema import FileRef
 
+    from vrecon.analysis.proxies import seated_figure
+
+    aspect = {}
+    for k, v in others.items():  # mask height / width in pixels: about 3 standing, under 2 sitting
+        r_ = []
+        for f in range(0, t, 10):
+            ys, xs = np.nonzero(largest_part(masks[f] == k))
+            if len(xs) > 30:
+                r_.append((ys.max() - ys.min() + 1) / (xs.max() - xs.min() + 1))
+        aspect["obj_person_box_" + v.removeprefix("obs_").zfill(2)] = float(np.median(r_)) if r_ else 3.0
+    rep["people"]["mask_aspect"] = aspect
     for o in pobjs:
-        fv, ff = standing_figure(*o.size)
+        sitting = aspect.get(o.id, 3.0) < 2.0
+        fv, ff = (seated_figure if sitting else standing_figure)(*o.size)
+        if sitting:
+            o.name = (o.name or o.id) + " (sitting)"
         np.savez_compressed(out / f"{o.id}.npz", verts=fv, faces=ff)
         o.asset = FileRef(id="file_" + o.id.removeprefix("obj_"), path=f"{o.id}.npz", media_type="application/x-vrecon-mesh+npz")
 
     def target(lab):
         if lab == main_person:
             return "obj_person_01"
+        if lab in posed:
+            return next(c.id for c in extra_chars if c.name == f"person {lab}")
         if lab.startswith("obs_"):
             return "obj_person_box_" + lab.removeprefix("obs_").zfill(2)
         return lab
@@ -203,7 +233,19 @@ def main() -> int:
     bg = next(o for o in p.reconstruction.objects if o.id == "obj_background")
     bg = bg.model_copy(update={"size": tuple(float(x) for x in np.ptp(verts, 0)),
                                "evidence": [Evidence(note="4RC point maps, every masked thing's box left out")]})
-    p.reconstruction.objects = keep + objs + pobjs + [bg]
+    # appearance: median colour of each mask in the video (objects without a pose: one colour)
+    looks = {}
+    for k, lab in id_map.items():
+        tid = target(lab)
+        px = [video[f][masks[f] == k] for f in range(0, t, 6)]
+        px = np.concatenate([x for x in px if len(x)]) if any(len(x) for x in px) else None
+        if px is not None:
+            looks[tid] = tuple(float(c) / 255 for c in np.median(px, 0))
+    for o in objs + pobjs:
+        if o.id in looks:
+            o.look = {"all": looks[o.id]}
+    rep["looks"] = {k: [round(c, 3) for c in v] for k, v in looks.items()}
+    p.reconstruction.objects = keep + extra_chars + objs + pobjs + [bg]
     save_project(p, out / "project.json")
 
     # step 2: source view check

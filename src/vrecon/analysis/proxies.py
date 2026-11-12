@@ -74,7 +74,7 @@ def box_proxy(p: np.ndarray):
 
 FITS = {"plane": plane_proxy, "board": board_proxy, "box": box_proxy}
 
-__all__ = ["FITS", "ground_box", "near_band", "standing_figure", "board_proxy", "box_proxy", "plane_proxy"]
+__all__ = ["FITS", "ground_box", "near_band", "seated_figure", "standing_figure", "stepped_mesh", "board_proxy", "box_proxy", "plane_proxy"]
 
 
 def _ray(r, c, k, u, v):
@@ -82,21 +82,27 @@ def _ray(r, c, k, u, v):
     return c, d
 
 
-def ground_box(mask: np.ndarray, r: np.ndarray, c: np.ndarray, k: np.ndarray, depth_ratio: float = 1.0):
+def ground_box(mask: np.ndarray, r: np.ndarray, c: np.ndarray, k: np.ndarray, depth_ratio: float = 1.0,
+               distance: float | None = None):
     """An upright box on the floor (z = 0) from one frame's mask and camera only: the mask's lowest pixels are
     where it touches the floor, so the ray through them meets z = 0 at the foot point; height and width come from
     the mask's top and sides at that distance. Used for small or far things (people, chairs), whose 4RC points
     are few and smeared in depth. Returns (centre, yaw, size) or None (no floor contact visible: mask touches the
-    picture's bottom edge, or the ray misses the floor)."""
+    picture's bottom edge, or the ray misses the floor).
+    distance: put the foot point at this horizontal distance along the ray instead (things above the floor, e.g.
+    spectators in the stands, whose feet ray never meets z = 0); the box then stands at that height."""
     ys, xs = np.nonzero(mask)
     if len(xs) < 20 or ys.max() >= mask.shape[0] - 2:
         return None
     bottom = ys >= ys.max() - max(2, 0.03 * (ys.max() - ys.min()))
     u0, v0 = float(np.median(xs[bottom])), float(ys.max()) + 0.5
     o, d = _ray(r, c, k, u0, v0)
-    if d[2] >= -1e-9:
+    if distance is not None:
+        foot = o + d * (distance / np.linalg.norm(d[:2]))
+    elif d[2] >= -1e-9:
         return None
-    foot = o + d * (-o[2] / d[2])
+    else:
+        foot = o + d * (-o[2] / d[2])
     view = foot - o
     fwd = np.array([view[0], view[1], 0.0]) / np.linalg.norm(view[:2])
     side = np.cross(fwd, [0.0, 0.0, 1.0])
@@ -110,7 +116,8 @@ def ground_box(mask: np.ndarray, r: np.ndarray, c: np.ndarray, k: np.ndarray, de
     lo, hi = (on_plane(float(x), v0) @ side for x in np.quantile(xs, [0.02, 0.98]))
     width = abs(hi - lo)
     centre = foot + side * ((lo + hi) / 2 - foot @ side) + fwd * (width * depth_ratio / 2)
-    centre[2] = top / 2
+    centre[2] = (top + foot[2]) / 2
+    top = top - foot[2]
     yaw = float(np.arctan2(side[1], side[0]))
     return centre, yaw, (float(width), float(width * depth_ratio), float(max(top, 1e-3)))
 
@@ -144,3 +151,72 @@ def standing_figure(width: float, depth: float, height: float):
     v = np.array(vs, float)
     v[:, 2] -= H / 2
     return v, np.array(fs, int)
+
+
+def _boxes(parts, height: float):
+    """Mesh of axis-aligned boxes (x0, x1, y0, y1, z0, z1), z from the feet, shifted to centre on the origin."""
+    vs, fs = [], []
+    box_faces = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    for x0, x1, y0, y1, z0, z1 in parts:
+        base = len(vs)
+        for z in (z0, z1):
+            vs += [(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)]
+        for f in box_faces:
+            fs += [(base + f[0], base + f[1], base + f[2]), (base + f[0], base + f[2], base + f[3])]
+    v = np.array(vs, float)
+    v[:, 2] -= height / 2
+    return v, np.array(fs, int)
+
+
+def seated_figure(width: float, depth: float, height: float):
+    """A blocky seated person (thighs forward along -y, lower legs down) filling a box of this size, centred at the
+    origin. For people whose mask is not tall and thin (mask height / width under 2: ball kids, spectators)."""
+    H = height
+    sw = min(width, 0.42 * H)
+    aw, lw = 0.1 * H, 0.13 * H
+    d = max(depth, 0.45 * H)
+    tb = 0.16 * H  # torso thickness
+    y_back, y_front = d / 2, d / 2 - tb
+    knee = -d / 2
+    parts = [
+        (-sw / 2 + aw, sw / 2 - aw, y_front, y_back, 0.40 * H, 0.80 * H),        # torso
+        (-0.09 * H, 0.09 * H, y_front, y_back, 0.81 * H, 1.0 * H),             # head
+        (-sw / 2, -sw / 2 + aw, y_front, y_back, 0.42 * H, 0.78 * H),           # arms
+        (sw / 2 - aw, sw / 2, y_front, y_back, 0.42 * H, 0.78 * H),
+        (-sw / 2 + aw, -sw / 2 + aw + lw, knee, y_back, 0.30 * H, 0.42 * H),    # thighs
+        (sw / 2 - aw - lw, sw / 2 - aw, knee, y_back, 0.30 * H, 0.42 * H),
+        (-sw / 2 + aw, -sw / 2 + aw + lw, knee, knee + lw, 0.0, 0.32 * H),      # lower legs
+        (sw / 2 - aw - lw, sw / 2 - aw, knee, knee + lw, 0.0, 0.32 * H),
+    ]
+    return _boxes(parts, H)
+
+
+def stepped_mesh(rotation_matrix: np.ndarray, size, rise: float):
+    """Stands as steps: a sawtooth (vertical riser, then tread) whose average is the fitted plane, in the object's
+    local axes (a = across, b = up the slope, n = normal, as plane_proxy sets them), extruded across a.
+    rise: wanted height of one row (the count is rounded). Returns (verts, faces, rows)."""
+    r = np.asarray(rotation_matrix, float)
+    W, L = float(size[0]), float(size[1])
+    b = r[:, 1]
+    height = abs(L * b[2])
+    rows = max(3, int(round(height / rise))) if rise > 0 else 3
+    step = L / rows
+    up = np.array([0.0, 0.0, 1.0]) * step * b[2]
+    pts = []
+    for i in range(rows):
+        s0 = (-L / 2 + i * step) * b
+        pts += [s0, s0 + up]
+    pts.append((L / 2) * b)
+    loc = np.array(pts) @ r  # world offsets -> local (a, b, n)
+    loc[:, 2] -= loc[:, 2].mean()  # sawtooth centred on the plane
+    vs = []
+    for x in (-W / 2, W / 2):
+        q = loc.copy()
+        q[:, 0] = x
+        vs.append(q)
+    v = np.concatenate(vs)
+    k = len(loc)
+    f = []
+    for i in range(k - 1):
+        f += [(i, i + 1, k + i + 1), (i, k + i + 1, k + i)]
+    return v, np.array(f, int), rows

@@ -39,7 +39,8 @@ def _view_rays(cam: Camera, frame: int, samples: int = 9):
 
 def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[int] | None = None,
                        max_factor: float = 20.0, margin: float = 0.05, sideways_only: bool | None = None,
-                       protect: Camera | None = None, protect_frames: list[int] | None = None) -> tuple[Project, dict]:
+                       protect: Camera | None = None, protect_frames: list[int] | None = None,
+                       protect_depth: dict | None = None, depth_tol: float = 0.005) -> tuple[Project, dict]:
     """Grow a flat set piece in its plane so that it covers what `cam` sees of that plane (rays through a grid of
     the picture hitting the plane). The thin axis and the plane's position stay; the far side is capped at
     max_factor times the current size (a floor seen up to the horizon would grow without end).
@@ -49,8 +50,14 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     clips it lost the wall's top in views from further back).
     protect: the source camera. Growth stops where it would show in that camera's picture (protect_frames): what
     the source saw is the observed reconstruction, and an assumed extension must not cover it (the tennis stands
-    grown down to the floor hid the observed wall, 2026-11-13). Each of the four in-plane directions is cut back
-    on its own (bisection on the new strip)."""
+    grown down to the floor hid the observed wall, 2026-11-13).
+    protect_depth: {frame: view-z depth map of the scene before completion, from `protect` (0 = nothing)}. With it
+    a point only counts as covering the source view if it lies in front of what that pixel shows (by depth_tol);
+    where nothing was built (0) it covers nothing (masked things are cut out of the background, e.g. beside the
+    stands); without it, any point in the picture does. Hits that would cover are dropped,
+    each in-plane axis grows from the hits beside the piece, and then each of the four new strips is cut back
+    (bisection) until no point of it covers the source view: wall pieces grown sideways across a visible gap
+    stood in front of the stands and other walls (2026-11-13)."""
     p = project.model_copy(deep=True)
     o = next(x for x in p.reconstruction.objects if x.id == obj_id)
     thin, n, other, r = _plane_axes(o)
@@ -88,31 +95,71 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     mid[thin] = 0.0
     cut = {}
     if protect is not None:
-        # drop the view's hits that the source camera shows (outside the current piece): what the source saw is the
-        # observed reconstruction. Then grow each in-plane axis only from hits beside the current piece (within its
-        # extent on the other axis), so hits in one direction do not stretch the rectangle into a protected one.
         pf = protect_frames or sorted({k.shot_frame for k in protect.keys})
         pw, ph = protect.intrinsics.width, protect.intrinsics.height
-        vis = np.zeros(len(pts), bool)
-        for f in pf:
-            rr, cc, kk = camera_pose(protect, f)
-            q = (pts - cc) @ np.asarray(rr)
-            z = np.where(q[:, 2] > 1e-9, q[:, 2], np.nan)
-            uu, vv = kk[0, 0] * q[:, 0] / z + kk[0, 2], kk[1, 1] * q[:, 1] / z + kk[1, 2]
-            vis |= (uu >= 0) & (uu < pw) & (vv >= 0) & (vv < ph)
+        views = [(f, *camera_pose(protect, f)) for f in pf]
+
+        def covers(w_: np.ndarray) -> np.ndarray:
+            bad = np.zeros(len(w_), bool)
+            for f, rr, cc, kk in views:
+                q = (w_ - cc) @ np.asarray(rr)
+                z = np.where(q[:, 2] > 1e-9, q[:, 2], np.nan)
+                uu, vv = kk[0, 0] * q[:, 0] / z + kk[0, 2], kk[1, 1] * q[:, 1] / z + kk[1, 2]
+                inf = (uu >= 0) & (uu < pw) & (vv >= 0) & (vv < ph)
+                if protect_depth is None:
+                    bad |= inf
+                    continue
+                dm = protect_depth[f]
+                ui = np.clip(np.nan_to_num(uu * dm.shape[1] / pw).astype(int), 0, dm.shape[1] - 1)
+                vi = np.clip(np.nan_to_num(vv * dm.shape[0] / ph).astype(int), 0, dm.shape[0] - 1)
+                d = dm[vi, ui].astype(float)
+                bad |= inf & (d > 0) & (z < d * (1 - depth_tol))
+            return bad
+
         inside = np.all(np.abs(local) <= size / 2 + 1e-9, axis=1)
+        vis = covers(pts)
         free = ~vis | inside
         ax2 = [x for x in range(3) if x != thin]
-        lo, hi = -size / 2, size / 2
-        lo, hi = lo.copy(), hi.copy()
+        lo, hi = (-size / 2).copy(), (size / 2).copy()
         for A, B in (ax2, ax2[::-1]):
             sel = free & (np.abs(local[:, B]) <= size[B] / 2)
             if sel.any():
                 lo[A] = max(min(lo[A], local[sel, A].min()), -cap[A])
                 hi[A] = min(max(hi[A], local[sel, A].max()), cap[A])
-            cut["dropped_hits"] = int((vis & ~inside).sum())
+        cut["dropped_hits"] = int((vis & ~inside).sum())
         if sideways_only:
             lo[keep], hi[keep] = -size[keep] / 2, size[keep] / 2
+        g = np.linspace(0, 1, 64)
+        # pass 1: each strip beside the piece (the other axis at its old extent); pass 2: the full strips, corners
+        # included, cutting the other direction back where a corner still covers the source view
+        for band_full, (A, B) in [(False, ax2), (False, ax2[::-1]), (True, ax2), (True, ax2[::-1])]:
+            for side in (0, 1):
+                orig = (-size[A] / 2, size[A] / 2)[side]
+                far = (lo[A], hi[A])[side]
+                if abs(far - orig) < 1e-12:
+                    continue
+
+                def strip_bad(f):
+                    edge = orig + f * (far - orig)
+                    uu, vv = np.meshgrid(g, g)
+                    loc = np.zeros((uu.size, 3))
+                    loc[:, A] = orig + uu.ravel() * (edge - orig)
+                    b0, b1 = (lo[B], hi[B]) if band_full else (-size[B] / 2, size[B] / 2)
+                    loc[:, B] = b0 + vv.ravel() * (b1 - b0)
+                    return covers(centre + loc @ r.T).any()
+
+                if not strip_bad(1.0):
+                    continue
+                a_, b_ = 0.0, 1.0
+                for _ in range(12):
+                    m_ = (a_ + b_) / 2
+                    a_, b_ = (m_, b_) if not strip_bad(m_) else (a_, m_)
+                new = orig + a_ * (far - orig)
+                cut[f"axis{A}_{'lo' if side == 0 else 'hi'}_kept{'_full' if band_full else ''}"] = round(a_, 3)
+                if side == 0:
+                    lo[A] = new
+                else:
+                    hi[A] = new
         grow = (hi - lo) - size  # margin only on the grown part, so it does not creep into the source view
         span = size + grow * (1 + margin)
         span[thin] = size[thin]

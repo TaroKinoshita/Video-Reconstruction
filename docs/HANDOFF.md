@@ -414,3 +414,13 @@ MCPで使う場合：`claude mcp add vrecon -- <repo>\.venv\Scripts\python.exe -
 - `complete_scene.py`: only boundary pieces grow (no person/net/chair beyond the plane, seen from the source camera); grown middle walls cut through people.
 - Bug found on the way (`proxies_scene.ground_object`): far people placed from the floor contact landed 1-4 m behind the wall (the ray to the feet nearly grazes the floor). Now the distance is capped at the 4RC points' depth, scaling about the camera (picture unchanged; spectators stand above the floor). IoU obs_2 .42 -> .67, obs_3/4 .23/.16 -> .33/.31.
 - Result: 11 of 14 flat pieces grow; empty share in +-30 deg orbits .45 -> .005/.05 with nothing in front of the people (`runs/human/tennis/planes/overview.png`).
+
+## Scene finish + control export (2026-11-13, "1 and 2 thoroughly")
+- Left person posed: `run_gvhmr.py` on the left 224 px strip with the other people greyed (GVHMR's tracker picks the main player on the full or greyed frame; hydra rejects non-ASCII paths, so run from `/home/taro/vrecon/work`). 21-22 of 22 joints inside its mask. `proxies_scene.py --person obs_1=left/gvhmr_skeleton.npz` places it like the main player (obj_person_02). IoU .48 -> .77.
+- People without a pose: floor contact capped at the 4RC depth through `ground_box(distance=)` (also for feet above the horizon: obs_5 .17 -> .68); mask height/width < 2 -> `seated_figure` (obs_3, obs_4).
+- Looks: median mask colour per object (stands blue, net grey ...); walls from the background points.
+- `planes.split_planes` merges coplanar pieces (one wall found twice z-fought once extended): 12 -> 7 walls.
+- Completion protection is depth-aware (`extend_set_to_view(protect_depth=...)`, tol 0.5%): an extension may not stand in front of what the source camera's depth shows; growing into pixels where nothing was built is allowed. Strips cut back by bisection in two passes (beside the piece, then corners). `scripts/source_view_change.py`: source-view pixels where completion now covers something built: 0.16% (was about 4.5% before the depth test).
+- Stands as 9 steps of about 0.45 m around the fitted plane (`proxies.stepped_mesh`), at export.
+- `scripts/export_scene_controls.py`: finished scene `runs/human/tennis/final/` (project.json, scene.blend) and H3-conformed controls (24 fps, 243 frames = 17*14+5, 800x704, no H3 problems) for `source` and `orbit30` (0 -> 30 deg over the clip about the main player): depth, canny, clay, id, look; the background reference mesh is left out. Timing checked against the video (`final/controls_sheet.png`).
+- Open: control videos not yet tried in V2V; people are cylinder bodies; spectators in the stands are tiny (4RC depth scale far away).
