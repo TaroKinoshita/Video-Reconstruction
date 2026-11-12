@@ -53,7 +53,10 @@ def segment(predictor, video: str, prompt: str, frames: tuple[int, int, int], pr
     sid = predictor.handle_request({"type": "start_session", "resource_path": video, "offload_video_to_cpu": True})["session_id"]
     predictor.handle_request({"type": "add_prompt", "session_id": sid, "frame_index": prompt_frame, "text": prompt})
     found: dict[int, np.ndarray] = {}
-    for out in predictor.handle_stream_request({"type": "propagate_in_video", "session_id": sid}):
+    # evict: SAM keeps every frame's masks on the GPU unless told otherwise; we copy them out here, and keeping them
+    # filled 8 GB on a 312-frame clip and slowed it from 1.6 frames/s to one frame per 20 s (tennis, 2026-11-13)
+    req = {"type": "propagate_in_video", "session_id": sid, "evict_cached_frame_outputs": True}
+    for out in predictor.handle_stream_request(req):
         res = out["outputs"]
         for oid, mask in zip(res["out_obj_ids"], res["out_binary_masks"]):
             found.setdefault(int(oid), np.zeros(frames, bool))[out["frame_index"]] = mask

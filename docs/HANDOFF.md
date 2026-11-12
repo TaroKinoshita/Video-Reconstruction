@@ -369,3 +369,8 @@ MCPで使う場合：`claude mcp add vrecon -- <repo>\.venv\Scripts\python.exe -
   .582/.579/.448）**、cmp_03 .880×3（何も足さない、同じ）。2個で止めた理由は「床に収まる数」：LLMに渡す床は元の視野で切った開始時の
   床（x≦2.5）なので、6個目（x=3.0）が床の外になる。床を延長してから渡せば変わる見込み（未検証）。目的（忠実／作品として自然）で
   指示を切り替える意味はある。
+
+## SAM 3.1 on tennis (2026-11-13)
+- `gpu/observe/run_sam3.py`: propagate passes `evict_cached_frame_outputs=True` (cached outputs stayed on GPU and slowed every frame). 3x faster at first, but it still slows down later (~22 s/frame near the end, peak 9.9 GB VRAM).
+- Full run (person + net + chair + stadium seats, --quick): 9221 s (2.6 h). `runs/human/tennis/masks.npz` (312x720x812, labels obj_net, obj_chair, obj_stands, obs_0..5). Every label present in all frames (obs_3: 244).
+- Next: plan step 1 (masks + 4RC points -> proxies), step 2 (source-view IoU check).
