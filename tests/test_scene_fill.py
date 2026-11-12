@@ -125,3 +125,26 @@ def test_coverage_front_seen_back_unseen():
     ny = np.array([pl.normal[1] for pl in me.polygons])
     assert (cov[ny < -0.9] == 2).all()  # facing the camera
     assert (cov[ny > 0.9] == 0).all()  # the back
+
+
+def test_rule_completions():
+    from vrecon.run.complete import extend_set_to_view, mirror, repeat
+    from vrecon.schema import Camera, CameraKey, Intrinsics
+
+    floor = SceneObject(id="obj_floor", kind="set", size=(2.0, 2.0, 0.002),
+                        rest=TransformKey(time=0.0, pose=Pose(translation=(0.0, 0.0, -0.001))))
+    box = SceneObject(id="obj_box", size=(1.0, 0.5, 0.5), rest=TransformKey(time=0.0, pose=Pose(translation=(2.0, 1.0, 0.25))))
+    p = _project([floor, box])
+    # a camera 2 m up looking down 45 deg along +y sees far more floor than 2 x 2 m
+    q = (0.3826834, -0.9238795, 0.0, 0.0)  # OpenCV axes turned -135 deg about x: looking along +y and 45 deg down
+    cam = Camera(id="cam_001", shot_id="shot_001", intrinsics=Intrinsics(width=64, height=48, fx=40, fy=40, cx=32, cy=24),
+                 keys=[CameraKey(shot_frame=0, pose=Pose(translation=(0.0, -3.0, 2.0), rotation=q))])
+    p2, r = extend_set_to_view(p, "obj_floor", cam, frames=[0])
+    f2 = next(o for o in p2.reconstruction.objects if o.id == "obj_floor")
+    assert r["changed"] and f2.size[0] > 2.0 and f2.size[2] == pytest.approx(0.002) and f2.status == "assumed"
+    assert f2.rest.pose.translation[2] == pytest.approx(-0.001)  # stays in its plane
+    p3, r = mirror(p, "obj_box", point=(0, 0, 0), normal=(1, 0, 0))
+    m = next(o for o in p3.reconstruction.objects if o.id == r["new"])
+    assert m.rest.pose.translation == pytest.approx((-2.0, 1.0, 0.25)) and m.status == "assumed"
+    p4, r = repeat(p, "obj_box", offset=(0, 1.0, 0), count=2)
+    assert [o.rest.pose.translation[1] for o in p4.reconstruction.objects if o.id in r["new"]] == pytest.approx([2.0, 3.0])
