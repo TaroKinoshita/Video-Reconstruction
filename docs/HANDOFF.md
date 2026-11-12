@@ -388,3 +388,9 @@ MCPで使う場合：`claude mcp add vrecon -- <repo>\.venv\Scripts\python.exe -
 - `scripts/coverage_scene.py PROJECT OUT [--orbits 30,-30]`: coverage from the source camera, rendered from the source and from cameras orbited about the main character (vertical axis). `runs/human/tennis/proxies/coverage/` (overview.png, coverage.json).
 - Observed / oblique / unseen: main player .71/.08/.21, background .46/.25/.30, stands .40/.07/.54, net .23/.27/.50 (back side), chair .20/.10/.70, figures .06-.17 observed (only the front faces), floor 0/.23/.77.
 - Turning 30 deg: the player and nearby figures hold up; most of the picture is black (nothing built outside the source view) and the floor beyond it is red. That is what step 4 (rules) fills.
+
+## Step 4 on the tennis proxy scene (2026-11-13)
+- `scripts/complete_scene.py PROJECT OUT [--orbits 30,-30]`: floor and stands grown to fill the orbit cameras' views (`extend_set_to_view` over all sampled frames), coverage before/after. `runs/human/tennis/proxies/complete/` (project.json, completion.json, clay_overview.png: rows before/after, columns source/+30/-30).
+- Empty (black) share of the picture: .45 -> .00 (+30), .45 -> .05 (-30). The filled part is all "unseen" (red in coverage): it is assumed, not observed.
+- Fix in `run/complete.extend_set_to_view`: standing planes (normal > 45 deg from vertical) grow sideways only (`sideways_only`). Grown along the slope, the 71 deg stands plane ran below the floor and in front of the camera and filled the whole view.
+- Open: the gap between the floor and the stands (the blue wall is only in the background mesh, which is not extended); the stands are one long flat plane (no stadium curve); the net and chair are not mirrored or repeated (judgement: step 6, LLM).

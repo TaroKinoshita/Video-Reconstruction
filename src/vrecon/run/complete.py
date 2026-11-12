@@ -38,10 +38,13 @@ def _view_rays(cam: Camera, frame: int, samples: int = 9):
 
 
 def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[int] | None = None,
-                       max_factor: float = 20.0, margin: float = 0.05) -> tuple[Project, dict]:
+                       max_factor: float = 20.0, margin: float = 0.05, sideways_only: bool | None = None) -> tuple[Project, dict]:
     """Grow a flat set piece in its plane so that it covers what `cam` sees of that plane (rays through a grid of
     the picture hitting the plane). The thin axis and the plane's position stay; the far side is capped at
-    max_factor times the current size (a floor seen up to the horizon would grow without end)."""
+    max_factor times the current size (a floor seen up to the horizon would grow without end).
+    sideways_only (default: on for standing pieces, i.e. normal more than 45 deg from vertical): grow only along
+    the plane's horizontal axis. A wall or stands grown up and down its slope fills the whole view, running below
+    the floor and in front of the camera (tennis stands, 2026-11-13)."""
     p = project.model_copy(deep=True)
     o = next(x for x in p.reconstruction.objects if x.id == obj_id)
     thin, n, other, r = _plane_axes(o)
@@ -66,6 +69,11 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     cap = max_factor * size / 2
     lo, hi = np.maximum(lo, -cap), np.minimum(hi, cap)
     lo[thin], hi[thin] = -size[thin] / 2, size[thin] / 2
+    if sideways_only is None:
+        sideways_only = abs(n[2]) < np.cos(np.radians(45))
+    if sideways_only:
+        keep = max(other, key=lambda ax: abs(r[2, ax]))  # the in-plane axis closest to vertical keeps its extent
+        lo[keep], hi[keep] = -size[keep] / 2, size[keep] / 2
     span = (hi - lo) * (1 + margin)
     span[thin] = size[thin]
     mid = (hi + lo) / 2
