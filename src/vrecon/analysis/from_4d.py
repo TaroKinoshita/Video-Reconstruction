@@ -202,8 +202,10 @@ def _yaw_quat(yaw: float):
 
 def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int, height: int,
                shot_id: str, shot_start: int = 0, keep: float = 0.7, observation_id: str | None = None,
-               fps: float = 24.0):
-    """Returns (cameras, objects, scale, report). Labels: obj_floor, optional obj_wall, movers obs_*."""
+               fps: float = 24.0, alignment=None):
+    """Returns (cameras, objects, scale, report). Labels: obj_floor, optional obj_wall, movers obs_*.
+    alignment: a model-world -> aligned-world matrix to reuse (another run's report "alignment"), so objects
+    land in the same world as that run's cameras and floor."""
     labels = labels_at_model_pixels(m, masks)
     by_name = {v: k for k, v in id_map.items()}
     floor_sel = labels == by_name["obj_floor"] if "obj_floor" in by_name else np.zeros(labels.shape, bool)
@@ -218,6 +220,8 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
             raise ValueError(f"no floor: {int(floor_sel.sum())} background points at model pixels")
     floor = _confident(m, floor_sel, keep)
     A, report = floor_frame(m, floor)
+    if alignment is not None:
+        A = np.asarray(alignment, float)
     report["floor_source"] = source
     report["alignment"] = A.tolist()  # model world -> aligned world (floor z = 0), for other users of the points
     report["frames"] = [int(f) for f in m.frames]

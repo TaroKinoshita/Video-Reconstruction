@@ -374,3 +374,10 @@ MCPで使う場合：`claude mcp add vrecon -- <repo>\.venv\Scripts\python.exe -
 - `gpu/observe/run_sam3.py`: propagate passes `evict_cached_frame_outputs=True` (cached outputs stayed on GPU and slowed every frame). 3x faster at first, but it still slows down later (~22 s/frame near the end, peak 9.9 GB VRAM).
 - Full run (person + net + chair + stadium seats, --quick): 9221 s (2.6 h). `runs/human/tennis/masks.npz` (312x720x812, labels obj_net, obj_chair, obj_stands, obs_0..5). Every label present in all frames (obs_3: 244).
 - Next: plan step 1 (masks + 4RC points -> proxies), step 2 (source-view IoU check).
+
+## Plan steps 1-2 on tennis: proxies from SAM masks + 4RC (2026-11-13)
+- `analysis/proxies.py` (plane facing the camera / upright board / box, `near_band` depth filter against mask-edge bleed), `scripts/proxies_scene.py` (reuses the place_person world via `initialize(..., alignment=A)`; GVHMR person = obs_* holding most joints; other people boxes; background mesh rebuilt with mask boxes left out; source-view index check without the background).
+- Output `runs/human/tennis/proxies/` (project.json, scene.blend, check_*.png, proxies.json).
+- Source-view IoU (6 frames): net .77, stands .54, GVHMR person .65, near person .55, chair .33, far people .09-.21.
+- Learned: a free plane fit lays the stands flat (4RC gives them little depth spread) and RANSAC locks onto one step; regressing depth on (sideways, height) gives 71 deg. Without the depth band the chair box was 6 m wide.
+- Open: far people's boxes reach below their feet (floor far away is off), chair is a slab; stands could be stepped boxes.
