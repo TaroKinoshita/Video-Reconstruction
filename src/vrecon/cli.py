@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from vrecon.schema import load_project, save_project
 
@@ -22,7 +23,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
     from vrecon.scene.builder import build_scene, render_frames, save_blend
 
     project = load_project(args.project)
-    report = build_scene(project, args.shot)
+    report = build_scene(project, args.shot, root=Path(args.project).resolve().parent)
     for w in report.warnings:
         print(f"warning: {w}")
     print(f"saved {save_blend(args.blend)}")

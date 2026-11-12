@@ -112,7 +112,10 @@ def read_video_rgb(path: str | Path) -> np.ndarray:
         raise ValueError(f"not a readable video: {path}: {size.stderr.strip()[-300:]}")
     w, h = (int(x) for x in size.stdout.strip().split(",")[:2])
     proc = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v:0", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        # passthrough: one output frame per stored frame (as OpenCV and the GVHMR / SAM wrappers read them); the
+        # default would duplicate or drop frames to make a variable-frame-rate file constant-rate
+        ["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v:0", "-fps_mode", "passthrough", "-f", "rawvideo",
+         "-pix_fmt", "rgb24", "-"],
         capture_output=True,
     )
     if proc.returncode != 0:

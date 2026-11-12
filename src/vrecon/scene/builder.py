@@ -82,8 +82,14 @@ def _proxy_mesh(name: str, size: tuple[float, float, float]) -> bpy.types.Mesh:
     return mesh
 
 
-def _build_object(project: Project, obj: SceneObject, shot: Shot, report: BuildReport) -> None:
-    if obj.asset is not None:
+def _build_object(project: Project, obj: SceneObject, shot: Shot, report: BuildReport,
+                  root: Path | None = None) -> None:
+    if obj.kind == "character" and obj.asset is not None and obj.asset.path.endswith(".npz"):
+        from .character import build_character
+
+        if build_character(project, obj, shot, root, report, ID_PROP):
+            return
+    elif obj.asset is not None:
         report.warnings.append(f"{obj.id}: asset import not implemented yet; using a proxy box")
     size = obj.size or (1.0, 1.0, 1.0)
     bobj = _new_object(obj.name or obj.id, _proxy_mesh(obj.id, size), obj.id)
@@ -160,8 +166,9 @@ def _build_camera(cam: Camera, report: BuildReport) -> bpy.types.Object:
     return bcam
 
 
-def build_scene(project: Project, shot_id: str | None = None) -> BuildReport:
-    """Replace the current Blender session with a scene for one shot."""
+def build_scene(project: Project, shot_id: str | None = None, root: str | os.PathLike[str] | None = None) -> BuildReport:
+    """Replace the current Blender session with a scene for one shot. root: folder that asset paths are
+    relative to (the project file's folder); default the current directory."""
     shot = _shot(project, shot_id)
     cams = [c for c in project.reconstruction.cameras if c.shot_id == shot.id]
     if len(cams) != 1:
@@ -183,7 +190,7 @@ def build_scene(project: Project, shot_id: str | None = None) -> BuildReport:
     report = BuildReport(shot_id=shot.id, camera=cams[0].id)
     scene.camera = _build_camera(cams[0], report)
     for obj in project.reconstruction.objects:
-        _build_object(project, obj, shot, report)
+        _build_object(project, obj, shot, report, Path(root) if root is not None else None)
         report.objects.append(obj.id)
 
     # Neutral lighting so proxies read clearly; not part of the reconstruction.
