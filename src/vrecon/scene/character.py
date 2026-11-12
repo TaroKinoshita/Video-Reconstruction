@@ -74,6 +74,10 @@ def build_character(project: Project, obj: SceneObject, shot: Shot, root: Path |
     arm = bpy.data.objects.new(f"{obj.name or obj.id}_rig", arm_data)
     scene.collection.objects.link(arm)
     arm["vrecon_rig_of"] = obj.id
+    sc = float(obj.rest.scale[0])  # skeleton in metres -> scene units (rest.scale, uniform)
+    if max(obj.rest.scale) - min(obj.rest.scale) > 1e-9:
+        report.warnings.append(f"{obj.id}: non-uniform rest.scale {obj.rest.scale}; using x")
+    arm.scale = (sc, sc, sc)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode="EDIT")
     ebs = []
@@ -134,7 +138,9 @@ def build_character(project: Project, obj: SceneObject, shot: Shot, root: Path |
         for j, pb in enumerate(pbs):
             pb.rotation_quaternion = quats[j][i]
             pb.keyframe_insert("rotation_quaternion", frame=frame)
-        pbs[root_j].location = Vector(np.array(key.pose.translation) - rest[root_j])
+        # the rig object carries the body's scale (scene units per metre, uniform); the root bone's location is in
+        # the rig's unscaled space
+        pbs[root_j].location = Vector(np.array(key.pose.translation) / sc - rest[root_j])
         pbs[root_j].keyframe_insert("location", frame=frame)
     report.warnings.append(f"{obj.id}: skeleton with {len(names)} joints, {len(obj.keys)} frames (body = simple cylinders)")
     return True

@@ -73,3 +73,30 @@ def test_builder_poses_the_rig(tmp_path):
     head = np.array(arm.matrix_world @ arm.pose.bones["head"].head)
     assert pelvis == pytest.approx([0.4, 0, 1.0], abs=1e-4)
     assert head == pytest.approx([0.4, 0, 1.6], abs=1e-4)  # spine turn about z leaves the head above the pelvis
+
+
+def test_place_in_scene_recovers_scale_and_floor(tmp_path):
+    from vrecon.analysis.place_person import place_in_scene
+    from vrecon.scene.convert import matrix_to_quat
+
+    names = ["pelvis", "left_ankle", "right_ankle", "head"]
+    rest = np.array([[0, 0, 0], [-0.1, 0, -0.85], [0.1, 0, -0.85], [0, 0, 0.6]])
+    n, s_true = 4, 0.1
+    root = np.array([[0.2 * t, 0, 0.93] for t in range(n)])  # ankles at 0.08 m: standing
+    jw = np.stack([root + rest[j] for j in range(4)], 1)
+    rc = np.array([[1.0, 0, 0], [0, 0, 1.0], [0, -1.0, 0]])  # cam->world: looks along +y, image down = -z
+    c = np.array([0.0, -4.0, 1.2])
+    jc = (jw - c) @ rc  # world -> camera (rows)
+    local = np.zeros((n, 4, 4))
+    local[..., 0] = 1.0
+    k = np.array([[500.0, 0, 320], [0, 500.0, 240], [0, 0, 1]])
+    np.savez(tmp_path / "s.npz", fps=25.0, frames=n, width=640, height=480, joint_names=np.array(names),
+             parents=np.array([-1, 0, 0, 0]), rest_joints=rest, local_rot=local, root_pos=root, joints_world=jw,
+             joints_cam=jc, root_rot_cam=np.tile([1.0, 0, 0, 0], (n, 1)), K=np.tile(k, (n, 1, 1)),
+             floor_z_before=0.0, meta=json.dumps({"commit": "x", "assumptions": []}))
+    cam = Camera(id="cam_001", shot_id="shot_001", intrinsics=Intrinsics(width=640, height=480, fx=500, fy=500, cx=320, cy=240),
+                 keys=[CameraKey(shot_frame=0, pose=Pose(translation=tuple(c * s_true), rotation=matrix_to_quat(rc.tolist())))])
+    obj, rep = place_in_scene(tmp_path / "s.npz", "s.npz", cam)
+    assert rep["scale_units_per_metre"] == pytest.approx(s_true, rel=1e-6)
+    assert obj.keys[3].pose.translation == pytest.approx(tuple(root[3] * s_true), abs=1e-9)
+    assert obj.rest.scale == pytest.approx((s_true,) * 3)
