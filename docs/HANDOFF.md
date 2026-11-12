@@ -394,3 +394,8 @@ MCPで使う場合：`claude mcp add vrecon -- <repo>\.venv\Scripts\python.exe -
 - Empty (black) share of the picture: .45 -> .00 (+30), .45 -> .05 (-30). The filled part is all "unseen" (red in coverage): it is assumed, not observed.
 - Fix in `run/complete.extend_set_to_view`: standing planes (normal > 45 deg from vertical) grow sideways only (`sideways_only`). Grown along the slope, the 71 deg stands plane ran below the floor and in front of the camera and filled the whole view.
 - Open: the gap between the floor and the stands (the blue wall is only in the background mesh, which is not extended); the stands are one long flat plane (no stadium curve); the net and chair are not mirrored or repeated (judgement: step 6, LLM).
+
+## Step 5 (2026-11-13)
+- Tennis has no novel-view ground truth: the camera is fixed (2 cm, 0.7 deg over 312 frames). Scored on the synthetic clips instead, checked tennis by eye (clay from +-30 deg orbits).
+- `extend_set_to_view` changed again: standing planes may not grow below the floor (hits with z < 0 dropped); `sideways_only` is now opt-in. With sideways-only by default the synthetic walls lost their tops (covered 1.0 -> .98, wall/floor IoU -.01..-.05 on back_1p5/orbits); with the floor clip the synthetic scores equal v1 (`runs/completion_rules_v2.json`: covered .99-1.00, extra 0-.01, set IoU .53-.98) and the tennis stands no longer cover the camera.
+- Tennis by eye: floor reaches the horizon, the stands now come down to the floor (the gap is closed), but in the source view the grown stands also cover the background mesh's blue wall (an assumed part hiding an observed one: open; growth should not cover what the source saw).

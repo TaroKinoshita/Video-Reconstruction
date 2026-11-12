@@ -42,9 +42,10 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     """Grow a flat set piece in its plane so that it covers what `cam` sees of that plane (rays through a grid of
     the picture hitting the plane). The thin axis and the plane's position stay; the far side is capped at
     max_factor times the current size (a floor seen up to the horizon would grow without end).
-    sideways_only (default: on for standing pieces, i.e. normal more than 45 deg from vertical): grow only along
-    the plane's horizontal axis. A wall or stands grown up and down its slope fills the whole view, running below
-    the floor and in front of the camera (tennis stands, 2026-11-13)."""
+    Standing pieces (normal more than 45 deg from vertical) do not grow below the floor (z = 0): grown down its
+    slope, the tennis stands plane ran under the floor and in front of the camera and filled the whole view
+    (2026-11-13). sideways_only: grow only along the plane's horizontal axis (off by default: on the synthetic
+    clips it lost the wall's top in views from further back)."""
     p = project.model_copy(deep=True)
     o = next(x for x in p.reconstruction.objects if x.id == obj_id)
     thin, n, other, r = _plane_axes(o)
@@ -60,7 +61,10 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
         t = ((centre - c) @ n) / np.where(ok, den, 1.0)
         hit = c + t[:, None] * d
         pts.append(hit[ok & (t > 0)])
+    standing = abs(n[2]) < np.cos(np.radians(45))
     pts = np.concatenate(pts) if pts else np.zeros((0, 3))
+    if standing:
+        pts = pts[pts[:, 2] >= 0.0]
     if len(pts) == 0:
         return p, {"op": "extend_set_to_view", "target": obj_id, "changed": False, "why": "the view does not see the plane"}
     local = (pts - centre) @ r  # in the object's axes
@@ -69,8 +73,6 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     cap = max_factor * size / 2
     lo, hi = np.maximum(lo, -cap), np.minimum(hi, cap)
     lo[thin], hi[thin] = -size[thin] / 2, size[thin] / 2
-    if sideways_only is None:
-        sideways_only = abs(n[2]) < np.cos(np.radians(45))
     if sideways_only:
         keep = max(other, key=lambda ax: abs(r[2, ax]))  # the in-plane axis closest to vertical keeps its extent
         lo[keep], hi[keep] = -size[keep] / 2, size[keep] / 2
