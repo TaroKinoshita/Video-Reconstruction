@@ -21,3 +21,21 @@ def test_board_and_band():
     assert (kept[:, 1] < 1).all()
     _, _, size, _ = board_proxy(kept)
     assert abs(size[0] - 6) < 0.4 and size[1] < 0.1 and abs(size[2] - 1) < 0.1
+
+
+def test_ground_box_from_mask():
+    from vrecon.analysis.proxies import ground_box
+
+    # camera 1.5 up at y = -10 looking along +y (OpenCV: x right, y down, z forward)
+    r = np.array([[1.0, 0, 0], [0, 0, 1], [0, -1, 0]])
+    c, k = np.array([0.0, -10.0, 1.5]), np.array([[500.0, 0, 320], [0, 500, 240], [0, 0, 1]])
+    # a person 0.5 wide, 1.8 tall standing at (1, 0): its front face projected
+    def px(x, y, z):
+        q = r.T @ (np.array([x, y, z]) - c)
+        return 320 + 500 * q[0] / q[2], 240 + 500 * q[1] / q[2]
+    (u0, v1), (u1, v0) = px(0.75, 0, 0), px(1.25, 0, 1.8)
+    mask = np.zeros((480, 640), bool)
+    mask[int(v0):int(v1), int(u0):int(u1)] = True
+    centre, yaw, size = ground_box(mask, r, c, k, depth_ratio=0.0)
+    assert abs(centre[0] - 1) < 0.05 and abs(centre[1]) < 0.1
+    assert abs(size[0] - 0.5) < 0.05 and abs(size[2] - 1.8) < 0.08

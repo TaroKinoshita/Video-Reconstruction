@@ -29,15 +29,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     for x in ("video", "rc", "masks", "scene", "out"):
         ap.add_argument(x)
-    ap.add_argument("--kinds", default="obj_net=board,obj_chair=box,obj_stands=plane")
+    ap.add_argument("--kinds", default="obj_net=board,obj_chair=ground,obj_stands=plane")
     ap.add_argument("--check", default="0,60,120,180,240,300")
     a = ap.parse_args()
 
     import cv2
 
     from vrecon.analysis.background import background_mesh
-    from vrecon.analysis.from_4d import _confident, initialize, labels_at_model_pixels, load_4rc
-    from vrecon.analysis.proxies import FITS, near_band
+    from vrecon.analysis.from_4d import _confident, _yaw_quat, initialize, labels_at_model_pixels, load_4rc
+    from vrecon.analysis.proxies import FITS, ground_box, near_band
+    from vrecon.metrics.poses import camera_pose
     from vrecon.control.core import read_video_rgb
     from vrecon.schema import Evidence, Pose, SceneObject, TransformKey, load_project, save_project
 
@@ -64,6 +65,39 @@ def main() -> int:
         return p @ A[:3, :3].T + A[:3, 3]
 
     eye = (A @ m.c2w[0])[:3, 3]
+    fps = base.source.fps.num / base.source.fps.den
+    cam0 = base.reconstruction.cameras[0]
+
+    def largest_part(mk):
+        """One prompt can cover several things ("chair" took two chairs and a bag): keep the largest piece."""
+        n_, lab, st, _ = cv2.connectedComponentsWithStats(mk.astype(np.uint8), connectivity=8)
+        return lab == 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA])) if n_ > 1 else mk
+
+    def ground_object(oid, num, name, depth_ratio):
+        """Box from the masks' floor contact per sampled frame (proxies.ground_box); one rest pose unless it moves."""
+        per = []
+        for f in frames:
+            r_, c_, k_ = camera_pose(cam0, f)
+            g = ground_box(largest_part(masks[f] == num), np.asarray(r_), np.asarray(c_), k_, depth_ratio)
+            if g is not None:
+                per.append((f, *g))
+        if len(per) < 3:
+            return None, {"skipped": f"floor contact seen in {len(per)} sampled frames"}
+        cs = np.array([c for _, c, _, _ in per])
+        size = tuple(float(v) for v in np.median([s for *_, s in per], 0))
+        spread = float(np.linalg.norm(cs[:, :2] - np.median(cs[:, :2], 0), axis=1).max())
+        moving = spread > 0.5 * max(size[:2]) * 2
+        yaw = float(np.median([y for _, _, y, _ in per]))
+        if moving:
+            keys = [TransformKey(time=f / fps, pose=Pose(translation=(float(c[0]), float(c[1]), size[2] / 2), rotation=_yaw_quat(y)))
+                    for f, c, y, _ in per]
+            rest = keys[0]
+        else:
+            mc = np.median(cs, 0)
+            keys, rest = [], TransformKey(time=0.0, pose=Pose(translation=(float(mc[0]), float(mc[1]), size[2] / 2), rotation=_yaw_quat(yaw)))
+        o = SceneObject(id=oid, name=name, kind="rigid", size=size, status="estimated", rest=rest, keys=keys,
+                        evidence=[Evidence(note="floor contact of the SAM mask (proxies.ground_box)")])
+        return o, {"size": [round(v, 4) for v in size], "frames": len(per), "moving": bool(moving)}
     rep = {"fits": {}, "people": {}}
     objs = []
     ev = [Evidence(note="SAM 3.1 mask + 4RC points (scripts/proxies_scene.py)")]
@@ -71,6 +105,12 @@ def main() -> int:
         name, kind = spec.split("=")
         num = next((k for k, v in id_map.items() if v == name), None)
         if num is None:
+            continue
+        if kind == "ground":
+            o, r = ground_object(name, num, name, depth_ratio=1.0)
+            rep["fits"][name] = {"kind": kind, **r}
+            if o is not None:
+                objs.append(o)
             continue
         p = aligned(_confident(m, labels == num, 0.9))
         p = near_band(p[p[:, 2] > -0.01 * cam_h], eye)
@@ -99,12 +139,18 @@ def main() -> int:
     main_person = max(hits, key=hits.get)
     rep["people"] = {"joint_hits": hits, "gvhmr_is": main_person}
     others = {k: v for k, v in people.items() if v != main_person}
-    fps = base.source.fps.num / base.source.fps.den
     _, pobjs, _, prep = initialize(m, masks, others, w, h, "shot_001", fps=fps, alignment=A)
     pobjs = [o for o in pobjs if o.id not in ("obj_floor", "obj_wall")]
     for o in pobjs:
         o.id = o.id.replace("obj_", "obj_person_box_")
-    rep["people"]["boxes"] = prep["objects"]
+    rep["people"]["boxes_4rc"] = prep["objects"]
+    rep["people"]["ground"] = {}
+    for k, v in others.items():  # floor contact first; the 4RC points' box when the feet are never seen
+        oid = "obj_person_box_" + v.removeprefix("obs_").zfill(2)
+        o, r = ground_object(oid, k, v, depth_ratio=0.6)
+        rep["people"]["ground"][v] = r
+        if o is not None:
+            pobjs = [x for x in pobjs if x.id != oid] + [o]
 
     def target(lab):
         if lab == main_person:

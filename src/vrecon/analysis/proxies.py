@@ -74,4 +74,42 @@ def box_proxy(p: np.ndarray):
 
 FITS = {"plane": plane_proxy, "board": board_proxy, "box": box_proxy}
 
-__all__ = ["FITS", "near_band", "board_proxy", "box_proxy", "plane_proxy"]
+__all__ = ["FITS", "ground_box", "near_band", "board_proxy", "box_proxy", "plane_proxy"]
+
+
+def _ray(r, c, k, u, v):
+    d = r @ np.array([(u - k[0, 2]) / k[0, 0], (v - k[1, 2]) / k[1, 1], 1.0])
+    return c, d
+
+
+def ground_box(mask: np.ndarray, r: np.ndarray, c: np.ndarray, k: np.ndarray, depth_ratio: float = 1.0):
+    """An upright box on the floor (z = 0) from one frame's mask and camera only: the mask's lowest pixels are
+    where it touches the floor, so the ray through them meets z = 0 at the foot point; height and width come from
+    the mask's top and sides at that distance. Used for small or far things (people, chairs), whose 4RC points
+    are few and smeared in depth. Returns (centre, yaw, size) or None (no floor contact visible: mask touches the
+    picture's bottom edge, or the ray misses the floor)."""
+    ys, xs = np.nonzero(mask)
+    if len(xs) < 20 or ys.max() >= mask.shape[0] - 2:
+        return None
+    bottom = ys >= ys.max() - max(2, 0.03 * (ys.max() - ys.min()))
+    u0, v0 = float(np.median(xs[bottom])), float(ys.max()) + 0.5
+    o, d = _ray(r, c, k, u0, v0)
+    if d[2] >= -1e-9:
+        return None
+    foot = o + d * (-o[2] / d[2])
+    view = foot - o
+    fwd = np.array([view[0], view[1], 0.0]) / np.linalg.norm(view[:2])
+    side = np.cross(fwd, [0.0, 0.0, 1.0])
+
+    def on_plane(u, v):  # ray hit on the vertical plane through the foot, facing the camera
+        o2, d2 = _ray(r, c, k, u, v)
+        t = ((foot - o2) @ fwd) / (d2 @ fwd)
+        return o2 + t * d2
+
+    top = on_plane(u0, float(ys.min()) - 0.5)[2]
+    lo, hi = (on_plane(float(x), v0) @ side for x in np.quantile(xs, [0.02, 0.98]))
+    width = abs(hi - lo)
+    centre = foot + side * ((lo + hi) / 2 - foot @ side) + fwd * (width * depth_ratio / 2)
+    centre[2] = top / 2
+    yaw = float(np.arctan2(side[1], side[0]))
+    return centre, yaw, (float(width), float(width * depth_ratio), float(max(top, 1e-3)))
