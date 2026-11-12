@@ -39,3 +39,17 @@ def test_ground_box_from_mask():
     centre, yaw, size = ground_box(mask, r, c, k, depth_ratio=0.0)
     assert abs(centre[0] - 1) < 0.05 and abs(centre[1]) < 0.1
     assert abs(size[0] - 0.5) < 0.05 and abs(size[2] - 1.8) < 0.08
+
+
+def test_split_planes_two_walls():
+    from vrecon.analysis.planes import split_planes
+
+    rng = np.random.default_rng(2)
+    back = np.c_[rng.uniform(-3, 3, 3000), 5 + rng.normal(0, 0.02, 3000), rng.uniform(0, 2, 3000)]
+    side = np.c_[-3 + rng.normal(0, 0.02, 1500), rng.uniform(1, 5, 1500), rng.uniform(0, 2, 1500)]
+    noise = rng.uniform([-3, 0, 0], [3, 5, 2], (300, 3))
+    pieces, rest = split_planes(np.r_[back, side, noise], tol=0.08, cell=0.5)
+    assert len(pieces) == 2
+    normals = sorted(tuple(np.round(np.abs(p["normal"]), 1)) for p in pieces)
+    assert normals == [(0.0, 1.0, 0.0), (1.0, 0.0, 0.0)]
+    assert rest[-300:].mean() > 0.8

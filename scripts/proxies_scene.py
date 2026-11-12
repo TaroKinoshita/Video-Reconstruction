@@ -75,29 +75,46 @@ def main() -> int:
 
     def ground_object(oid, num, name, depth_ratio):
         """Box from the masks' floor contact per sampled frame (proxies.ground_box); one rest pose unless it moves."""
-        per = []
-        for f in frames:
+        per, capped = [], 0
+        for i, f in enumerate(frames):
             r_, c_, k_ = camera_pose(cam0, f)
             g = ground_box(largest_part(masks[f] == num), np.asarray(r_), np.asarray(c_), k_, depth_ratio)
-            if g is not None:
-                per.append((f, *g))
+            if g is None:
+                continue
+            # far away the ray to the feet runs almost along the floor, so a small floor error moves the foot point
+            # metres (tennis line judges landed 1-4 m behind the wall). Cap the distance at the 4RC points' depth.
+            q = aligned(m.pts[i][labels[i] == num])
+            ctr, yw, sz = g
+            c_ = np.asarray(c_)
+            if len(q) >= 20:
+                d4 = float(np.median(np.linalg.norm(q[:, :2] - c_[:2], axis=1)))
+                dg = float(np.linalg.norm(ctr[:2] - c_[:2]))
+                if dg > 1.2 * d4:
+                    # scale about the camera: the picture stays the same, the person stands above the floor
+                    # (spectators in the stands)
+                    k = d4 / dg
+                    ctr = c_ + (ctr - c_) * k
+                    sz = tuple(v * k for v in sz)
+                    capped += 1
+            per.append((f, ctr, yw, sz))
         if len(per) < 3:
             return None, {"skipped": f"floor contact seen in {len(per)} sampled frames"}
         cs = np.array([c for _, c, _, _ in per])
         size = tuple(float(v) for v in np.median([s for *_, s in per], 0))
+        zc = float(np.median(cs[:, 2]))
         spread = float(np.linalg.norm(cs[:, :2] - np.median(cs[:, :2], 0), axis=1).max())
         moving = spread > 0.5 * max(size[:2]) * 2
         yaw = float(np.median([y for _, _, y, _ in per]))
         if moving:
-            keys = [TransformKey(time=f / fps, pose=Pose(translation=(float(c[0]), float(c[1]), size[2] / 2), rotation=_yaw_quat(y)))
+            keys = [TransformKey(time=f / fps, pose=Pose(translation=(float(c[0]), float(c[1]), zc), rotation=_yaw_quat(y)))
                     for f, c, y, _ in per]
             rest = keys[0]
         else:
             mc = np.median(cs, 0)
-            keys, rest = [], TransformKey(time=0.0, pose=Pose(translation=(float(mc[0]), float(mc[1]), size[2] / 2), rotation=_yaw_quat(yaw)))
+            keys, rest = [], TransformKey(time=0.0, pose=Pose(translation=(float(mc[0]), float(mc[1]), zc), rotation=_yaw_quat(yaw)))
         o = SceneObject(id=oid, name=name, kind="rigid", size=size, status="estimated", rest=rest, keys=keys,
                         evidence=[Evidence(note="floor contact of the SAM mask (proxies.ground_box)")])
-        return o, {"size": [round(v, 4) for v in size], "frames": len(per), "moving": bool(moving)}
+        return o, {"size": [round(v, 4) for v in size], "frames": len(per), "moving": bool(moving), "depth_capped_frames": capped}
     rep = {"fits": {}, "people": {}}
     objs = []
     ev = [Evidence(note="SAM 3.1 mask + 4RC points (scripts/proxies_scene.py)")]

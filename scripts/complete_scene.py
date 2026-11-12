@@ -4,6 +4,7 @@ from those cameras to see what got filled.
     python scripts/complete_scene.py PROJECT.json OUT_DIR [--orbits 30,-30] [--frames 0,120,240] [--step 13]
 
 Rules applied (no judgement, no ground truth): every flat set piece without a mesh file (floor, stands, walls)
+that bounds the scene (nothing else beyond its plane, seen from the source camera)
 is grown in its plane to fill each new camera's view (extend_set_to_view, all sampled frames), but not into
 the source camera's picture (protect=source camera: the extension must not cover what was observed). The cameras are
 orbits about the main character (scripts/coverage_scene.orbit), standing for the camera move a user asks for.
@@ -43,6 +44,7 @@ def main() -> int:
     a = ap.parse_args()
     from coverage_scene import orbit
 
+    from vrecon.metrics.poses import camera_pose
     from vrecon.run.complete import extend_set_to_view
     from vrecon.scene.coverage import render_coverage
     from vrecon.schema import load_project, save_project
@@ -61,9 +63,34 @@ def main() -> int:
     frames = [int(f) for f in a.frames.split(",")]
     views = {f"orbit{int(x):+d}": orbit(cam, float(x), pivot) for x in a.orbits.split(",")}
 
-    done, ops = p, []
+    from vrecon.metrics.poses import _rot
+
+    eye = np.array(camera_pose(cam, 0)[1])
+
+    def boundary(o) -> bool:
+        """Only pieces that bound the scene grow: no thing (person, net, chair) lies beyond the piece's plane (on the side away
+        from the source camera). A side wall in the middle of the scene, grown sideways, cut through the people
+        in front of it (tennis wall pieces, 2026-11-13). The floor always grows."""
+        if o.id == "obj_floor":
+            return True
+        r = np.asarray(_rot(o.rest.pose.rotation))
+        n = r[:, int(np.argmin(o.size))]
+        c = np.array(o.rest.pose.translation)
+        if (eye - c) @ n > 0:
+            n = -n  # n points away from the camera
+        for x in p.reconstruction.objects:
+            if x.kind == "set":  # walls behind walls are fine; what must not be cut is things (people, net, chairs)
+                continue
+            t = np.array((x.keys[0] if x.keys else x.rest).pose.translation)
+            if (t - c) @ n > 0.02 * np.linalg.norm(c - eye):
+                return False
+        return True
+
+    grow = [o.id for o in p.reconstruction.objects if o.kind == "set" and o.asset is None and boundary(o)]
+    skipped = [o.id for o in p.reconstruction.objects if o.kind == "set" and o.asset is None and o.id not in grow]
+    done, ops = p, [{"op": "boundary_check", "grow": grow, "not_boundary": skipped}]
     for name, v in views.items():
-        for o in [o for o in done.reconstruction.objects if o.kind == "set" and o.asset is None]:
+        for o in [o for o in done.reconstruction.objects if o.id in grow]:
             done, r = extend_set_to_view(done, o.id, v, frames=src, protect=cam, protect_frames=src)
             ops.append({"view": name, **r})
     save_project(done, out / "project.json")
@@ -77,7 +104,7 @@ def main() -> int:
         res["views"][name] = row
     (out / "completion.json").write_text(json.dumps(res, indent=1) + "\n", encoding="utf-8")
     print(json.dumps(res["views"], indent=1))
-    print(json.dumps([{k: o[k] for k in ("view", "target", "changed") if k in o} | {"capped": o.get("capped")} for o in ops]))
+    print(json.dumps(ops[0]))
     return 0
 
 
