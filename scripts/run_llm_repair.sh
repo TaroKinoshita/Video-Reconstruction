@@ -12,7 +12,7 @@
 set -euo pipefail
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 RUN="$(abspath "$1")"; shift
-MODEL="claude-opus-5-5"; TURNS=60; MINUTES=30; CLIP=""; USE_BUDGET=0
+MODEL="claude-opus-5-5"; TURNS=60; MINUTES=30; CLIP=""; USE_BUDGET=0; LOOKER=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --model) MODEL="$2"; shift ;;
@@ -20,6 +20,7 @@ while [[ $# -gt 0 ]]; do
     --minutes) MINUTES="$2"; shift ;;
     --clip) CLIP="$(abspath "$2")"; shift ;;
     --use-budget) USE_BUDGET=1 ;;
+    --looker) LOOKER=1 ;;  # option 2 prototype: run_look (picture) + run_fix (issue words)
     *) echo "unknown option $1"; exit 2 ;;
   esac
   shift
@@ -36,10 +37,17 @@ again (earlier fits were made with other parts still wrong), and try the camera 
 else
   STOP_RULE="Stop when it is used up or when two diagnoses in a row suggest nothing that is likely to help."
 fi
+LOOK_RULE=""; EXTRA=()
+if [[ $LOOKER == 1 ]]; then
+  LOOK_RULE="You can also LOOK: run_look shows the reference video next to the reconstruction's boxes. Look before
+repairing and after each adopted change, say in one line what looks wrong, and fix it with run_fix (one issue
+word and a target). run_fix and run_optimize share the budget and the accept rule."
+  EXTRA=("mcp__vrecon__run_look" "mcp__vrecon__run_fix")
+fi
 
 cat > "$LOG/mcp.json" <<EOF
 {"mcpServers": {"vrecon": {"command": "$PY", "args": ["-m", "vrecon.mcp_server"],
-  "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}}}}
+  "env": {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "VRECON_LOOKER": "$LOOKER"}}}}
 EOF
 cat > "$LOG/prompt.txt" <<EOF
 You are repairing a 3D reconstruction of a short video. The run directory is: $RUN
@@ -50,6 +58,7 @@ run manager adopts it only if the loss improves. Read run_state and run_diagnose
 after each adopted change. The attempt budget is fixed in the run (run_state shows attempts and
 max_attempts).
 ${STOP_RULE}
+${LOOK_RULE}
 Finish with a short summary of what you changed and what still looks wrong.
 EOF
 
@@ -58,7 +67,7 @@ set +e
 (cd "$LOG" && timeout "${MINUTES}m" claude -p "$(cat "$LOG/prompt.txt")" \
   --model "$MODEL" --max-turns "$TURNS" --mcp-config "$LOG/mcp.json" --strict-mcp-config --tools "" \
   --allowedTools "mcp__vrecon__run_state" "mcp__vrecon__run_diagnose" "mcp__vrecon__run_optimize" \
-    "mcp__vrecon__run_history" "mcp__vrecon__run_rollback" \
+    "mcp__vrecon__run_history" "mcp__vrecon__run_rollback" "${EXTRA[@]}" \
   --output-format stream-json --verbose) > "$LOG/agent.jsonl" 2> "$LOG/agent.stderr"
 EXIT=$?
 set -e
