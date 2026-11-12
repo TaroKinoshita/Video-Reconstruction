@@ -1,6 +1,7 @@
 """Completion comparison (plan step 6) on evaluation/completion: none / rules / LLM, scored from the new camera.
 
     python scripts/run_completion_compare.py OUT_DIR [--llm-runs 3] [--model claude-opus-5-5] [--scenes cmp_01,...]
+        [--goal faithful|creative]
 
     none   the starting scene (what the source view shows)
     rules  floor and wall extended to the new camera's view (run/complete.extend_set_to_view)
@@ -38,7 +39,7 @@ reason: what in the picture or the numbers supports it. keep: what must not chan
 PROMPT = """You are completing a 3D scene reconstructed from one camera view. The camera saw only part of the scene.
 A new camera will show more of it. Decide whether the visible part implies objects outside the original view
 (for example a symmetric arrangement, or a regular row that continues), and propose operations to add them.
-Do not invent objects without support from what is visible: an empty or unexplained area should stay empty.
+{goal}
 
 Files in this folder:
   source.png   the original camera's picture
@@ -69,12 +70,21 @@ def scene_summary(p, new_cam) -> dict:
     return {"objects": objs, "original_camera": cam(p.reconstruction.cameras[0]), "new_camera": cam(new_cam)}
 
 
-def ask_llm(src_png: Path, summary: dict, model: str, log: Path) -> list[dict]:
+GOALS = {
+    "faithful": "Do not invent objects without support from what is visible: an empty or unexplained area should stay empty.",
+    "creative": ("The goal is a natural, complete scene for a new camera move, not a record of what was seen. Where the "
+                 "visible part sets up a pattern (symmetry, a regular row, a repeated unit), continue it the way the "
+                 "layout most plausibly goes on, up to what the new camera shows, rather than stopping at the edge of "
+                 "the original picture. Still add nothing where the visible part implies nothing."),
+}
+
+
+def ask_llm(src_png: Path, summary: dict, model: str, log: Path, goal: str = "faithful") -> list[dict]:
     with tempfile.TemporaryDirectory() as tmp:
         shutil.copyfile(src_png, Path(tmp) / "source.png")
         (Path(tmp) / "scene.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
         (Path(tmp) / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
-        prompt = PROMPT.format(ops=OPS_DOC)
+        prompt = PROMPT.format(ops=OPS_DOC, goal=GOALS[goal])
         proc = subprocess.run(["claude", "-p", prompt, "--model", model, "--max-turns", "6", "--strict-mcp-config",
                                "--mcp-config", str(Path(tmp) / "mcp.json"), "--tools", "Read", "--allowedTools", "Read",
                                "--output-format", "json"], cwd=tmp, capture_output=True, text=True, encoding="utf-8",
@@ -149,6 +159,8 @@ def main() -> int:
     ap.add_argument("--llm-runs", type=int, default=3)
     ap.add_argument("--model", default="claude-opus-5-5")
     ap.add_argument("--scenes", default="cmp_01,cmp_02,cmp_03")
+    ap.add_argument("--goal", choices=sorted(GOALS), default="faithful",
+                    help="faithful: add only what the visible part supports; creative: continue patterns to fill the new view")
     a = ap.parse_args()
     from vrecon.run.complete import extend_set_to_view
     from vrecon.schema import Camera, load_project
@@ -169,7 +181,7 @@ def main() -> int:
         for k in range(a.llm_runs):
             log = out / f"{sid}_llm{k + 1}.log"
             try:
-                ops, usage = ask_llm(d / "source.png", scene_summary(start, new_cam), a.model, log)
+                ops, usage = ask_llm(d / "source.png", scene_summary(start, new_cam), a.model, log, a.goal)
             except Exception as e:
                 res["llm"].append({"error": str(e)})
                 continue
