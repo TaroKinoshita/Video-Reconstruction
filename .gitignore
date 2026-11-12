@@ -24,3 +24,5 @@ models/
 # synthetic ground-truth clips: video, gt.json, meta.json are small and shared; passes are regenerated
 !evaluation/synthetic/*/video.mp4
 evaluation/synthetic/*/gt_passes/
+!evaluation/synthetic2d/*/video.mp4
+evaluation/synthetic2d/*/gt_passes/

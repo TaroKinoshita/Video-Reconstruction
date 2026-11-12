@@ -13,7 +13,11 @@ from .project import SCHEMA_VERSION, Project
 
 # Migrations: from_version -> function(raw dict) -> raw dict at the next version.
 # Add one entry per schema change, e.g. MIGRATIONS["0.1.0"] = _0_1_0_to_0_2_0.
-MIGRATIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {}
+def _0_1_0_to_0_2_0(raw: dict[str, Any]) -> dict[str, Any]:
+    return {**raw, "schema_version": "0.2.0"}  # reconstruction.layers added, defaults to []
+
+
+MIGRATIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {"0.1.0": _0_1_0_to_0_2_0}
 
 
 class SchemaVersionError(ValueError):

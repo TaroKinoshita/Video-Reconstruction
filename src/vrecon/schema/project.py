@@ -28,7 +28,7 @@ from .common import (
     utcnow,
 )
 
-SCHEMA_VERSION = "0.1.0"
+SCHEMA_VERSION = "0.2.0"  # 0.2.0: reconstruction.layers (2D layers)
 
 
 # --- source and shots ---------------------------------------------------------
@@ -144,6 +144,40 @@ class ShotOverride(Model):
     note: str = ""
 
 
+Easing = Literal["linear", "ease_in", "ease_out", "ease_in_out", "hold"]
+
+
+class LayerKey(Model):
+    """2D layer state at a scene_time (seconds). Screen pixels of the source frame, origin top-left, y down.
+    rotation: degrees, counter-clockwise as seen on screen. easing: how the values go to the NEXT key."""
+
+    time: float
+    x: float  # layer centre
+    y: float
+    rotation: float = 0.0
+    scale: float = 1.0
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+    easing: Easing = "linear"
+
+
+class Layer2D(Model):
+    """A flat element drawn over (or attached to) the picture: text, shape, logo, screen recording.
+    Before the first key and after the last the layer keeps that key's values."""
+
+    id: Id
+    name: str = ""
+    kind: Literal["text", "shape", "image", "unknown"] = "unknown"
+    text: str | None = None  # recognised text, if any
+    size: tuple[float, float]  # width, height in pixels at scale 1
+    z: int = 0  # drawing order, higher is in front
+    attach: Literal["screen", "object"] = "screen"  # 'object': moves with parent (a scene object)
+    parent: Id | None = None
+    sprite: FileRef | None = None  # RGBA picture of the layer at scale 1
+    keys: list[LayerKey] = Field(min_length=1)
+    status: Status = "estimated"
+    evidence: list[Evidence] = Field(default_factory=list)
+
+
 class Reconstruction(Model):
     scale: Scale = Field(default_factory=Scale)
     objects: list[SceneObject] = Field(default_factory=list)
@@ -151,6 +185,7 @@ class Reconstruction(Model):
     events: list[Event] = Field(default_factory=list)
     shot_mapping: list[ShotMapping] = Field(default_factory=list)
     overrides: list[ShotOverride] = Field(default_factory=list)
+    layers: list[Layer2D] = Field(default_factory=list)
 
 
 # --- layer 3: human edits and locks -------------------------------------------
@@ -222,6 +257,7 @@ class Project(Model):
             ("camera", rec.cameras),
             ("event", rec.events),
             ("override", rec.overrides),
+            ("layer", rec.layers),
             ("edit", self.human.edits),
             ("lock", self.human.locks),
             ("artifact", self.artifacts),

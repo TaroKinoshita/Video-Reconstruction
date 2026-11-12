@@ -1,0 +1,71 @@
+{
+ "id": "s2d_04",
+ "kind": "2d_graphics",
+ "frames": 72,
+ "fps": 24,
+ "size": [
+  640,
+  360
+ ],
+ "layers": [
+  {
+   "id": "lay_bar",
+   "kind": "shape",
+   "text": null,
+   "z": 0,
+   "segments": [
+    {
+     "start_frame": 4,
+     "end_frame": 22,
+     "easing": "ease_out"
+    },
+    {
+     "start_frame": 56,
+     "end_frame": 70,
+     "easing": "ease_in"
+    }
+   ]
+  },
+  {
+   "id": "lay_name",
+   "kind": "text",
+   "text": "Jane Doe",
+   "z": 1,
+   "segments": [
+    {
+     "start_frame": 18,
+     "end_frame": 32,
+     "easing": "ease_out"
+    },
+    {
+     "start_frame": 56,
+     "end_frame": 70,
+     "easing": "ease_in"
+    }
+   ]
+  },
+  {
+   "id": "lay_badge",
+   "kind": "shape",
+   "text": null,
+   "z": 2,
+   "segments": [
+    {
+     "start_frame": 35,
+     "end_frame": 36,
+     "easing": "hold"
+    },
+    {
+     "start_frame": 36,
+     "end_frame": 46,
+     "easing": "ease_out"
+    },
+    {
+     "start_frame": 46,
+     "end_frame": 56,
+     "easing": "ease_in"
+    }
+   ]
+  }
+ ]
+}

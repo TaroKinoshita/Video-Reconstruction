@@ -11,7 +11,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 
 Vec3 = tuple[float, float, float]
 
-ID_PREFIXES = ("obj_", "cam_", "shot_", "evt_", "obs_", "art_", "file_", "edit_", "lock_", "proj_", "ovr_")
+ID_PREFIXES = ("obj_", "cam_", "shot_", "evt_", "obs_", "art_", "file_", "edit_", "lock_", "proj_", "ovr_", "lay_")
 _ID_RE = re.compile(r"^[a-z]+_[A-Za-z0-9_\-]+$")
 
 

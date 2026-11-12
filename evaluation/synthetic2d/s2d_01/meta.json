@@ -1,0 +1,30 @@
+{
+ "id": "s2d_01",
+ "kind": "2d_graphics",
+ "frames": 72,
+ "fps": 24,
+ "size": [
+  640,
+  360
+ ],
+ "layers": [
+  {
+   "id": "lay_card",
+   "kind": "shape",
+   "text": null,
+   "z": 0,
+   "segments": [
+    {
+     "start_frame": 0,
+     "end_frame": 20,
+     "easing": "ease_out"
+    },
+    {
+     "start_frame": 40,
+     "end_frame": 64,
+     "easing": "ease_in_out"
+    }
+   ]
+  }
+ ]
+}

@@ -13,6 +13,8 @@ from .project import (
     Event,
     HumanEdit,
     HumanLayer,
+    Layer2D,
+    LayerKey,
     Lock,
     Observation,
     Project,
@@ -28,7 +30,7 @@ from .project import (
 __all__ = [
     "SCHEMA_VERSION", "MIGRATIONS", "SchemaVersionError",
     "Artifact", "Camera", "CameraKey", "Event", "Evidence", "FileRef", "HumanEdit", "HumanLayer",
-    "Intrinsics", "Lock", "Observation", "Pose", "Project", "Provenance", "Rational",
+    "Intrinsics", "Layer2D", "LayerKey", "Lock", "Observation", "Pose", "Project", "Provenance", "Rational",
     "Reconstruction", "Scale", "SceneObject", "Shot", "ShotMapping", "ShotOverride",
     "SourceVideo", "TransformKey",
     "json_schema", "load_project", "migrate", "save_project",

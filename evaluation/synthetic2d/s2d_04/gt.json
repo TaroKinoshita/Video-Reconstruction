@@ -1,0 +1,229 @@
+{
+  "schema_version": "0.2.0",
+  "id": "proj_s2d_04",
+  "revision": 0,
+  "source": {
+    "file": {
+      "id": "file_video",
+      "path": "video.mp4",
+      "sha256": null,
+      "media_type": null
+    },
+    "fps": {
+      "num": 24,
+      "den": 1
+    },
+    "frame_count": 72,
+    "width": 640,
+    "height": 360
+  },
+  "shots": [
+    {
+      "id": "shot_001",
+      "start": 0,
+      "end": 72,
+      "transition_from_previous": "first"
+    }
+  ],
+  "observations": [],
+  "reconstruction": {
+    "scale": {
+      "source": "assumed",
+      "note": ""
+    },
+    "objects": [],
+    "cameras": [],
+    "events": [],
+    "shot_mapping": [
+      {
+        "shot_id": "shot_001",
+        "scene_time_start": 0.0
+      }
+    ],
+    "overrides": [],
+    "layers": [
+      {
+        "id": "lay_bar",
+        "name": "",
+        "kind": "shape",
+        "text": null,
+        "size": [
+          400.0,
+          64.0
+        ],
+        "z": 0,
+        "attach": "screen",
+        "parent": null,
+        "sprite": {
+          "id": "file_lay_bar",
+          "path": "gt_passes/sprites/lay_bar.png",
+          "sha256": null,
+          "media_type": null
+        },
+        "keys": [
+          {
+            "time": 0.16666666666666666,
+            "x": 140.0,
+            "y": 300.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 1.0,
+            "easing": "ease_out"
+          },
+          {
+            "time": 0.9166666666666666,
+            "x": 330.0,
+            "y": 300.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 1.0,
+            "easing": "linear"
+          },
+          {
+            "time": 2.3333333333333335,
+            "x": 330.0,
+            "y": 300.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 1.0,
+            "easing": "ease_in"
+          },
+          {
+            "time": 2.9166666666666665,
+            "x": 330.0,
+            "y": 300.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 0.0,
+            "easing": "linear"
+          }
+        ],
+        "status": "human_confirmed",
+        "evidence": []
+      },
+      {
+        "id": "lay_name",
+        "name": "",
+        "kind": "text",
+        "text": "Jane Doe",
+        "size": [
+          175.0,
+          49.0
+        ],
+        "z": 1,
+        "attach": "screen",
+        "parent": null,
+        "sprite": {
+          "id": "file_lay_name",
+          "path": "gt_passes/sprites/lay_name.png",
+          "sha256": null,
+          "media_type": null
+        },
+        "keys": [
+          {
+            "time": 0.75,
+            "x": 280.0,
+            "y": 300.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 0.0,
+            "easing": "ease_out"
+          },
+          {
+            "time": 1.3333333333333333,
+            "x": 300.0,
+            "y": 300.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 1.0,
+            "easing": "linear"
+          },
+          {
+            "time": 2.3333333333333335,
+            "x": 300.0,
+            "y": 300.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 1.0,
+            "easing": "ease_in"
+          },
+          {
+            "time": 2.9166666666666665,
+            "x": 300.0,
+            "y": 300.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 0.0,
+            "easing": "linear"
+          }
+        ],
+        "status": "human_confirmed",
+        "evidence": []
+      },
+      {
+        "id": "lay_badge",
+        "name": "",
+        "kind": "shape",
+        "text": null,
+        "size": [
+          70.0,
+          70.0
+        ],
+        "z": 2,
+        "attach": "screen",
+        "parent": null,
+        "sprite": {
+          "id": "file_lay_badge",
+          "path": "gt_passes/sprites/lay_badge.png",
+          "sha256": null,
+          "media_type": null
+        },
+        "keys": [
+          {
+            "time": 1.4583333333333333,
+            "x": 500.0,
+            "y": 250.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 0.0,
+            "easing": "hold"
+          },
+          {
+            "time": 1.5,
+            "x": 500.0,
+            "y": 250.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 1.0,
+            "easing": "ease_out"
+          },
+          {
+            "time": 1.9166666666666667,
+            "x": 500.0,
+            "y": 250.0,
+            "rotation": 0.0,
+            "scale": 1.3,
+            "opacity": 1.0,
+            "easing": "ease_in"
+          },
+          {
+            "time": 2.3333333333333335,
+            "x": 500.0,
+            "y": 250.0,
+            "rotation": 0.0,
+            "scale": 1.0,
+            "opacity": 1.0,
+            "easing": "linear"
+          }
+        ],
+        "status": "human_confirmed",
+        "evidence": []
+      }
+    ]
+  },
+  "human": {
+    "edits": [],
+    "locks": []
+  },
+  "artifacts": []
+}

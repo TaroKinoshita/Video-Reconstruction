@@ -148,6 +148,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_triage(args) -> int:
+    import json
+
+    from vrecon.analysis.triage import triage
+
+    out = triage(args.video)
+    text = json.dumps(out, indent=2, default=str)
+    if args.out:
+        from pathlib import Path
+
+        Path(args.out).write_text(text + "\n", encoding="utf-8")
+    print(text)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="vrecon")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -192,6 +207,11 @@ def main(argv: list[str] | None = None) -> int:
     n.add_argument("--threshold", type=float, default=27.0, help="PySceneDetect content threshold")
     n.add_argument("--no-shots", action="store_true", help="treat the whole video as one shot")
     n.set_defaults(func=_cmd_new)
+
+    t = sub.add_parser("triage", help="cut a video into shots and say per shot which path fits (camera still/moving)")
+    t.add_argument("video")
+    t.add_argument("--out")
+    t.set_defaults(func=_cmd_triage)
 
     sc = sub.add_parser("score", help="score a reconstruction against a reference clip folder")
     sc.add_argument("reference")

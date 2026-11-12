@@ -1,0 +1,30 @@
+{
+ "id": "s2d_03",
+ "kind": "2d_graphics",
+ "frames": 72,
+ "fps": 24,
+ "size": [
+  640,
+  360
+ ],
+ "layers": [
+  {
+   "id": "lay_logo",
+   "kind": "image",
+   "text": null,
+   "z": 0,
+   "segments": [
+    {
+     "start_frame": 4,
+     "end_frame": 32,
+     "easing": "ease_in_out"
+    },
+    {
+     "start_frame": 32,
+     "end_frame": 60,
+     "easing": "ease_in"
+    }
+   ]
+  }
+ ]
+}

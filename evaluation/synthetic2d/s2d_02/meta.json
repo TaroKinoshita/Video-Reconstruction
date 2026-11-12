@@ -1,0 +1,30 @@
+{
+ "id": "s2d_02",
+ "kind": "2d_graphics",
+ "frames": 72,
+ "fps": 24,
+ "size": [
+  640,
+  360
+ ],
+ "layers": [
+  {
+   "id": "lay_title",
+   "kind": "text",
+   "text": "SALE 50%",
+   "z": 0,
+   "segments": [
+    {
+     "start_frame": 6,
+     "end_frame": 30,
+     "easing": "ease_in_out"
+    },
+    {
+     "start_frame": 50,
+     "end_frame": 66,
+     "easing": "ease_in"
+    }
+   ]
+  }
+ ]
+}
