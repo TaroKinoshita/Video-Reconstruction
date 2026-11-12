@@ -82,17 +82,58 @@ def _proxy_mesh(name: str, size: tuple[float, float, float]) -> bpy.types.Mesh:
     return mesh
 
 
+LOOK_ATTR = "look"  # colour attribute with the rough appearance (passes: scene/color_passes.py)
+DEFAULT_LOOK = (0.6, 0.6, 0.6)
+
+
+def set_look(mesh: bpy.types.Mesh, colors) -> None:
+    """Per-vertex RGB (0..1) as the mesh's 'look' colour attribute; one colour or one per vertex."""
+    import numpy as np
+
+    c = np.asarray(colors, float)
+    if c.ndim == 1:
+        c = np.tile(c, (len(mesh.vertices), 1))
+    attr = mesh.color_attributes.get(LOOK_ATTR) or mesh.color_attributes.new(LOOK_ATTR, "FLOAT_COLOR", "POINT")
+    attr.data.foreach_set("color", np.c_[c, np.ones(len(c))].ravel().tolist())
+
+
+def _mesh_asset(obj: SceneObject, root: Path | None, report: BuildReport) -> bpy.types.Mesh | None:
+    """A mesh file (.npz: verts [V,3], faces [F,3], optional colors [V,3] 0..1), e.g. analysis/background.py."""
+    import numpy as np
+
+    path = Path(obj.asset.path)
+    if not path.is_absolute():
+        path = (root or Path.cwd()) / path
+    if not path.is_file():
+        report.warnings.append(f"{obj.id}: mesh file {path} not found; using a proxy box")
+        return None
+    with np.load(path) as d:
+        verts, faces = d["verts"], d["faces"]
+        colors = d["colors"] if "colors" in d.files else None
+    mesh = bpy.data.meshes.new(obj.id)
+    mesh.from_pydata(verts.tolist(), [], faces.tolist())
+    mesh.update()
+    set_look(mesh, colors if colors is not None and "all" not in obj.look else obj.look.get("all", DEFAULT_LOOK))
+    return mesh
+
+
 def _build_object(project: Project, obj: SceneObject, shot: Shot, report: BuildReport,
                   root: Path | None = None) -> None:
+    mesh = None
     if obj.kind == "character" and obj.asset is not None and obj.asset.path.endswith(".npz"):
         from .character import build_character
 
         if build_character(project, obj, shot, root, report, ID_PROP):
             return
+    elif obj.asset is not None and obj.asset.path.endswith(".npz"):
+        mesh = _mesh_asset(obj, root, report)
     elif obj.asset is not None:
         report.warnings.append(f"{obj.id}: asset import not implemented yet; using a proxy box")
-    size = obj.size or (1.0, 1.0, 1.0)
-    bobj = _new_object(obj.name or obj.id, _proxy_mesh(obj.id, size), obj.id)
+    if mesh is None:
+        size = obj.size or (1.0, 1.0, 1.0)
+        mesh = _proxy_mesh(obj.id, size)
+        set_look(mesh, obj.look.get("all", DEFAULT_LOOK))
+    bobj = _new_object(obj.name or obj.id, mesh, obj.id)
 
     override = next(
         (o for o in project.reconstruction.overrides if o.shot_id == shot.id and o.target_id == obj.id and o.pose),
@@ -244,7 +285,7 @@ def render_frames(
         scene.cycles.samples = samples
     scene.render.resolution_percentage = resolution_percentage
     scene.render.image_settings.file_format = "PNG"
-    out = Path(out_dir)
+    out = Path(out_dir).resolve()  # Blender resolves relative output paths against the .blend, not the cwd
     out.mkdir(parents=True, exist_ok=True)
     paths = []
     for f in shot_frames:

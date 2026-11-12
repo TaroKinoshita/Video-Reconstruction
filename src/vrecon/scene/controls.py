@@ -39,12 +39,16 @@ def export_controls(
     depth_mode: Literal["clip", "frame"] = "clip",
     preview: bool = True,
     strict_h3: bool = False,
+    root: str | Path | None = None,
 ) -> dict:
-    """Write control videos and a manifest for one shot. Returns the manifest dict."""
+    """Write control videos and a manifest for one shot. Returns the manifest dict.
+
+    kinds: depth, canny, gray (geometry passes) and clay, id, look (colour passes, scene/color_passes.py; with
+    id, legend.json maps each identity colour to its object). root: folder asset paths are relative to."""
     import numpy as np
 
-    out = Path(out_dir)
-    report = build_scene(project, shot_id)
+    out = Path(out_dir).resolve()
+    report = build_scene(project, shot_id, root=root)
     scene = bpy.context.scene
     w, h = scene.render.resolution_x, scene.render.resolution_y
     n_frames = scene.frame_end - scene.frame_start + 1
@@ -73,10 +77,24 @@ def export_controls(
         path = encode_mp4(np.repeat(gray[..., None], 3, axis=-1), out / "control_gray.mp4", fps=FPS)
         files["gray"] = {"path": path.name, "sha256": _sha256(path), "params": {"source": "workbench shaded pass"}}
 
+    colour_kinds = [k for k in ("clay", "id", "look") if k in kinds]
+    if colour_kinds:
+        from .color_passes import identity_colors, render_color_pass
+
+        colors = identity_colors(project)
+        shot_frames = list(range(n_frames))
+        for kind in colour_kinds:
+            paths = render_color_pass(kind, out / "passes" / kind, shot_frames, colors)
+            path = encode_mp4(load_frames(paths), out / f"control_{kind}.mp4", fps=FPS)
+            files[kind] = {"path": path.name, "sha256": _sha256(path), "params": {"source": f"workbench {kind} pass"}}
+        if "id" in colour_kinds:
+            (out / "legend.json").write_text(json.dumps(colors, indent=2) + "\n", encoding="utf-8")
+            files["id"]["legend"] = "legend.json"
+
     previews = []
     if preview:
         # A small shaded render of the first, middle and last frame, for a quick look.
-        build_scene(project, shot_id)
+        build_scene(project, shot_id, root=root)
         picks = sorted({0, n_frames // 2, n_frames - 1})
         previews = [
             p.relative_to(out).as_posix()

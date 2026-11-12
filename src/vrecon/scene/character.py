@@ -16,6 +16,7 @@ import bpy
 import numpy as np
 from mathutils import Vector
 
+from vrecon.analysis.appearance import body_part
 from vrecon.schema import Project, SceneObject, Shot
 
 BONE_TAIL = 0.05  # m, along +Y
@@ -113,6 +114,13 @@ def build_character(project: Project, obj: SceneObject, shot: Shot, root: Path |
     mesh = bpy.data.meshes.new(obj.id)
     mesh.from_pydata(verts, [], faces)
     mesh.update()
+    from .builder import DEFAULT_LOOK, set_look
+
+    part_of = {bone: body_part(bone) for bone, _ in groups}
+    look = np.zeros((len(verts), 3))
+    for bone, idx in groups:
+        look[list(idx)] = obj.look.get(part_of[bone], obj.look.get("all", DEFAULT_LOOK))
+    set_look(mesh, look)
     body = bpy.data.objects.new(obj.name or obj.id, mesh)
     scene.collection.objects.link(body)
     body[id_prop] = obj.id

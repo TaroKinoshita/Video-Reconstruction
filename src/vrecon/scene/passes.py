@@ -125,7 +125,7 @@ def render_passes(out_dir: str | Path, shot_frames: list[int] | None = None, sha
     scene = bpy.context.scene
     if shot_frames is None:
         shot_frames = list(range(scene.frame_end - scene.frame_start + 1))
-    out = Path(out_dir)
+    out = Path(out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     id_map = _assign_pass_indices()
     w, h = scene.render.resolution_x, scene.render.resolution_y

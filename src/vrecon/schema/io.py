@@ -17,7 +17,11 @@ def _0_1_0_to_0_2_0(raw: dict[str, Any]) -> dict[str, Any]:
     return {**raw, "schema_version": "0.2.0"}  # reconstruction.layers added, defaults to []
 
 
-MIGRATIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {"0.1.0": _0_1_0_to_0_2_0}
+def _0_2_0_to_0_3_0(raw: dict[str, Any]) -> dict[str, Any]:
+    return {**raw, "schema_version": "0.3.0"}  # SceneObject.look added, defaults to {}
+
+
+MIGRATIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {"0.1.0": _0_1_0_to_0_2_0, "0.2.0": _0_2_0_to_0_3_0}
 
 
 class SchemaVersionError(ValueError):

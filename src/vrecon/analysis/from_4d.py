@@ -219,6 +219,7 @@ def initialize(m: Model4D, masks: np.ndarray, id_map: dict[int, str], width: int
     floor = _confident(m, floor_sel, keep)
     A, report = floor_frame(m, floor)
     report["floor_source"] = source
+    report["alignment"] = A.tolist()  # model world -> aligned world (floor z = 0), for other users of the points
     report["frames"] = [int(f) for f in m.frames]
 
     def aligned(p):

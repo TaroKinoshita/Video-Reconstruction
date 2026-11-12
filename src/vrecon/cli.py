@@ -3,7 +3,7 @@
     vrecon build   PROJECT [--shot S] --blend OUT.blend [--render-dir DIR --frames 0,12]
     vrecon handoff PROJECT [--shot S] --out DIR
     vrecon ingest  PROJECT --handoff DIR/handoff.json [--blend EDITED.blend] [--dry-run]
-    vrecon control PROJECT [--shot S] --out DIR [--kinds depth,canny] [--depth-mode clip|frame]
+    vrecon control PROJECT [--shot S] --out DIR [--kinds depth,canny,gray,clay,id,look] [--depth-mode clip|frame]
     vrecon new     VIDEO --out DIR [--id proj_x] [--threshold 27] [--no-shots]
     vrecon score   REFERENCE_DIR PROJECT [--shot S] [--out report.json]
     vrecon score-blend REFERENCE_DIR SCENE.blend [--out report.json]
@@ -77,7 +77,7 @@ def _cmd_control(args: argparse.Namespace) -> int:
     project = load_project(args.project)
     m = export_controls(
         project, args.out, args.shot, kinds=tuple(args.kinds.split(",")), depth_mode=args.depth_mode,
-        preview=not args.no_preview, strict_h3=args.strict,
+        preview=not args.no_preview, strict_h3=args.strict, root=Path(args.project).resolve().parent,
     )
     for p in m["h3_problems"]:
         print(f"warning (H3): {p}")

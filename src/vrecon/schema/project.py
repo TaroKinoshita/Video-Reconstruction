@@ -28,7 +28,7 @@ from .common import (
     utcnow,
 )
 
-SCHEMA_VERSION = "0.2.0"  # 0.2.0: reconstruction.layers (2D layers)
+SCHEMA_VERSION = "0.3.0"  # 0.2.0: reconstruction.layers (2D layers); 0.3.0: SceneObject.look
 
 
 # --- source and shots ---------------------------------------------------------
@@ -96,6 +96,10 @@ class SceneObject(Model):
     size: Vec3 | None = None  # proxy box size in meters
     rest: TransformKey = Field(default_factory=lambda: TransformKey(time=0.0, pose=Pose()))
     keys: list[TransformKey] = Field(default_factory=list)
+    # rough appearance for renders that stand in for the final look: part -> RGB 0..1 ("all"; a character can
+    # name body parts, analysis.appearance.BODY_PARTS). From the reference video (scene.looks / analysis), editable.
+    # Not the identity colour of ID passes, which is derived from the id and never stored.
+    look: dict[str, tuple[float, float, float]] = Field(default_factory=dict)
     status: Status = "estimated"
     evidence: list[Evidence] = Field(default_factory=list)
 
