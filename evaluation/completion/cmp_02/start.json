@@ -1,0 +1,267 @@
+{
+  "schema_version": "0.3.0",
+  "id": "proj_start_cmp_02",
+  "revision": 0,
+  "source": {
+    "file": {
+      "id": "file_video",
+      "path": "source.png",
+      "sha256": null,
+      "media_type": null
+    },
+    "fps": {
+      "num": 24,
+      "den": 1
+    },
+    "frame_count": 9,
+    "width": 640,
+    "height": 352
+  },
+  "shots": [
+    {
+      "id": "shot_001",
+      "start": 0,
+      "end": 9,
+      "transition_from_previous": "first"
+    }
+  ],
+  "observations": [],
+  "reconstruction": {
+    "scale": {
+      "source": "human",
+      "note": "synthetic ground truth, meters"
+    },
+    "objects": [
+      {
+        "id": "obj_floor",
+        "name": "",
+        "kind": "set",
+        "asset": null,
+        "size": [
+          8.0,
+          8.0,
+          0.02
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -1.5,
+              1.5,
+              -0.01
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      },
+      {
+        "id": "obj_wall",
+        "name": "",
+        "kind": "set",
+        "asset": null,
+        "size": [
+          8.0,
+          0.2,
+          3.0
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -1.5,
+              6.1,
+              1.5
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      },
+      {
+        "id": "obj_crate_1",
+        "name": "",
+        "kind": "rigid",
+        "asset": null,
+        "size": [
+          0.7056806492753195,
+          0.6786328146873896,
+          0.7325675774942777
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -2.9576023598323204,
+              2.4967138678196976,
+              0.36628378874713885
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      },
+      {
+        "id": "obj_crate_2",
+        "name": "",
+        "kind": "rigid",
+        "asset": null,
+        "size": [
+          0.7114429451171043,
+          0.6800166078816577,
+          0.6805187374668368
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -1.8211477566618743,
+              2.5192422745995318,
+              0.3402593687334184
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      },
+      {
+        "id": "obj_crate_3",
+        "name": "",
+        "kind": "rigid",
+        "asset": null,
+        "size": [
+          0.6798663737850831,
+          0.7329774165947641,
+          0.6699248839010814
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -0.6306713371268909,
+              2.458886356983492,
+              0.3349624419505407
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      }
+    ],
+    "cameras": [
+      {
+        "id": "cam_001",
+        "shot_id": "shot_001",
+        "intrinsics": {
+          "width": 640,
+          "height": 352,
+          "fx": 896.0,
+          "fy": 896.0,
+          "cx": 319.5,
+          "cy": 175.5,
+          "distortion": null
+        },
+        "keys": [
+          {
+            "shot_frame": 0,
+            "pose": {
+              "translation": [
+                -3.4,
+                -2.6,
+                1.4
+              ],
+              "rotation": [
+                0.6299522516284188,
+                -0.7693638168704384,
+                0.08202746090761513,
+                -0.06716378202487797
+              ]
+            },
+            "intrinsics": null
+          }
+        ],
+        "status": "human_confirmed",
+        "evidence": []
+      }
+    ],
+    "events": [],
+    "shot_mapping": [
+      {
+        "shot_id": "shot_001",
+        "scene_time_start": 0.0
+      }
+    ],
+    "overrides": [],
+    "layers": []
+  },
+  "human": {
+    "edits": [],
+    "locks": []
+  },
+  "artifacts": []
+}

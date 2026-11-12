@@ -1,0 +1,14 @@
+{
+ "id": "cmp_01",
+ "hidden": [
+  "obj_chair_r"
+ ],
+ "structure": "mirror of obj_chair_l across x = 0 (the table's centre)",
+ "note": "evaluation only: reconstruction and the LLM must not read meta.json or gt.json",
+ "visible_in_source": [
+  "obj_chair_l",
+  "obj_floor",
+  "obj_table",
+  "obj_wall"
+ ]
+}

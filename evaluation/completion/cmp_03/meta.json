@@ -1,0 +1,12 @@
+{
+ "id": "cmp_03",
+ "hidden": [],
+ "structure": "nothing is hidden: the right side is empty",
+ "note": "evaluation only: reconstruction and the LLM must not read meta.json or gt.json",
+ "visible_in_source": [
+  "obj_box_a",
+  "obj_box_b",
+  "obj_floor",
+  "obj_wall"
+ ]
+}

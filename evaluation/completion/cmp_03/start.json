@@ -1,0 +1,231 @@
+{
+  "schema_version": "0.3.0",
+  "id": "proj_start_cmp_03",
+  "revision": 0,
+  "source": {
+    "file": {
+      "id": "file_video",
+      "path": "source.png",
+      "sha256": null,
+      "media_type": null
+    },
+    "fps": {
+      "num": 24,
+      "den": 1
+    },
+    "frame_count": 9,
+    "width": 640,
+    "height": 352
+  },
+  "shots": [
+    {
+      "id": "shot_001",
+      "start": 0,
+      "end": 9,
+      "transition_from_previous": "first"
+    }
+  ],
+  "observations": [],
+  "reconstruction": {
+    "scale": {
+      "source": "human",
+      "note": "synthetic ground truth, meters"
+    },
+    "objects": [
+      {
+        "id": "obj_floor",
+        "name": "",
+        "kind": "set",
+        "asset": null,
+        "size": [
+          8.0,
+          8.0,
+          0.02
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -1.5,
+              1.5,
+              -0.01
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      },
+      {
+        "id": "obj_wall",
+        "name": "",
+        "kind": "set",
+        "asset": null,
+        "size": [
+          8.0,
+          0.2,
+          3.0
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -1.5,
+              6.1,
+              1.5
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      },
+      {
+        "id": "obj_box_a",
+        "name": "",
+        "kind": "rigid",
+        "asset": null,
+        "size": [
+          0.7718536965109668,
+          0.6069579172245734,
+          0.58018114934314
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -2.3787493052624793,
+              2.010783249275747,
+              0.29009057467157
+            ],
+            "rotation": [
+              0.9887710779360422,
+              0.0,
+              0.0,
+              0.14943813247359922
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      },
+      {
+        "id": "obj_box_b",
+        "name": "",
+        "kind": "rigid",
+        "asset": null,
+        "size": [
+          0.49421687360584854,
+          0.5058748816807234,
+          1.1072877680804172
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              -1.2456777746049321,
+              2.8030118260852905,
+              0.5536438840402086
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "evidence": []
+      }
+    ],
+    "cameras": [
+      {
+        "id": "cam_001",
+        "shot_id": "shot_001",
+        "intrinsics": {
+          "width": 640,
+          "height": 352,
+          "fx": 896.0,
+          "fy": 896.0,
+          "cx": 319.5,
+          "cy": 175.5,
+          "distortion": null
+        },
+        "keys": [
+          {
+            "shot_frame": 0,
+            "pose": {
+              "translation": [
+                -2.8,
+                -2.8,
+                1.5
+              ],
+              "rotation": [
+                0.6337872398810589,
+                -0.7623133304778843,
+                0.10082400058142778,
+                -0.08382506574063281
+              ]
+            },
+            "intrinsics": null
+          }
+        ],
+        "status": "human_confirmed",
+        "evidence": []
+      }
+    ],
+    "events": [],
+    "shot_mapping": [
+      {
+        "shot_id": "shot_001",
+        "scene_time_start": 0.0
+      }
+    ],
+    "overrides": [],
+    "layers": []
+  },
+  "human": {
+    "edits": [],
+    "locks": []
+  },
+  "artifacts": []
+}

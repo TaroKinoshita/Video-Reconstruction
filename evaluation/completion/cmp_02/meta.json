@@ -1,0 +1,17 @@
+{
+ "id": "cmp_02",
+ "hidden": [
+  "obj_crate_4",
+  "obj_crate_5",
+  "obj_crate_6"
+ ],
+ "structure": "row continues: x = -3.0 + 1.2 i, i = 0..5",
+ "note": "evaluation only: reconstruction and the LLM must not read meta.json or gt.json",
+ "visible_in_source": [
+  "obj_crate_1",
+  "obj_crate_2",
+  "obj_crate_3",
+  "obj_floor",
+  "obj_wall"
+ ]
+}
