@@ -35,3 +35,20 @@ def test_fit_moves_stand_onto_observation_and_clips():
     far = {"things": {"obs": {"centroid": [0, 30.0, 1.0], "z_range": [0, 2.0]}}}
     out, log = fit_layout(lay, far)
     assert np.isclose(out["parts"][0]["front"][0][1], 22.0) and log[-1]["clipped"]
+
+
+def test_corners_join_and_aisles_are_stairs():
+    from vrecon.venue.generate import join_corners, rows_along
+
+    north = {"id": "n", "front": [[-20.0, 20.0], [20.0, 20.0]], "rows": 3, "row_depth": 1.0, "rise": 0.5, "base_height": 0.0,
+             "status": "observed"}
+    west = {"id": "w", "front": [[-14.0, -20.0], [-14.0, 15.0]], "rows": 3, "row_depth": 1.0, "rise": 0.5, "base_height": 0.0,
+            "status": "hypothesis"}
+    corners = join_corners([north, west])
+    assert len(corners) == 1 and np.allclose(corners[0]["corner"], [-14.0, 20.0])
+    assert north["front"][0] == [-14.0, 20.0] and west["front"][-1] == [-14.0, 20.0]  # trimmed and extended
+    assert corners[0]["status"] == "hypothesis"
+    v, f, cols = rows_along([[-10, 20], [10, 20]], 2, 1.0, 0.5, 0.0, aisles={"every": 10.0, "width": 1.4},
+                            colour=(0.2, 0.3, 0.6))
+    grey = np.all(np.isclose(cols, [0.62, 0.62, 0.6], atol=0.01), axis=1)
+    assert grey.any()  # stair steps in the aisle

@@ -152,22 +152,37 @@ def main() -> int:
             per.append((f, ctr, yw, sz))
         if len(per) < 3:
             return None, {"skipped": f"floor contact seen in {len(per)} sampled frames"}
+        per.sort(key=lambda x: x[0])
         cs = np.array([c for _, c, _, _ in per])
         size = tuple(float(v) for v in np.median([s for *_, s in per], 0))
         zc = float(np.median(cs[:, 2]))
-        spread = float(np.linalg.norm(cs[:, :2] - np.median(cs[:, :2], 0), axis=1).max())
-        moving = spread > 0.5 * max(size[:2]) * 2
         yaw = float(np.median([y for _, _, y, _ in per]))
+        # per-frame positions are still noisy across the picture. Median filter over time (5 keys), then call it moving only if
+        # the filtered path goes further than 1.5 m and well beyond the noise; moving paths are smoothed again.
+        # the distance along each frame's ray comes from that frame's mask and swings (tennis: a still line judge
+        # "walked" 17 m along the camera's ray, 0.15 m across it). Keep each frame's direction from the camera
+        # and use the median distance: what moves across the picture still moves, the depth stays put.
+        cam_xy = np.array([np.asarray(camera_pose(cam0, f)[1])[:2] for f, *_ in per])
+        rel = cs[:, :2] - cam_xy
+        dist = np.linalg.norm(rel, axis=1)
+        xy = cam_xy + rel / dist[:, None] * np.median(dist)
+        k5 = 2
+        med = np.array([np.median(xy[max(0, i - k5): i + k5 + 1], 0) for i in range(len(xy))])
+        noise = float(np.median(np.linalg.norm(xy - med, axis=1)))
+        reach = float(np.percentile(np.linalg.norm(med - np.median(med, 0), axis=1), 90))
+        moving = reach > max(1.5 * s_units, 4 * noise)
         if moving:
-            keys = [TransformKey(time=f / fps, pose=Pose(translation=(float(c[0]), float(c[1]), zc), rotation=_yaw_quat(y)))
-                    for f, c, y, _ in per]
+            sm = np.array([med[max(0, i - k5): i + k5 + 1].mean(0) for i in range(len(med))])
+            keys = [TransformKey(time=f / fps, pose=Pose(translation=(float(c[0]), float(c[1]), zc), rotation=_yaw_quat(yaw)))
+                    for (f, *_), c in zip(per, sm)]
             rest = keys[0]
         else:
-            mc = np.median(cs, 0)
+            mc = np.median(xy, 0)
             keys, rest = [], TransformKey(time=0.0, pose=Pose(translation=(float(mc[0]), float(mc[1]), zc), rotation=_yaw_quat(yaw)))
         o = SceneObject(id=oid, name=name, kind="rigid", size=size, status="estimated", rest=rest, keys=keys,
                         evidence=[Evidence(note="floor contact of the SAM mask (proxies.ground_box)")])
-        return o, {"size": [round(v, 4) for v in size], "frames": len(per), "moving": bool(moving), "depth_capped_frames": capped}
+        return o, {"size": [round(v, 4) for v in size], "frames": len(per), "moving": bool(moving), "depth_capped_frames": capped,
+                   "noise": round(noise, 3), "reach": round(reach, 3)}
     rep = {"fits": {}, "people": {}}
     objs = []
     ev = [Evidence(note="SAM 3.1 mask + 4RC points (scripts/proxies_scene.py)")]

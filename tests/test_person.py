@@ -96,7 +96,7 @@ def test_place_in_scene_recovers_scale_and_floor(tmp_path):
              floor_z_before=0.0, meta=json.dumps({"commit": "x", "assumptions": []}))
     cam = Camera(id="cam_001", shot_id="shot_001", intrinsics=Intrinsics(width=640, height=480, fx=500, fy=500, cx=320, cy=240),
                  keys=[CameraKey(shot_frame=0, pose=Pose(translation=tuple(c * s_true), rotation=matrix_to_quat(rc.tolist())))])
-    obj, rep = place_in_scene(tmp_path / "s.npz", "s.npz", cam)
+    obj, rep = place_in_scene(tmp_path / "s.npz", "s.npz", cam, smooth_frames=0)
     assert rep["scale_units_per_metre"] == pytest.approx(s_true, rel=1e-6)
     assert obj.keys[3].pose.translation == pytest.approx(tuple(root[3] * s_true), abs=1e-9)
     assert obj.rest.scale == pytest.approx((s_true,) * 3)

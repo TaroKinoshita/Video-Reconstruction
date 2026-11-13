@@ -105,9 +105,28 @@ def main() -> int:
     zoom = bool(drift > 0.02 or scatter > 0.03)
     res["focal"] = {"zoom": zoom, "drift_share": round(float(drift), 4), "scatter_share": round(scatter, 4),
                     "median_px": round(float(np.median(fo_all)), 2)}
+    per = {f: (fits[f] if zoom else camera_fixed_centre(v["img"], v["court"], C, w, h, focal=float(np.median(fo_all))))
+           for f, v in free.items()}
+    # the per-frame rotations jitter (0.1 deg between keys against a 0.6 deg pan over the clip on tennis: the
+    # camera shook in Blender). A camera on a tripod pans smoothly: fit each rotation-vector component (relative
+    # to the middle frame) with a cubic over time and use that.
+    fr_all = np.array(sorted(per))
+    Rm = per[int(fr_all[len(fr_all) // 2])][1]
+    rv = np.array([cv2.Rodrigues(per[f][1] @ Rm.T)[0].ravel() for f in fr_all])
+    deg = min(3, len(fr_all) - 1)
+    coef = [np.polyfit(fr_all, rv[:, i], deg) for i in range(3)]
+    smooth = {}
+    for f in fr_all:
+        r_s = np.array([np.polyval(c_, f) for c_ in coef])
+        smooth[int(f)] = cv2.Rodrigues(r_s)[0] @ Rm
+    jitter = [float(np.degrees(np.linalg.norm(cv2.Rodrigues(per[f][1] @ smooth[int(f)].T)[0]))) for f in fr_all]
+    res["rotation_smoothing"] = {"model": f"cubic over time per rotation-vector component", "jitter_removed_deg_median": round(float(np.median(jitter)), 4),
+                                 "jitter_removed_deg_max": round(float(np.max(jitter)), 4)}
     for f, v in free.items():
-        K, R, t, fo, err = (fits[f] if zoom else
-                            camera_fixed_centre(v["img"], v["court"], C, w, h, focal=float(np.median(fo_all))))
+        K, R_raw, t_raw, fo, _ = per[f]
+        R = smooth[int(f)]
+        t = -R @ C
+        err = float(np.mean(np.linalg.norm(project(K, R, t, np.c_[v["court"], np.zeros(len(v["court"]))] if np.asarray(v["court"]).shape[1] == 2 else v["court"]) - v["img"], axis=1)))
         white, valid = prep(f)
         sup = line_support(hom(K, R, t), white, valid=valid)
         inside = [(s, n) for s, n in sup.values() if s is not None and n > 20]

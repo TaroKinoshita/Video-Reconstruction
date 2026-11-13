@@ -48,7 +48,7 @@ def _rays(d: dict, camera: Camera, first_shot_frame: int):
 
 def place_in_scene(path: str | Path, rel_path: str, camera: Camera, obj_id: str = "obj_person_01",
                    start_time: float = 0.0, first_shot_frame: int = 0, quantile: float = 0.25,
-                   name: str = "") -> tuple[SceneObject, dict]:
+                   name: str = "", smooth_frames: float = 1.5) -> tuple[SceneObject, dict]:
     from vrecon.analysis.from_gvhmr import load_skeleton
     from vrecon.scene.convert import matrix_to_quat, quat_to_matrix
 
@@ -77,6 +77,16 @@ def place_in_scene(path: str | Path, rel_path: str, camera: Camera, obj_id: str 
                                                                        rotation=tuple(matrix_to_quat(m.tolist()))),
                                  scale=(s, s, s)))
     joints = np.array(joints)
+    # the root's path through the camera's rays shakes (GVHMR's per-frame depth and the camera's own small
+    # jitter: up to 0.2 m between frames on tennis): a Gaussian over time (sigma 1.5 frames) on the root position
+    # only; the joint rotations stay as GVHMR gave them
+    tr = np.array([k.pose.translation for k in keys])
+    g = np.exp(-0.5 * (np.arange(-4, 5) / smooth_frames) ** 2) if smooth_frames > 0 else np.array([1.0])
+    g /= g.sum()
+    pad = np.pad(tr, ((len(g) // 2, len(g) // 2), (0, 0)), mode="edge")
+    sm = np.stack([np.convolve(pad[:, a], g, mode="valid") for a in range(3)], 1)
+    keys = [k.model_copy(update={"pose": k.pose.model_copy(update={"translation": tuple(float(x) for x in sm[i])})})
+            for i, k in enumerate(keys)]
     lowest = joints[:, feet, 2].min(1)
     lo, hi = joints.reshape(-1, 3).min(0), joints.reshape(-1, 3).max(0)
     report = {"scale_units_per_metre": s, "scale_per_frame_quantiles": np.quantile(s_frame[ok], [0.1, 0.25, 0.5, 0.75, 0.9]).tolist(),

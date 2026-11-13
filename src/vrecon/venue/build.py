@@ -57,6 +57,16 @@ def build_venue(layout: dict, base, out_dir: str | Path, replace: set[str], look
         ext = np.ptp(v, 0) if len(v) else np.zeros(3)
         return f"{oid}.npz", ext
 
+    # stands that meet at a corner: front lines extended to the crossing and a fan of rows between them
+    from .generate import _two_tone, corner_fan, join_corners
+
+    stands = [p for p in layout["parts"] if p["type"] == "stand"]
+    for c in (join_corners(stands) if layout.get("join_corners", True) else []):
+        oid = f"obj_stand_{c['id']}"
+        boxes = corner_fan(np.array(c["corner"]), np.array(c["n1"]), np.array(c["n2"]), c["rows"], c["row_depth"],
+                           c["rise"], c["base_height"])
+        path, ext = mesh(oid, _two_tone(boxes, looks.get("stands", (0.2, 0.35, 0.65))))
+        objs.append(_obj(oid, "set", ext, (0, 0, 0), c["status"], f"{c['id']}: corner fan between stands", asset=path))
     for p in layout["parts"]:
         t, st, pid = p["type"], p["status"], p["id"]
         note = f"{pid}: " + json.dumps({k: v for k, v in p.items() if k not in ("id", "type", "status")})[:300]
