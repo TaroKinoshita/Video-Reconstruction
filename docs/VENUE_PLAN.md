@@ -187,3 +187,19 @@ whole pose) of the start key; kept unless the silhouette loss rises by more than
 pose was rejected (+6% loss: the position drifts before the start, likely compensating the trucking camera);
 holding the facing passed for both objects. syn_04 from its start scene: timing error 16 -> 8.5 frames
 (obj_00 now starts at 15 from position drift; IoU .686 -> .682). Not yet rerun with the LLM on all six clips.
+
+Rerun with the LLM (runs/viewer3, same start scenes and budget; syn_03-06 rerun after a usage-limit failure):
+
+| clip | timing err +align / +hold | mask IoU +align / +hold | align / hold adopted |
+|---|---|---|---|
+| syn_01 | 1 / 1 | .810 / .816 | 1 / 2 |
+| syn_02 | 5 / 5 | .819 / .836 | 0 / 1 |
+| syn_03 | 5 / 4 | .884 / .898 | 0 / 2 |
+| syn_04 | 15 / 17 | .766 / .767 | 1 / 1 |
+| syn_05 | 13 / 6 | .778 / .765 | 0 / 1 |
+| syn_06 | 1.5 / 3.5 | .875 / .884 | 2 / 2 |
+| mean | 6.75 / 6.08 | .822 / .828 | |
+
+Looker -> viewer -> +align -> +hold: timing 7.8 -> 7.8 -> 6.75 -> 6.08 frames, IoU .836 -> .829 -> .822 -> .828.
+syn_05 13 -> 6; syn_04 stays (obj_00's position drifts before its start, the drift the silhouette keeps). One run
+per clip: single-clip differences of 1-2 frames are noise.
