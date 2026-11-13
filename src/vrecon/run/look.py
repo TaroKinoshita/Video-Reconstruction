@@ -118,6 +118,12 @@ def fix(run_dir: str, issue: str, target: str | None = None, note: str = "", max
         if not match:
             raise ValueError(f"no such hypothesis for {target} (static objects have no timing)")
         params = match[0][1]
+    if issue == "wrong_timing":  # first the machine's onsets, applied directly; the search only if that fails
+        from .service import align_timing
+
+        al = align_timing(run_dir, target, note)
+        if any(t.get("status") == "accepted" for t in al.get("tries", [])):
+            return {"aligned_from_onsets": al}
     specs = [_spec(p) for p in params]
     text = f"[looker] {issue}" + (f" {target}" if target else "") + (f": {note}" if note else "")
     return run_optimizer(run_dir, specs, text, max_evals=max_evals)

@@ -235,3 +235,61 @@ def rollback(run_dir: str, revision: int) -> dict:
 
 
 __all__ = ["auto", "auto_pairs", "diagnose", "history", "init_run", "rollback", "run_optimizer", "state", "submit"]
+
+
+def warp_times(times, scene: tuple, observed: tuple, fps: float) -> list[float]:
+    """Key times (s) re-timed so the scene's start/stop frames land on the observed ones: piecewise linear
+    between start and stop, a plain shift before the start and after the stop. A missing stop (None) is a shift
+    by the start offset."""
+    ss, se = scene
+    os_, oe = observed
+    if se is None or oe is None or se <= ss or oe <= os_:
+        return [t + (os_ - ss) / fps for t in times]
+    out = []
+    for t in times:
+        f = t * fps
+        if f <= ss:
+            g = f + (os_ - ss)
+        elif f >= se:
+            g = f + (oe - se)
+        else:
+            g = os_ + (f - ss) * (oe - os_) / (se - ss)
+        out.append(g / fps)
+    return out
+
+
+def align_timing(run_dir: str, obj: str, note: str = "") -> dict:
+    """Re-time an object's keys so its motion starts and stops where the video's does (run_view_track's onsets),
+    proposed as one change; adopted only if the loss improves. Tries start+stop warp, then a start-only shift."""
+    from . import view
+
+    tr = view.track(run_dir, obj)
+    rec = tr["scene_object"]
+    so, se, rs, re_ = tr["observed_starts"], tr["observed_stops"], tr["scene_starts"], tr["scene_stops"]
+    if rec is None or so is None or rs is None:
+        return {"status": "skipped", "reason": "no start found in the video or the scene", "track": {
+            k: tr[k] for k in ("observed_starts", "observed_stops", "scene_starts", "scene_stops")}}
+    mgr, _, _ = _manager(Path(run_dir))
+    o = next(x for x in mgr.adopted.reconstruction.objects if x.id == rec)
+    if not o.keys:
+        return {"status": "skipped", "reason": f"{rec} has no keys"}
+    fps = mgr.adopted.source.fps.num / mgr.adopted.source.fps.den
+    times = [k.time for k in o.keys]
+    tries = [("start+stop", warp_times(times, (rs, re_), (so, se), fps)),
+             ("start only", warp_times(times, (rs, None), (so, None), fps))]
+    results = []
+    for name, new in tries:
+        if all(abs(a - b) < 0.5 / fps for a, b in zip(new, times)):
+            results.append({"variant": name, "status": "no change"})
+            continue
+        keys = [k.model_copy(update={"time": float(t)}).model_dump(mode="json") for k, t in zip(o.keys, new)]
+        prop = Proposal(id=f"align_{mgr.attempts + 1:03d}", source="optimizer", changes=[{
+            "target_id": rec, "field": "keys", "value": keys}],
+            hypothesis=f"timing of {rec} from the video onsets ({name}): scene {rs}-{re_} -> observed {so}-{se}"
+                       + (f"; {note}" if note else ""))
+        out = mgr.try_proposal(prop)
+        results.append({"variant": name, "status": out.status, "reasons": out.reasons})
+        if out.status == "accepted":
+            break
+        mgr, _, _ = _manager(Path(run_dir))
+    return {"object": rec, "scene": [rs, re_], "observed": [so, se], "tries": results}

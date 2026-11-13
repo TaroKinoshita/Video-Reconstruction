@@ -159,3 +159,21 @@ The agent used every view tool (overview and events once per clip, track 2-7 tim
 did not move: differences are within run-to-run noise. Reading: the bottleneck is not seeing the timing but
 turning it into a fix (run_fix/run_optimize change keys but the 15-frame error on syn_04 stays). Next: let the
 events tool's onsets be applied directly as key timing proposals instead of leaving the translation to the LLM.
+
+### Onsets applied directly (run_align_timing; run_fix wrong_timing tries it first)
+Same six start scenes, same budget, `--viewer` plus the new tool (runs/viewer2).
+
+| clip | timing err (frames) looker / viewer / +align | mask IoU looker / viewer / +align | align adopted |
+|---|---|---|---|
+| syn_01 | 6 / 7 / 1 | .824 / .826 / .810 | 1 |
+| syn_02 | 5 / 5 / 5 | .854 / .838 / .819 | 0 |
+| syn_03 | 5 / 5 / 5 | .901 / .884 / .884 | 0 |
+| syn_04 | 15 / 15 / 15 | .757 / .763 / .766 | 0 |
+| syn_05 | 14 / 13 / 13 | .779 / .771 / .778 | 2 |
+| syn_06 | 2 / 2 / 1.5 | .900 / .891 / .875 | 1 |
+| mean | 7.8 / 7.8 / 6.75 | .836 / .829 / .822 | |
+
+Timing improves where an alignment is adopted (syn_01 7 -> 1); syn_04/05 keep their error: on syn_04 every
+alignment was rejected by the silhouette accept rule and on syn_05 the adopted ones did not touch the scored
+event. IoU drifts down slightly (within run noise, one run per clip). Next: see what syn_04's 15 frames are (an
+event the onsets do not capture, or an accept rule that trades timing for silhouette).

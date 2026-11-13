@@ -27,3 +27,12 @@ def test_events_find_start_stop_and_skip_set_pieces():
     kinds = {(e["object"], e["kind"]) for e in ev}
     assert ("obs_0", "starts moving") in kinds and ("obs_0", "stops") in kinds
     assert not any(e["object"] == "obj_floor" for e in ev)
+
+
+def test_warp_times_maps_onsets():
+    from vrecon.run.service import warp_times
+
+    t = [0.0, 1.0, 2.0, 3.0]  # frames 0, 24, 48, 72 at 24 fps
+    out = warp_times(t, (24, 48), (30, 66), 24.0)
+    assert [round(x * 24) for x in out] == [6, 30, 66, 90]
+    assert [round(x * 24) for x in warp_times(t, (24, None), (30, None), 24.0)] == [6, 30, 54, 78]

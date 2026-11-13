@@ -52,8 +52,9 @@ object's speed), then run_view_events (machine-found starts, stops, turns, occlu
 through the frames that matter with run_view_clip (its own frame rate; give an object label as region to zoom in)
 and run_view_compare (video and reconstruction on the same frames). Before fixing timing or a path, check the
 numbers with run_view_track (observed and reconstructed start and stop frames, offsets). Say what you saw with
-frame numbers."
-  EXTRA+=("mcp__vrecon__run_view_overview" "mcp__vrecon__run_view_events" "mcp__vrecon__run_view_clip"
+frame numbers. When the starts or stops differ, run_align_timing re-times the object to the video's onsets directly
+(run_fix wrong_timing also tries this first)."
+  EXTRA+=("mcp__vrecon__run_align_timing" "mcp__vrecon__run_view_overview" "mcp__vrecon__run_view_events" "mcp__vrecon__run_view_clip"
           "mcp__vrecon__run_view_compare" "mcp__vrecon__run_view_track")
 fi
 

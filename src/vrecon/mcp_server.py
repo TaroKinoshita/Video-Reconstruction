@@ -124,6 +124,14 @@ if os.environ.get("VRECON_LOOKER") == "1":  # option 2 prototype; off so conditi
         return view.track(run_dir, obj, start, None if end < 0 else end)
 
     @server.tool()
+    def run_align_timing(run_dir: str, obj: str, note: str = "") -> dict:
+        """Re-time an object so it starts and stops moving where the video does (onsets from run_view_track),
+        applied directly as one proposal; kept only if the loss improves."""
+        from vrecon.run.service import align_timing
+
+        return align_timing(run_dir, obj, note)
+
+    @server.tool()
     def run_fix(run_dir: str, issue: str, target: str = "", note: str = "") -> dict:
         """Fix one thing you saw. issue: camera | misplaced | wrong_size | wrong_facing | wrong_timing.
         target: object id (empty for camera). note: what you saw, in your own words. The tool finds the numbers;
