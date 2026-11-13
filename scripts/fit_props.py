@@ -35,7 +35,8 @@ from vrecon.analysis.prop_table import load_table, lookup
 from vrecon.control.core import read_video_rgb
 from vrecon.metrics.poses import camera_pose
 from vrecon.scene.convert import matrix_to_quat
-from vrecon.schema import Evidence, Pose, SceneObject, TransformKey, load_project, save_project
+from vrecon.analysis.prop_shapes import prop_mesh, write_mesh
+from vrecon.schema import Evidence, FileRef, Pose, SceneObject, TransformKey, load_project, save_project
 
 
 def load_mask(spec: str, t_n: int):
@@ -53,6 +54,13 @@ def load_mask(spec: str, t_n: int):
 
 def obj_id(name: str) -> str:
     return "obj_" + name.replace(" ", "_")
+
+
+def mesh_asset(entry: dict, s: float, oid: str, out: Path) -> FileRef:
+    """The prop's stand-in shape as a mesh file next to the project (a box reads as a board to image models)."""
+    name = f"{oid}.npz"
+    write_mesh(out / name, prop_mesh(entry, s))
+    return FileRef(id=f"file_{oid[4:]}_mesh", path=name, media_type="application/x-vrecon-mesh+npz")
 
 
 def notes_to_evidence(notes: list) -> list:
@@ -122,7 +130,8 @@ def main() -> int:
                                 f"(analysis/props.held_poses); size from the table ({entry['source']})")]
             ev += [Evidence(source_frames=[f], note=n) for f, n in enumerate(notes) if n != "sharp"][:400]
             new_objs.append(SceneObject(id=oid, name=entry["name"], kind="rigid", size=tuple(x * s for x in entry["size"]),
-                                        keys=keys, status="estimated", look={"all": tuple(entry["colour"])}, evidence=ev))
+                                        asset=mesh_asset(entry, s, oid, out), keys=keys, status="estimated",
+                                        evidence=ev))
             overlays.append(("stick", entry, poses, s))
         else:
             d = entry["size"][0] * s
@@ -156,9 +165,10 @@ def main() -> int:
                         for f in range(t_n) if np.all(np.isfinite(pos[f]))]
                 ev = [Evidence(note=f"mask {src}; held / free states (analysis/prop_fit); size from the table "
                                     f"({entry['source']}); spin not observed")] + notes_to_evidence(notes)
-                new_objs.append(SceneObject(id=oid if len(groups) == 1 else f"{oid}_{gi:02d}", name=entry["name"],
-                                            kind="rigid", size=(d, d, d), keys=keys, status="estimated",
-                                            look={"all": tuple(entry["colour"])}, evidence=ev))
+                sid = oid if len(groups) == 1 else f"{oid}_{gi:02d}"
+                new_objs.append(SceneObject(id=sid, name=entry["name"], kind="rigid", size=(d, d, d),
+                                            asset=mesh_asset(entry, s, sid, out), keys=keys, status="estimated",
+                                            evidence=ev))
                 overlays.append(("sphere", entry, pos, s))
         rep["props"][entry["name"]] = r
 

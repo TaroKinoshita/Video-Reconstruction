@@ -58,3 +58,14 @@ def test_ballistic_fit_recovers_a_toss():
     pos, how, info = P.ball_fit(cen, [(R, c, K)] * t_n, fps, splits=[], floor_z=None, models=("still", "ballistic"))
     assert info[0]["model"] == "ballistic"
     assert np.allclose(pos[0], p0, atol=0.05)
+
+
+def test_prop_meshes_are_valid():
+    from vrecon.analysis.prop_shapes import prop_mesh
+
+    for name in ("tennis racket", "tennis ball", "baseball bat", "table tennis paddle", "phone"):
+        e = lookup(name)
+        v, f, c = prop_mesh(e)
+        assert len(v) == len(c) and f.min() >= 0 and f.max() < len(v)
+        ext = v.max(0) - v.min(0)
+        assert abs(ext[0] - e["size"][0]) < 0.02 * e["size"][0] + 1e-6  # length along x

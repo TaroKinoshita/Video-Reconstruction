@@ -433,3 +433,25 @@ MCPで使う場合：`claude mcp add vrecon -- <repo>\.venv\Scripts\python.exe -
 - Outside the camera: `run/complete.enclose` copies boundary pieces facing the scene's centre (the middle of the people/things) at 90/180/270 deg, pushed out until the cameras and things are inside (+2 m); a 180 copy without the push stood between camera and player. Copies may not show in the source view at all (empty source pixels count as seen for them).
 - Source-view protection: an exact check (rays through every 6th source pixel hit the plane; covering hits must stay outside the grown rectangle, cut back side by side) replaced the sampled strip check, which missed thin overlaps on pieces grown hundreds of metres; plus a final render check in `complete_scene.py` (pieces covering >0.1% of source pixels: regrown strictly, then reverted, copies dropped). Tennis: 4 copies dropped, 3 pieces regrown strictly; covers-built 0.24% of source pixels. Moves orbit30/-30/90/180, dolly50, crane6: empty share .45-.57 -> 0 (`runs/human/tennis/planes/moves_look.png`).
 - Export: `runs/human/tennis/final/` (scene.blend opens with colours), controls for source, orbit30, orbit90, orbit180, dolly50, crane6 (24 fps, 243 frames, 800x704, no H3 problems), last frames in `final/controls_sheet.png`. Not yet tried in V2V.
+
+## V2V（フェーズF）直前の状態（2026-11-14）
+
+**結論：テニスの Blender シーンは V2V の前にやることが終わった。次はフェーズF（借りたGPUで MiniMax-H3）。**
+
+- 渡すもの：`runs/venue/tennis/fal2c_props/final/`（`scene.blend`、`project.json`、カメラの動き5種の制御映像
+  `controls_<move>/control_{depth,canny,clay,id,look}.mp4`、H3 の条件に合格：24 fps、32の倍数、17n+5 コマ）。
+  動き：source、dolly-100+crane4、orbit90+dolly-60（横）、crane10、orbit180。`runs/` はコミットしない。
+- 会場：LLM の配置＋fal の画面外の絵（フェーズE）、観客は座席の8%（`docs/VENUE_PLAN.md` に経過と数字）。
+- 人：GVHMR の選手＋SMPL-X の体（服の色を測定、肌っぽい色は無地に置換）、他の人は立ち姿。
+- タイミング：観測した動き出しに合わせる `align_timing`、開始前は静止 `hold_still`（6本で誤差 7.8 → 6.1 コマ）。
+- 小道具（`docs/PROPS_PLAN.md`、`scripts/fit_props.py`、物の表 `analysis/prop_table.py`）：
+  - ラケット：右手、形で向きを合わせ時間方向にならす（がたつき 1.7° → 0.4°）。形はラケット型のメッシュ（箱だと画像モデルが板として描いた）。
+  - ボール：1回目のサーブは持ったまま（投げていない）、2回目はトス→物理で延長→打った瞬間は仮説（ラケットの打点が一番高い
+    236コマ目。元映像でもラケットが最も上がるのは 234-236）→ サービスエリアへの仮説（`runs/venue/tennis/tennis_after.json`）。
+    打った後のボールは元映像に写っていないので確かめられない（仮説の印つき）。
+- 見た目の確認（fal で写真風、`scripts/fal_restyle.py`、`fal2c_props/restyle_{120,240}/sheet.png`、約$0.08）：ボールは手の中の
+  テニスボール、ラケットは6枚とも本物のラケットとして描かれた（箱のときは3枚で黒い板のままだった）。
+- 分かっている残り：syn_04 型（カメラが横に動く場面でカメラ移動が再現できず物が動く）は未対処、テニスはカメラがほぼ動かないので影響なし。
+  小道具の汎用化の残り（行き先と物の表を LLM に書かせる、転がる・蹴る・複数の合成映像）は V2V に必須ではない。
+- 注意：グラボ（8 GB）を使う処理は1つずつ。SAM と描画を同時に回すと両方が数十倍遅くなった。
+- テスト 155 件合格。
