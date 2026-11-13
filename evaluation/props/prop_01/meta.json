@@ -1,0 +1,32 @@
+{
+  "id": "prop_01",
+  "camera_motion": "static",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "motion_blur": {
+    "shutter_frames": 0.5
+  },
+  "prop_events": [
+    {
+      "object": "obj_ball",
+      "kind": "toss",
+      "frame": 14
+    },
+    {
+      "object": "obj_ball",
+      "kind": "hit",
+      "frame": 33
+    },
+    {
+      "object": "obj_paddle",
+      "kind": "swing",
+      "frame": 30,
+      "end_frame": 36
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json or gt_passes/"
+}

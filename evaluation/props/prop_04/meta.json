@@ -1,0 +1,25 @@
+{
+  "id": "prop_04",
+  "camera_motion": "static",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "motion_blur": {
+    "shutter_frames": 0.5
+  },
+  "prop_events": [
+    {
+      "object": "obj_ball",
+      "kind": "put down",
+      "frame": 30
+    }
+  ],
+  "scene": "put_down",
+  "hands": [
+    "obj_hand"
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json or gt_passes/"
+}
