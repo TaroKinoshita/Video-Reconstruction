@@ -219,3 +219,10 @@ per clip: single-clip differences of 1-2 frames are noise.
 - Tennis, plausibility judge (good of 7): none 3 / 3, hand-made 2, fal 5 / 6 (both picked natural_medium_0).
   The judge has no ground truth and earlier runs were judged earlier, so read as a hint, not a result.
 - LLM cost with pictures: $0.18-0.28 per layout (vs ~$0.11 without).
+- Look check before V2V (`scripts/fal_restyle.py`): frame 120 of control_look per move, made photo-like by the same
+  model with the source frame as colour reference (medium). orbit90 / crane10 / orbit180 came back as believable
+  photos of the venue with court, net, stands, stairs and poses kept (outline agreement .27-.76; the model adds
+  spectators and redraws the stands' tops). source and dolly-100+crane4 were refused by fal's content checker
+  (422 content_policy_violation): they show the skin-coloured SMPL-X bodies of the background people up close;
+  the prompt calling them clothed mannequins did not help. Fix in the scene, not the prompt: give those bodies
+  clothing colours (shirt / shorts) in the look, which V2V also needs. Estimated cost $0.03.
