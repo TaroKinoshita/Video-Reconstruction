@@ -69,9 +69,12 @@ def main() -> int:
     ap.add_argument("--racket-id", default=None, help="label of the racket track (default: the one that is not obj_ball)")
     ap.add_argument("--max-rms", type=float, default=3.0)
     ap.add_argument("--link", type=float, default=60.0, help="px a ball may move between frames in one tracklet")
+    ap.add_argument("--ball-masks", default=None, help="masks for the ball from scripts/props_recut.py merge "
+                    "(every label in it is a ball candidate); default: the obj_ball label of MASKS")
+    ap.add_argument("--one-track", action="store_true", help="all ball blobs are one ball (anchored recut)")
     ap.add_argument("--balls", action="store_true", help="also put the fitted ball tracklets in the scene "
                     "(off by default: on tennis they are other balls and blobs, not the served ball)")
-    ap.add_argument("--hand-px", type=float, default=30.0, help="ball blob this close to a hand: in the hand")
+    ap.add_argument("--hand-px", type=float, default=50.0, help="ball blob this close to a hand: in the hand")
     ap.add_argument("--gap", type=int, default=3, help="frames a tracklet may go unseen")
     ap.add_argument("--video", default="runs/human/tennis/tennis.mp4", help="only for the check sheet")
     a = ap.parse_args()
@@ -130,7 +133,12 @@ def main() -> int:
 
     # ---- ball: SAM's one "ball" label holds several balls (in the hand, lying on the court): split it into
     # blobs, link blobs frame to frame into tracklets (nearest within --link px), fit each tracklet on its own
-    bm = lab == ball_v
+    if a.ball_masks:
+        zb = np.load(a.ball_masks, allow_pickle=True)["masks"]
+        bm = np.zeros_like(lab, bool)
+        bm[:len(zb)] = zb[:len(lab)] > 0
+    else:
+        bm = lab == ball_v
     tracks = []  # each: {frame: (centre, width, blob mask)}
     live = []
     for f in range(t_n):
@@ -157,26 +165,45 @@ def main() -> int:
                 nxt.append(tr)
         live = nxt
     tracks = [t for t in tracks if len(t) >= 5]
+    if a.ball_masks and a.one_track:  # an anchored recut holds one ball: keep it as one track
+        tracks = [{f: v for t in tracks for f, v in t.items()}] if tracks else []
     balls, info = [], []
     for k, tr in enumerate(sorted(tracks, key=lambda t: min(t))):
         cen = np.full((t_n, 2), np.nan)
         wid = np.full(t_n, np.nan)
         for f, (c, w, _) in tr.items():
             cen[f], wid[f] = c, w
-        # hypothesis checked by the fit: where the ball's blob touches a hand, the ball is in that hand
-        anchors = {}
+        # state (docs/PROPS_PLAN.md): held where the blob stays by a hand (the ball on its ray at the hand's depth),
+        # free elsewhere (fitted on the rays; the hand position at a release frame anchors the depth)
+        held = {}
         for f in tr:
             R, c, K = cams[f]
-            for h in hands.values():
-                if np.linalg.norm(_project(h[f], cams[f])[0] - cen[f]) < a.hand_px:
-                    anchors[f] = (float((h[f] - c) @ P.pixel_ray(cen[f], R, c, K)), 0.15 * s)
-        pos, bhow, segs = P.ball_fit(cen, cams, fps, widths=wid, diameter=BALL * s, anchors=anchors)
+            near_h = min(hands, key=lambda k_: np.linalg.norm(_project(hands[k_][f], cams[f])[0] - cen[f]))
+            if np.linalg.norm(_project(hands[near_h][f], cams[f])[0] - cen[f]) < a.hand_px:
+                ray = P.pixel_ray(cen[f], R, c, K)
+                held[f] = (near_h, c + ray * float((hands[near_h][f] - c) @ ray))
+        free_cen = cen.copy()
+        anchors = {}
+        for f in held:
+            if (f + 1 in tr and f + 1 not in held) or (f - 1 in tr and f - 1 not in held):
+                R, c, K = cams[f]
+                anchors[f] = (float((held[f][1] - c) @ P.pixel_ray(cen[f], R, c, K)), 0.1 * s)
+            else:
+                free_cen[f] = np.nan
+        pos, bhow, segs = P.ball_fit(free_cen, cams, fps, widths=wid, diameter=BALL * s, anchors=anchors)
+        for f, (hn, p_) in held.items():
+            pos[f] = p_
+        segs.append({"frames": [min(held), max(held)] if held else [0, -1], "model": "held",
+                     "hands": sorted({hn for hn, _ in held.values()}), "held_frames": len(held), "rms_px": 0.0,
+                     "anchors": 0, "v": [0, 0, 0]})
         for sg in segs:
             lo, hi = sg["frames"]
             sg["track"] = k
             sg["kept"] = bool(sg["rms_px"] <= a.max_rms)
             if not sg["kept"]:
-                pos[lo:hi + 1] = np.nan
+                for f in range(lo, hi + 1):
+                    if f not in held:
+                        pos[f] = np.nan
             mid = (lo + hi) // 2
             sg["mid_xyz"] = [round(float(x), 2) for x in pos[mid]] if np.all(np.isfinite(pos[mid])) else None
             info.append(sg)
