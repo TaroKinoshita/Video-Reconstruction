@@ -281,6 +281,39 @@ def _slerp_dir(a, b, s):
     return (np.sin((1 - s) * om) * a + np.sin(s * om) * b) / np.sin(om)
 
 
+def _rotate(v, axis, a):
+    axis = axis / np.linalg.norm(axis)
+    return v * np.cos(a) + np.cross(axis, v) * np.sin(a) + axis * (axis @ v) * (1 - np.cos(a))
+
+
+def _refine_held(mask, grip, dirn, side, cam, length, width, thick, size, steps=(8, 4, 2, 1)):
+    """Pattern search on the silhouette IoU over the tip direction (two tilts) and the roll about it."""
+    dirn = dirn / np.linalg.norm(dirn)
+
+    def score(d, sd):
+        return iou(silhouette(_box_corners(grip, grip + d * length, sd, length, width, thick), cam, size), mask)
+
+    best = score(dirn, side)
+    for st in steps:
+        a = np.radians(st)
+        moved = True
+        while moved:
+            moved = False
+            u = np.cross(dirn, side)
+            for kind, sign in ((0, 1), (0, -1), (1, 1), (1, -1), (2, 1), (2, -1)):
+                if kind == 0:
+                    d, sd = _rotate(dirn, side, sign * a), side
+                elif kind == 1:
+                    d, sd = _rotate(dirn, u, sign * a), _rotate(side, u, sign * a)
+                else:
+                    d, sd = dirn, _rotate(side, dirn, sign * a)
+                sc = score(d, sd)
+                if sc > best + 1e-4:
+                    best, dirn, side, moved = sc, d / np.linalg.norm(d), sd, True
+                    break
+    return dirn, side, best
+
+
 def held_poses(masks: np.ndarray, grips: np.ndarray, cams: list, length: float, width: float, thick: float,
                shutter: float = 0.5, sharp_min_iou: float = 0.5, n_sub: int = 5, size=None):
     """Poses (grip, tip direction, side direction) per frame of a straight rigid shape held at `grips` [T,3].
@@ -319,8 +352,27 @@ def held_poses(masks: np.ndarray, grips: np.ndarray, cams: list, length: float, 
         side_ray = pixel_ray(mid_uv + minor * 10, R, c, K)
         side = np.cross(np.cross(tip - grips[f], side_ray), tip - grips[f])
         side = side / (np.linalg.norm(side) + 1e-9)
-        sil = silhouette(_box_corners(grips[f], tip, side, length, width, thick), cams[f], size)
-        sc = iou(sil, m)
+        # the mask's end is only an outline point; refine the pose on the whole silhouette, from each tip
+        # candidate (the two ray-sphere solutions differ in depth, which only the outline's shape tells apart)
+        best = None
+        starts = list(cands)
+        if prev_tip is not None:  # also from the previous pose: the outline alone can fit a mirrored pose as well
+            pd = prev_tip - grips[max(f - 1, 0)]
+            starts.append(grips[f] + pd / np.linalg.norm(pd) * length)
+        for t0 in starts:
+            sd0 = np.cross(np.cross(t0 - grips[f], side_ray), t0 - grips[f])
+            sd0 = sd0 / (np.linalg.norm(sd0) + 1e-9)
+            r = _refine_held(m, grips[f], t0 - grips[f], sd0, cams[f], length, width, thick, size)
+            # a box held at one end looks alike pointing either way; prefer the pose near the previous one
+            turn = 0.0
+            if prev_tip is not None:
+                pd = (prev_tip - grips[max(f - 1, 0)])
+                turn = np.degrees(np.arccos(np.clip(r[0] @ pd / np.linalg.norm(pd), -1, 1)))
+            key = r[2] - 0.002 * turn
+            if best is None or key > best[3]:
+                best = (*r, key)
+        dirn, side, sc, _ = best
+        tip = grips[f] + dirn * length
         tips[f], sides[f], score[f] = tip, side, sc
         how[f] = "sharp" if sc >= sharp_min_iou else "blurred"
         prev_tip = tip

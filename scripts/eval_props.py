@@ -131,6 +131,14 @@ def main() -> int:
             hi = min(s for s in sharp if s > f)
             lin = P._slerp_dir(est[lo], est[hi], (f - lo) / (hi - lo))
             errs["interpolated (no sweep)"].append(ang(lin, gt_dir[f]))
+    swing = next(ev for ev in meta["prop_events"] if ev["object"] == "obj_paddle")
+    every = [ang(est[f], gt_dir[f]) if np.all(np.isfinite(est[f])) else None for f in range(t_n)]
+    ok_e = [x for x in every if x is not None]
+    rep["paddle all frames"] = {"dir_error_deg_median": round(float(np.median(ok_e)), 1),
+                                "dir_error_deg_p90": round(float(np.percentile(ok_e, 90)), 1),
+                                "over_20deg": [f for f, x in enumerate(every) if x is not None and x > 20],
+                                "swing_frames_deg": [None if x is None else round(x) for x in
+                                                     every[swing["frame"] - 1:swing["end_frame"] + 2]]}
     rep["paddle"] = {"frames": {k: int((how == k).sum()) for k in ("sharp", "swept", "blurred", "unseen")},
                      **{f"dir_error_deg {k}": (round(float(np.median(v)), 1) if v else None) for k, v in errs.items()},
                      "swept frames": [int(f) for f in range(t_n) if how[f] == "swept"]}
