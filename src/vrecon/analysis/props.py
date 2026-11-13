@@ -118,35 +118,43 @@ def fit_trajectory(obs: list[tuple[float, np.ndarray, np.ndarray]], model: str =
     sigma)] add soft rows d.(p(t) - c) = depth. Returns (params, rms angle in radians between the rays and the
     fitted points, which a fit through the camera cannot game)."""
     t0 = obs[0][0]
-    rows, rhs = [], []
     n = {"still": 3, "linear": 6, "ballistic": 6}[model]
-    for t, c, d in obs:
-        tt = t - t0
-        S = _skew(d)
-        A = np.zeros((3, n))
-        A[:, :3] = S
-        if n == 6:
-            A[:, 3:] = S * tt
-        b = S @ c
-        if model == "ballistic":
-            b = b + S @ np.array([0, 0, g * tt * tt / 2])
-        rows.append(A)
-        rhs.append(b)
-    for t, c, d, z, sig in depths or []:
-        tt = t - t0
-        w = 1.0 / max(sig, 1e-3) * 0.05  # one ray row ~ 5 cm at a few metres; depth rows count as much at sigma 1 m
-        A = np.zeros((1, n))
-        A[0, :3] = d * w
-        if n == 6:
-            A[0, 3:] = d * tt * w
-        bz = z + d @ c
-        if model == "ballistic":
-            bz = bz + d @ np.array([0, 0, g * tt * tt / 2])
-        rows.append(A)
-        rhs.append(np.array([bz * w]))
-    A, b = np.concatenate(rows), np.concatenate(rhs)
-    x, *_ = np.linalg.lstsq(A, b, rcond=None)
-    prm = {"t0": t0, "p0": x[:3], "v": x[3:6] if n == 6 else np.zeros(3), "model": model, "g": g}
+
+    def solve(ray_w):
+        rows, rhs = [], []
+        for (t, c, d), w in zip(obs, ray_w):
+            tt = t - t0
+            S = _skew(d)
+            A = np.zeros((3, n))
+            A[:, :3] = S
+            if n == 6:
+                A[:, 3:] = S * tt
+            b = S @ c
+            if model == "ballistic":
+                b = b + S @ np.array([0, 0, g * tt * tt / 2])
+            rows.append(A * w)
+            rhs.append(b * w)
+        for t, c, d, z, sig in depths or []:
+            tt = t - t0
+            w = 1.0 / max(sig, 1e-3) * 0.05  # depth rows count as much as a ray row ~5 cm off at sigma 1 m
+            A = np.zeros((1, n))
+            A[0, :3] = d * w
+            if n == 6:
+                A[0, 3:] = d * tt * w
+            bz = z + d @ c
+            if model == "ballistic":
+                bz = bz + d @ np.array([0, 0, g * tt * tt / 2])
+            rows.append(A)
+            rhs.append(np.array([bz * w]))
+        x, *_ = np.linalg.lstsq(np.concatenate(rows), np.concatenate(rhs), rcond=None)
+        return {"t0": t0, "p0": x[:3], "v": x[3:6] if n == 6 else np.zeros(3), "model": model, "g": g}
+
+    # a ray row's residual is a distance, which grows with depth: reweight by 1/depth (an angle) and resolve, so
+    # far observations count like near ones and the fit is not pulled toward the camera
+    prm = solve([1.0] * len(obs))
+    for _ in range(4):
+        dep = [max(float((trajectory_at(prm, t) - c) @ d), 0.3) for t, c, d in obs]
+        prm = solve([1.0 / z for z in dep])
     res = []
     for t, c, d in obs:
         q = trajectory_at(prm, t) - c
@@ -164,7 +172,8 @@ def trajectory_at(prm: dict, t: float) -> np.ndarray:
 
 
 def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, ends=None, min_obs: int = 3,
-             splits: list[int] | None = None, floor_z: float | None = 0.0, widths=None, diameter: float | None = None):
+             splits: list[int] | None = None, floor_z: float | None = 0.0, widths=None, diameter: float | None = None,
+             anchors: dict | None = None):
     """Ball positions per frame from its 2D centres [T,2] (NaN = unseen) and cameras [(R, c, K)] per frame.
     Segments are split where the 2D motion changes (split_at_changes) or at `splits`; each is fitted with
     the model that explains it best (still / ballistic / linear, by rms on the rays, preferring the simpler).
@@ -213,7 +222,15 @@ def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, 
                     deps.append((f / fps, c, pixel_ray(centres[f], R, c, K), z, z / wpx))
         # gravity fixes a falling path's scale on its own and the size is the weaker cue (a few pixels wide), so
         # the size depths go only to the paths the rays leave without depth (still, straight)
-        fits = {m: fit_trajectory(obs, m, depths=None if m == "ballistic" else deps) for m in ("still", "ballistic", "linear")}
+        # anchors {frame: (depth along the ray, sigma)}: the ball known to be at another object then (in the hand
+        # at the toss); strong rows that every model uses
+        anc = []
+        for f in fr:
+            if anchors and f in anchors:
+                R, c, K = cams[f]
+                anc.append((f / fps, c, pixel_ray(centres[f], R, c, K), anchors[f][0], anchors[f][1]))
+        fits = {m: fit_trajectory(obs, m, depths=(anc if m == "ballistic" else deps + anc) or None)
+                for m in ("still", "ballistic", "linear")}
         px = 1.0 / cams[fr[0]][2][0, 0]  # one pixel as an angle
         best = "still" if fits["still"][1] < px else min(("ballistic", "linear"), key=lambda m: fits[m][1] * (1.0 if m == "ballistic" else 1.3))
         prm, rms = fits[best]
@@ -225,7 +242,7 @@ def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, 
                 p[2] = floor_z
             pos[f] = p
             how[f] = "trajectory" if seen[f] else "interpolated"
-        info.append({"frames": [lo, hi], "model": best, "rms_px": round(rms / px, 2), "observations": len(obs), "depth_rows": len(deps),
+        info.append({"frames": [lo, hi], "model": best, "rms_px": round(rms / px, 2), "observations": len(obs), "depth_rows": len(deps), "anchors": len(anc),
                      "blur_ends": use_blur, "v": [round(float(x), 2) for x in prm["v"]]})
     return pos, how, info
 
