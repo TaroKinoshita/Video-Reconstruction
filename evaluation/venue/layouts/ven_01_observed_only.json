@@ -1,0 +1,56 @@
+{
+ "site": "observed parts only (baseline): what the source view shows, nothing guessed",
+ "assumptions": [
+  "only parts the source view shows; the court and net by the rules; the ground is the ITF run-off only"
+ ],
+ "parts": [
+  {
+   "id": "court",
+   "type": "court",
+   "status": "standard"
+  },
+  {
+   "id": "net",
+   "type": "net",
+   "status": "standard"
+  },
+  {
+   "id": "north",
+   "type": "stand",
+   "front": [
+    [
+     -14,
+     18.3
+    ],
+    [
+     14,
+     18.3
+    ]
+   ],
+   "rows": 15,
+   "row_depth": 0.85,
+   "rise": 0.45,
+   "base_height": 0.0,
+   "status": "observed",
+   "fit": "obj_stand_north"
+  },
+  {
+   "id": "north_front",
+   "type": "wall",
+   "line": [
+    [
+     -14,
+     17.9
+    ],
+    [
+     14,
+     17.9
+    ]
+   ],
+   "height": 1.0,
+   "thickness": 0.2,
+   "status": "observed",
+   "fit": "obj_barrier_north"
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "site": "outdoor tennis stadium (synthetic ven_01), laid out by hand from source.png and the observation summary",
+ "assumptions": [
+  "the north stand and its front wall are observed; the other three sides are a guess: a stadium usually closes around the court",
+  "south stand as deep as the north one (15 rows), side stands like the north stand along the court's length",
+  "run-off: ITF recommended 6.40 m behind the baselines, 3.66 m at the sides; stands start 3 m beyond that at the sides",
+  "umpire chair and player benches at the usual places beside the net (west side); not seen",
+  "no roof: none is visible",
+  "written by the person who also wrote the generator: a reference for what the representation can reach, not a competitor"
+ ],
+ "parts": [
+  {"id": "court", "type": "court", "status": "standard"},
+  {"id": "net", "type": "net", "status": "standard"},
+  {"id": "ground", "type": "ground", "size": [80, 100], "status": "hypothesis"},
+  {"id": "north", "type": "stand", "front": [[-14, 18.3], [14, 18.3]], "rows": 15, "row_depth": 0.85, "rise": 0.45, "base_height": 0.0, "status": "observed", "fit": "obj_stand_north"},
+  {"id": "north_front", "type": "wall", "line": [[-14, 17.9], [14, 17.9]], "height": 1.0, "thickness": 0.2, "status": "observed", "fit": "obj_barrier_north"},
+  {"id": "south", "type": "stand", "front": [[14, -18.3], [-14, -18.3]], "rows": 15, "row_depth": 0.85, "rise": 0.45, "base_height": 0.0, "status": "hypothesis"},
+  {"id": "south_front", "type": "wall", "line": [[14, -17.9], [-14, -17.9]], "height": 1.0, "thickness": 0.2, "status": "hypothesis"},
+  {"id": "west", "type": "stand", "front": [[-12.2, -18.3], [-12.2, 18.3]], "rows": 15, "row_depth": 0.85, "rise": 0.45, "base_height": 0.0, "status": "hypothesis"},
+  {"id": "west_front", "type": "wall", "line": [[-11.8, -18.3], [-11.8, 18.3]], "height": 1.0, "thickness": 0.2, "status": "hypothesis"},
+  {"id": "east", "type": "stand", "front": [[12.2, 18.3], [12.2, -18.3]], "rows": 15, "row_depth": 0.85, "rise": 0.45, "base_height": 0.0, "status": "hypothesis"},
+  {"id": "east_front", "type": "wall", "line": [[11.8, 18.3], [11.8, -18.3]], "height": 1.0, "thickness": 0.2, "status": "hypothesis"},
+  {"id": "umpire", "type": "box", "category": "furniture", "centre": [-7.2, 0.0], "size": [1.0, 1.0, 2.2], "status": "hypothesis"},
+  {"id": "bench_s", "type": "box", "category": "furniture", "centre": [-7.4, -3.0], "size": [0.6, 2.0, 0.9], "status": "hypothesis"},
+  {"id": "bench_n", "type": "box", "category": "furniture", "centre": [-7.4, 3.0], "size": [0.6, 2.0, 0.9], "status": "hypothesis"}
+ ]
+}

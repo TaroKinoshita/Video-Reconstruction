@@ -1,0 +1,27 @@
+{
+ "site": "outdoor tennis stadium (the tennis clip), laid out by hand from the frame and the observation summary",
+ "assumptions": [
+  "court and net by the ITF rules, placed by the court calibration (the 4RC net at Y = +1.9 m is ignored)",
+  "the stand behind the far baseline is observed: steps from about 2 m up behind a 2 m sign wall, fitted to the observed stand points",
+  "the far-left corner shows the stand turning along the west side: a west stand is assumed; east and the near (south) side copy it",
+  "the camera stands 7.6 m behind the near baseline at 1.9 m: the south stand must start behind it",
+  "rows 0.85 m deep, 0.45 m rise (typical); 25 rows (the frame shows at least 7 above the wall, the top is cut off)",
+  "aisles every 8 m (the frame shows stairs between seat blocks)",
+  "umpire chair beside the net on the west side (seen at the left of the frame, position estimated)",
+  "no roof seen; none added"
+ ],
+ "parts": [
+  {"id": "court", "type": "court", "status": "standard"},
+  {"id": "net", "type": "net", "status": "standard"},
+  {"id": "ground", "type": "ground", "size": [70, 90], "status": "hypothesis"},
+  {"id": "north", "type": "stand", "front": [[-20, 20.5], [20, 20.5]], "rows": 25, "row_depth": 0.85, "rise": 0.45, "base_height": 2.0, "aisles": {"every": 8.0, "width": 1.2}, "status": "observed", "fit": "obj_stands"},
+  {"id": "north_sign", "type": "wall", "line": [[-20, 20.0], [20, 20.0]], "height": 2.0, "thickness": 0.3, "status": "observed"},
+  {"id": "west", "type": "stand", "front": [[-13.5, -21.0], [-13.5, 20.5]], "rows": 25, "row_depth": 0.85, "rise": 0.45, "base_height": 2.0, "aisles": {"every": 8.0, "width": 1.2}, "status": "hypothesis"},
+  {"id": "west_sign", "type": "wall", "line": [[-13.0, -21.0], [-13.0, 20.0]], "height": 2.0, "thickness": 0.3, "status": "hypothesis"},
+  {"id": "east", "type": "stand", "front": [[13.5, 20.5], [13.5, -21.0]], "rows": 25, "row_depth": 0.85, "rise": 0.45, "base_height": 2.0, "aisles": {"every": 8.0, "width": 1.2}, "status": "hypothesis"},
+  {"id": "east_sign", "type": "wall", "line": [[13.0, 20.0], [13.0, -21.0]], "height": 2.0, "thickness": 0.3, "status": "hypothesis"},
+  {"id": "south", "type": "stand", "front": [[20, -22.0], [-20, -22.0]], "rows": 25, "row_depth": 0.85, "rise": 0.45, "base_height": 2.0, "aisles": {"every": 8.0, "width": 1.2}, "status": "hypothesis"},
+  {"id": "south_sign", "type": "wall", "line": [[20, -21.5], [-20, -21.5]], "height": 2.0, "thickness": 0.3, "status": "hypothesis"},
+  {"id": "umpire", "type": "box", "category": "furniture", "centre": [-7.5, 0.0], "size": [1.0, 1.0, 2.4], "status": "observed"}
+ ]
+}
