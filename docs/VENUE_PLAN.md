@@ -141,3 +141,21 @@ fal：履歴保存を止める（`X-Fal-Store-IO: 0`）、アップロード画�
   合成6本・11の動き：パン補正なしでは中央値4〜5フレーム・最大23〜30フレームずれ（パンで止まっている物が90 px動いて見える）。補正ありで11中9が5フレーム以内（中央値：始まり3、止まり2）。外れた2つはカメラ自体が7 m移動するsyn_05（視差はパン補正では消えない）。
 - 未確認：これを使うとLLMの修正が実際に良くなるか（変更前後でタイミング誤差・動きの誤差・処理時間を比べる）。LLMの実行が要るので次の実験。
 - 会場の角：構成データに `join_corners`（true＝角を扇形でつないだすり鉢、false＝角は開けたまま）を足し、LLMが選ぶ。合成（角が開いた会場）で2回とも false を選び、観客席IoU .79 / .66（前の2回は .62 / .65）。
+
+### View tools: before/after on the six synthetic clips (2026-11-13)
+Same start scenes (looker rev_0000), 30-minute budget, `run_llm_repair.sh --viewer` vs the old looker (4-frame images).
+
+| clip | mask IoU old / new | timing err (frames) old / new | centroid err old / new | cost $ new |
+|---|---|---|---|---|
+| syn_01 | .824 / .826 | 6 / 7 | .0079 / .0076 | .79 |
+| syn_02 | .854 / .838 | 5 / 5 | .0058 / .0067 | 1.19 |
+| syn_03 | .901 / .884 | 5 / 5 | .0034 / .0033 | .51 |
+| syn_04 | .757 / .763 | 15 / 15 | .0074 / .0066 | 1.21 |
+| syn_05 | .779 / .771 | 14 / 13 | .0074 / .0078 | .97 |
+| syn_06 | .900 / .891 | 2 / 2 | .0046 / .0049 | 1.10 |
+| mean | .836 / .829 | 7.8 / 7.8 | | |
+
+The agent used every view tool (overview and events once per clip, track 2-7 times, compare 2-4) but the scores
+did not move: differences are within run-to-run noise. Reading: the bottleneck is not seeing the timing but
+turning it into a fix (run_fix/run_optimize change keys but the 15-frame error on syn_04 stays). Next: let the
+events tool's onsets be applied directly as key timing proposals instead of leaving the translation to the LLM.

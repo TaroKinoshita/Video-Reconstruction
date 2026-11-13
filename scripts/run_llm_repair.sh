@@ -12,7 +12,7 @@
 set -euo pipefail
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 RUN="$(abspath "$1")"; shift
-MODEL="claude-opus-5-5"; TURNS=60; MINUTES=30; CLIP=""; USE_BUDGET=0; LOOKER=0
+MODEL="claude-opus-5-5"; TURNS=60; MINUTES=30; CLIP=""; USE_BUDGET=0; LOOKER=0; VIEWER=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --model) MODEL="$2"; shift ;;
@@ -21,6 +21,7 @@ while [[ $# -gt 0 ]]; do
     --clip) CLIP="$(abspath "$2")"; shift ;;
     --use-budget) USE_BUDGET=1 ;;
     --looker) LOOKER=1 ;;  # option 2 prototype: run_look (picture) + run_fix (issue words)
+    --viewer) LOOKER=1; VIEWER=1 ;;  # looker + close looking (run/view.py): overview, events, clip, compare, track
     *) echo "unknown option $1"; exit 2 ;;
   esac
   shift
@@ -43,6 +44,17 @@ if [[ $LOOKER == 1 ]]; then
 repairing and after each adopted change, say in one line what looks wrong, and fix it with run_fix (one issue
 word and a target). run_fix and run_optimize share the budget and the accept rule."
   EXTRA=("mcp__vrecon__run_look" "mcp__vrecon__run_fix")
+fi
+if [[ $VIEWER == 1 ]]; then
+  LOOK_RULE="${LOOK_RULE}
+Look closely before you judge timing or motion: start with run_view_overview (the whole clip, numbered, with each
+object's speed), then run_view_events (machine-found starts, stops, turns, occlusions with frame ranges). Step
+through the frames that matter with run_view_clip (its own frame rate; give an object label as region to zoom in)
+and run_view_compare (video and reconstruction on the same frames). Before fixing timing or a path, check the
+numbers with run_view_track (observed and reconstructed start and stop frames, offsets). Say what you saw with
+frame numbers."
+  EXTRA+=("mcp__vrecon__run_view_overview" "mcp__vrecon__run_view_events" "mcp__vrecon__run_view_clip"
+          "mcp__vrecon__run_view_compare" "mcp__vrecon__run_view_track")
 fi
 
 cat > "$LOG/mcp.json" <<EOF
