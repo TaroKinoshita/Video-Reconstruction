@@ -177,3 +177,13 @@ Timing improves where an alignment is adopted (syn_01 7 -> 1); syn_04/05 keep th
 alignment was rejected by the silhouette accept rule and on syn_05 the adopted ones did not touch the scored
 event. IoU drifts down slightly (within run noise, one run per clip). Next: see what syn_04's 15 frames are (an
 event the onsets do not capture, or an accept rule that trades timing for silhouette).
+
+### syn_04's 15 frames: wobble, not timing
+The scorer's onset is the first frame an object moves more than 1 cm or 0.6 deg. syn_04's still box obj_00 (GT
+starts at 30) wobbled 1-8 deg in facing from frame 0, so it "started" at 0 (error -30; the other object was 0;
+mean 15). A few degrees of a box barely change its silhouette, so no fix was ever accepted. New: `hold_still`
+(run after run_align_timing): before the video's observed start, keys take the facing (and, if that passes, the
+whole pose) of the start key; kept unless the silhouette loss rises by more than 0.002 (draft). Holding the whole
+pose was rejected (+6% loss: the position drifts before the start, likely compensating the trucking camera);
+holding the facing passed for both objects. syn_04 from its start scene: timing error 16 -> 8.5 frames
+(obj_00 now starts at 15 from position drift; IoU .686 -> .682). Not yet rerun with the LLM on all six clips.

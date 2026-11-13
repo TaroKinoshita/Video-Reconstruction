@@ -36,3 +36,17 @@ def test_warp_times_maps_onsets():
     out = warp_times(t, (24, 48), (30, 66), 24.0)
     assert [round(x * 24) for x in out] == [6, 30, 66, 90]
     assert [round(x * 24) for x in warp_times(t, (24, None), (30, None), 24.0)] == [6, 30, 54, 78]
+
+
+def test_hold_keys_freezes_before_start():
+    import numpy as np
+
+    from vrecon.run.service import hold_keys
+    from vrecon.schema import Pose, TransformKey
+
+    keys = [TransformKey(time=i / 24, pose=Pose(translation=(0.0, 0.0, 0.0), rotation=(float(np.cos(0.01 * i)), 0.0, 0.0, float(np.sin(0.01 * i))))) for i in range(6)]
+    out = hold_keys(keys, 24.0, 3)
+    assert all(k.pose == keys[3].pose for k in out[:4]) and out[5].pose == keys[5].pose
+    assert all(k.pose == keys[0].pose for k in hold_keys(keys, 24.0, None))
+    rot = hold_keys(keys, 24.0, 3, rotation_only=True)
+    assert rot[0].pose.rotation == keys[3].pose.rotation and rot[0].pose.translation == keys[0].pose.translation

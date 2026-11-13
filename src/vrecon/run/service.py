@@ -267,7 +267,7 @@ def align_timing(run_dir: str, obj: str, note: str = "") -> dict:
     rec = tr["scene_object"]
     so, se, rs, re_ = tr["observed_starts"], tr["observed_stops"], tr["scene_starts"], tr["scene_stops"]
     if rec is None or so is None or rs is None:
-        return {"status": "skipped", "reason": "no start found in the video or the scene", "track": {
+        return {"status": "skipped", "hold": hold_still(run_dir, obj, note) if rec else None, "reason": "no start found in the video or the scene", "track": {
             k: tr[k] for k in ("observed_starts", "observed_stops", "scene_starts", "scene_stops")}}
     mgr, _, _ = _manager(Path(run_dir))
     o = next(x for x in mgr.adopted.reconstruction.objects if x.id == rec)
@@ -292,4 +292,59 @@ def align_timing(run_dir: str, obj: str, note: str = "") -> dict:
         if out.status == "accepted":
             break
         mgr, _, _ = _manager(Path(run_dir))
-    return {"object": rec, "scene": [rs, re_], "observed": [so, se], "tries": results}
+    return {"object": rec, "scene": [rs, re_], "observed": [so, se], "tries": results,
+            "hold": hold_still(run_dir, obj, note)}
+
+
+HOLD_TOLERANCE = 0.002  # draft: a hold may cost this much silhouette loss (a few degrees of wobble barely shows)
+
+
+def hold_keys(keys, fps: float, start: int | None, rotation_only: bool = False):
+    """Keys before `start` (frame) take the pose of the first key at or after it: still until the video shows
+    motion. start None = never moves: every key takes the first key's pose."""
+    if not keys:
+        return keys
+    if start is None:
+        ref = keys[0]
+    else:
+        ref = next((k for k in keys if k.time * fps >= start - 0.5), keys[-1])
+    out = []
+    for k in keys:
+        if start is None or k.time * fps < start - 0.5:
+            pose = k.pose.model_copy(update={"rotation": ref.pose.rotation}) if rotation_only else ref.pose
+            out.append(k.model_copy(update={"pose": pose}))
+        else:
+            out.append(k)
+    return out
+
+
+def hold_still(run_dir: str, obj: str, note: str = "") -> dict:
+    """Remove wobble while the video shows the object still: keys before the observed start (or all keys, if the
+    video never shows it moving) get one pose. Kept unless the silhouette loss rises by more than HOLD_TOLERANCE."""
+    from . import view
+    from .manager import AcceptRule
+
+    tr = view.track(run_dir, obj)
+    rec, so = tr["scene_object"], tr["observed_starts"]
+    if rec is None:
+        return {"status": "skipped", "reason": "no paired scene object"}
+    mgr, _, _ = _manager(Path(run_dir))
+    o = next(x for x in mgr.adopted.reconstruction.objects if x.id == rec)
+    fps = mgr.adopted.source.fps.num / mgr.adopted.source.fps.den
+    tries = []
+    for what, rot in (("pose", False), ("facing", True)):  # whole pose held, else only the facing (the wobble)
+        new = hold_keys(o.keys, fps, so, rotation_only=rot)
+        if all(a.pose == b.pose for a, b in zip(new, o.keys)):
+            tries.append({"held": what, "status": "no change"})
+            continue
+        prop = Proposal(id=f"hold_{mgr.attempts + 1:03d}", source="optimizer",
+                        changes=[{"target_id": rec, "field": "keys", "value": [k.model_dump(mode="json") for k in new]}],
+                        hypothesis=f"{rec} {what} held until frame {so} as in the video (wobble removed)"
+                                   + (f"; {note}" if note else ""))
+        out = mgr.try_proposal(prop, rule=AcceptRule(primary="silhouette_loss", min_gain=-HOLD_TOLERANCE))
+        tries.append({"held": what, "status": out.status, "reasons": out.reasons})
+        if out.status == "accepted":
+            break
+        mgr, _, _ = _manager(Path(run_dir))
+    return {"object": rec, "observed_start": so, "tries": tries,
+            "status": "accepted" if any(t["status"] == "accepted" for t in tries) else "rejected"}

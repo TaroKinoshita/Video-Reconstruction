@@ -122,7 +122,7 @@ def fix(run_dir: str, issue: str, target: str | None = None, note: str = "", max
         from .service import align_timing
 
         al = align_timing(run_dir, target, note)
-        if any(t.get("status") == "accepted" for t in al.get("tries", [])):
+        if any(t.get("status") == "accepted" for t in al.get("tries", [])) or (al.get("hold") or {}).get("status") == "accepted":
             return {"aligned_from_onsets": al}
     specs = [_spec(p) for p in params]
     text = f"[looker] {issue}" + (f" {target}" if target else "") + (f": {note}" if note else "")
