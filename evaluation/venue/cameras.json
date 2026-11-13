@@ -1,0 +1,17 @@
+{
+ "note": "Fixed evaluation cameras for full-venue completion (docs/VENUE_PLAN.md phase A). Decided before any comparison; do not tune methods against them. ven_01: explicit cameras (metres). tennis: moves of the source camera (scripts/camera_moves.py) about the main player, scored at the move's last frame.",
+ "ven_01": {
+  "source":        {"position": [1.5, -17.0, 1.7], "look_at": [0.0, 8.0, 1.2], "fx_of_width": 1.6, "why": "low camera behind the south baseline, like the tennis clip"},
+  "pullback_high": {"position": [0.0, -30.0, 12.0], "look_at": [0.0, 0.0, 0.0], "fx_of_width": 0.8, "why": "pull back and up: the whole venue"},
+  "side":          {"position": [24.0, -2.0, 8.0], "look_at": [-5.0, 0.0, 1.0], "fx_of_width": 0.8, "why": "from the east stand across the court"},
+  "high":          {"position": [0.0, -8.0, 45.0], "look_at": [0.0, 0.0, 0.0], "fx_of_width": 0.9, "why": "near top-down: layout of the stands"},
+  "back":          {"position": [0.0, 6.0, 2.0], "look_at": [0.0, -20.0, 3.0], "fx_of_width": 0.8, "why": "turned around: the side the source never faced"}
+ },
+ "tennis": {
+  "source":   "source",
+  "pullback": "dolly-100+crane4",
+  "side":     "orbit90",
+  "high":     "crane10",
+  "back":     "orbit180"
+ }
+}

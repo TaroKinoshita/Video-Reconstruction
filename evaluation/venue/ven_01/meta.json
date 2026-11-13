@@ -1,0 +1,46 @@
+{
+ "id": "ven_01",
+ "categories": {
+  "obj_floor": "floor",
+  "obj_court": "court",
+  "obj_net": "net",
+  "obj_umpire": "furniture",
+  "obj_bench_a": "furniture",
+  "obj_bench_b": "furniture",
+  "obj_player_a": "person",
+  "obj_player_b": "person",
+  "obj_stand_north": "stands",
+  "obj_barrier_north": "wall",
+  "obj_stand_south": "stands",
+  "obj_barrier_south": "wall",
+  "obj_stand_west": "stands",
+  "obj_barrier_west": "wall",
+  "obj_stand_east_s": "stands",
+  "obj_barrier_east_s": "wall",
+  "obj_stand_east_n": "stands",
+  "obj_barrier_east_n": "wall"
+ },
+ "visible_in_source_px": {
+  "obj_barrier_north": 13443,
+  "obj_court": 79143,
+  "obj_floor": 47,
+  "obj_net": 51258,
+  "obj_player_a": 43577,
+  "obj_player_b": 1196,
+  "obj_stand_north": 118088
+ },
+ "hidden_from_source": [
+  "obj_barrier_east_n",
+  "obj_barrier_east_s",
+  "obj_barrier_south",
+  "obj_barrier_west",
+  "obj_bench_a",
+  "obj_bench_b",
+  "obj_stand_east_n",
+  "obj_stand_east_s",
+  "obj_stand_south",
+  "obj_stand_west",
+  "obj_umpire"
+ ],
+ "note": "evaluation only: reconstruction and LLMs must not read meta.json, gt.json or gt_passes"
+}

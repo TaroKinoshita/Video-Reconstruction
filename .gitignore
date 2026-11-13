@@ -27,3 +27,5 @@ evaluation/synthetic/*/gt_passes/
 !evaluation/synthetic2d/*/video.mp4
 evaluation/synthetic2d/*/gt_passes/
 evaluation/completion/*/gt_passes/
+evaluation/venue/*/gt_passes/
+evaluation/venue/*/observed.npz
