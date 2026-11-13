@@ -36,8 +36,9 @@ def main() -> int:
     for f in src.glob("*.npz"):
         if f.name != "background.npz":
             shutil.copyfile(f, out / f.name)
-    place = json.loads((src.parent / "scene" / "placement.json").read_text(encoding="utf-8"))
-    s = float(place["scale_units_per_metre"])
+    from vrecon.analysis.units import units_per_metre
+
+    s = units_per_metre(src)
     p = load_project(src / "project.json")
     bg = np.load(src / "background.npz")
     v, faces, cols = bg["verts"], bg["faces"], bg["colors"]

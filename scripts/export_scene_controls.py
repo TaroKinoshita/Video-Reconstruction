@@ -52,8 +52,9 @@ def main() -> int:
     root, out = Path(a.root).resolve(), Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     p = load_project(a.project)
-    place = json.loads((root.parent / "scene" / "placement.json").read_text(encoding="utf-8"))
-    s = float(place["scale_units_per_metre"])
+    from vrecon.analysis.units import units_per_metre
+
+    s = units_per_metre(root)
 
     rep = {}
     st = next((o for o in p.reconstruction.objects if o.id == "obj_stands" and o.asset is None), None)

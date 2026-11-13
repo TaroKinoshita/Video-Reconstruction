@@ -31,6 +31,8 @@ def main() -> int:
         ap.add_argument(x)
     ap.add_argument("--kinds", default="obj_net=board,obj_chair=ground,obj_stands=plane")
     ap.add_argument("--check", default="0,60,120,180,240,300")
+    ap.add_argument("--calibration", default=None,
+                    help="court calibration (scripts/calibrate_court.py): build in the court frame, metres, with that camera")
     ap.add_argument("--person", action="append", default=[],
                     help="LABEL=SKELETON.npz: a GVHMR skeleton for another person (e.g. obs_1=left/gvhmr_skeleton.npz)")
     a = ap.parse_args()
@@ -62,6 +64,36 @@ def main() -> int:
     frames = [int(f) for f in np.linspace(0, t - 1, n, dtype=int)]
     m = load_4rc(a.rc, w, h, frames)
     labels = labels_at_model_pixels(m, masks)
+    if a.calibration:
+        # court frame (metres): the calibrated camera replaces 4RC's; 4RC points keep their pixels and distances
+        # (analysis/to_court.warp_model); the main person is placed again through the new camera
+        from vrecon.analysis.place_person import place_in_scene
+        from vrecon.analysis.to_court import court_cameras, similarity_to_court, transform_project, warp_model
+
+        cal = json.loads(Path(a.calibration).read_text(encoding="utf-8"))
+        old_cam = base.reconstruction.cameras[0]
+        A_s, k_s, T_s, rep_court = similarity_to_court(base, cal)
+        ccam = court_cameras(cal, old_cam.id, old_cam.shot_id)
+        base = transform_project(base, A_s, k_s, T_s, ccam)
+        m = warp_model(m, A, k_s, ccam)
+        A = np.eye(4)
+        cam_h = float(camera_pose(ccam, 0)[1][2])
+        place = {**place, "scale_units_per_metre": 1.0, "4rc": {**place["4rc"], "camera_height": cam_h, "alignment": A.tolist()}}
+        shutil.copyfile(scene / "skeleton.npz", out / "skeleton.npz")
+        ch_old = next(o for o in base.reconstruction.objects if o.kind == "character")
+        ch_new, _ = place_in_scene(out / "skeleton.npz", "skeleton.npz", ccam, obj_id=ch_old.id, name=ch_old.name or "")
+        ch_new.look = ch_old.look
+        base.reconstruction.objects = [ch_new if o.id == ch_old.id else o for o in base.reconstruction.objects]
+        # the ground is the court plane itself (z = 0, axes of the court); 4RC's floor fit sat 0.74 deg off
+        fl = next((o for o in base.reconstruction.objects if o.id == "obj_floor"), None)
+        if fl is not None:
+            from vrecon.schema import Pose as _Pose
+
+            span = max(fl.size[:2])
+            fl.size = (span, span, fl.size[2])
+            fl.rest = fl.rest.model_copy(update={"pose": _Pose(translation=(0.0, 0.0, -fl.size[2] / 2))})
+        (out / "units.json").write_text(json.dumps({"units_per_metre": 1.0, "source": "court lines (ITF)",
+                                                    "similarity": rep_court}, indent=1) + "\n", encoding="utf-8")
 
     def aligned(p):
         return p @ A[:3, :3].T + A[:3, 3]

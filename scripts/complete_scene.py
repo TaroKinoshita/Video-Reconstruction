@@ -65,8 +65,9 @@ def main() -> int:
     pivot[2] = 0.0
     n = p.source.frame_count
     src = list(range(0, n, a.step))
-    place = json.loads((root.parent / "scene" / "placement.json").read_text(encoding="utf-8"))
-    upm = float(place["scale_units_per_metre"])
+    from vrecon.analysis.units import units_per_metre
+
+    upm = units_per_metre(root)
     fps = p.source.fps.num / p.source.fps.den
     views = {mv: move_camera(cam, mv, pivot, upm, n, fps, fps, step=a.step) for mv in a.moves.split(",")}
 

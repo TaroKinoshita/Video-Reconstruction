@@ -48,8 +48,12 @@ def main() -> int:
         root = next((d for d in [path.parent, *path.parents] if (d / "skeleton.npz").exists()), path.parent)
         cam = p.reconstruction.cameras[0]
         pv = pivot_of(p)
-        place = next((d / "scene" / "placement.json" for d in path.parents if (d / "scene" / "placement.json").exists()), None)
-        upm = float(json.loads(place.read_text(encoding="utf-8"))["scale_units_per_metre"]) if place else 1.0
+        from vrecon.analysis.units import units_per_metre
+
+        try:
+            upm = units_per_metre(path.parent)
+        except FileNotFoundError:
+            upm = 1.0
         n = p.source.frame_count
         fps = p.source.fps.num / p.source.fps.den
         frame = a.frame if a.frame >= 0 else n - 1
