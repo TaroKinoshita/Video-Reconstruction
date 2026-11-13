@@ -33,7 +33,10 @@ G = 9.81
 PADDLE = (0.68, 0.27, 0.03)
 BALL = 0.067
 SPECS = [{"id": "prop_01", "seed": 11, "camera": "static", "second_toss": False},
-         {"id": "prop_02", "seed": 12, "camera": "pan", "second_toss": True}]
+         {"id": "prop_02", "seed": 12, "camera": "pan", "second_toss": True},
+         {"id": "prop_03", "seed": 13, "camera": "static", "scene": "throw_catch"},
+         {"id": "prop_04", "seed": 14, "camera": "static", "scene": "put_down"}]
+HAND = (0.09, 0.05, 0.1)
 
 
 def _quat_axis(axis, a):
@@ -127,6 +130,72 @@ def _bounce(p0, vz, t, e=0.7, r=BALL / 2):
             return np.array([p0[0], p0[1], r])
 
 
+def _lerp_keys(points, frames):
+    """Piecewise-linear (eased) path through points [(frame, xyz)] -> xyz per frame."""
+    out = []
+    for f in range(frames):
+        for (f0, p0), (f1, p1) in zip(points[:-1], points[1:]):
+            if f0 <= f <= f1:
+                u = (f - f0) / max(f1 - f0, 1)
+                u = 0.5 - 0.5 * math.cos(math.pi * u)
+                out.append(np.asarray(p0, float) + (np.asarray(p1, float) - np.asarray(p0, float)) * u)
+                break
+        else:
+            out.append(np.asarray(points[-1][1] if f > points[-1][0] else points[0][1], float))
+    return np.array(out)
+
+
+def hands_scene(spec: dict):
+    """throw_catch: hand A carries the ball, throws it (released at 20 with the hand's velocity) in an arc to hand
+    B, which catches it (frame 44) and carries it on. put_down: a hand carries the ball to a table top, lets go at
+    frame 30 and leaves; the ball rests there. Returns (objects, hands {id: [T,3]}, ball [T,3], events)."""
+    r = BALL / 2
+    if spec["scene"] == "throw_catch":
+        ha = _lerp_keys([(0, (-0.9, 1.0, 0.9)), (14, (-0.9, 1.0, 0.9)), (20, (-0.75, 1.0, 1.15)), (32, (-0.9, 1.0, 0.95))], FRAMES)
+        rel, cat = 20, 44
+        p_rel = ha[rel] + np.array([0, 0, r + HAND[2] / 2])
+        dt = (cat - rel) / FPS
+        hb_catch = np.array([0.8, 1.0, 1.1])
+        p_cat = hb_catch + np.array([0, 0, r + HAND[2] / 2])
+        v0 = (p_cat - p_rel + np.array([0, 0, G * dt * dt / 2])) / dt
+        hb = _lerp_keys([(0, (0.8, 1.0, 0.9)), (36, (0.8, 1.0, 1.1)), (44, hb_catch), (56, (0.6, 1.0, 0.8)), (FRAMES - 1, (0.6, 1.0, 0.8))], FRAMES)
+        ball = []
+        for f in range(FRAMES):
+            if f <= rel:
+                ball.append(ha[f] + np.array([0, 0, r + HAND[2] / 2]))
+            elif f < cat:
+                t = (f - rel) / FPS
+                ball.append(p_rel + v0 * t - np.array([0, 0, G * t * t / 2]))
+            else:
+                ball.append(hb[f] + np.array([0, 0, r + HAND[2] / 2]))
+        hands = {"obj_hand_a": ha, "obj_hand_b": hb}
+        events = [{"object": "obj_ball", "kind": "release", "frame": rel}, {"object": "obj_ball", "kind": "catch", "frame": cat}]
+        extra = []
+    else:
+        top = 0.75
+        h = _lerp_keys([(0, (-0.6, 1.0, 1.1)), (28, (0.1, 1.0, top + r * 2 + HAND[2] / 2 - 0.0)), (30, (0.1, 1.0, top + 2 * r + HAND[2] / 2)),
+                        (45, (0.0, 0.6, 1.2)), (FRAMES - 1, (-0.2, 0.6, 1.2))], FRAMES)
+        rel = 30
+        rest = np.array([0.1, 1.0, top + r])
+        ball = []
+        for f in range(FRAMES):
+            # carried under the hand (hanging from the fingers), set down at the release
+            ball.append(h[f] - np.array([0, 0, r + HAND[2] / 2]) if f <= rel else rest)
+        ball[rel] = rest
+        hands = {"obj_hand": h}
+        events = [{"object": "obj_ball", "kind": "put down", "frame": rel}]
+        extra = [SceneObject(id="obj_table", kind="set", size=(1.2, 0.8, 0.04),
+                             rest=TransformKey(time=0, pose=Pose(translation=(0.1, 1.0, top - 0.02))))]
+    objs = extra + [SceneObject(id=k, kind="rigid", size=HAND, status="human_confirmed", look={"all": (0.25, 0.3, 0.85)},
+                                keys=[TransformKey(time=f / FPS, pose=Pose(translation=tuple(float(x) for x in v[f])))
+                                      for f in range(FRAMES)]) for k, v in hands.items()]
+    objs.append(SceneObject(id="obj_ball", kind="rigid", size=(BALL, BALL, BALL), status="human_confirmed",
+                            look={"all": (0.85, 0.95, 0.2)},
+                            keys=[TransformKey(time=f / FPS, pose=Pose(translation=tuple(float(x) for x in ball[f])))
+                                  for f in range(FRAMES)]))
+    return objs, hands, events
+
+
 def make_project(spec: dict):
     f = 0.95 * W
     intr = Intrinsics(width=W, height=H, fx=f, fy=f, cx=(W - 1) / 2, cy=(H - 1) / 2)
@@ -137,10 +206,18 @@ def make_project(spec: dict):
         eye = (0.1, -3.4, 1.6)
         look = target if spec["camera"] == "static" else (target[0] - 0.6 + 1.2 * s, target[1], target[2])
         cams.append(CameraKey(shot_frame=fr, pose=Pose(translation=eye, rotation=look_at_opencv(eye, look))))
+    if spec.get("scene"):
+        hobjs, hands, events = hands_scene(spec)
+        objects = [SceneObject(id="obj_floor", kind="set", size=(40, 20, 0.02), rest=TransformKey(time=0, pose=Pose(translation=(0, 0, -0.01)))),
+                   SceneObject(id="obj_wall", kind="set", size=(40, 0.2, 8), rest=TransformKey(time=0, pose=Pose(translation=(0, 6.0, 4.0))))] + hobjs
+        bk2 = None
+    else:
+        hands = None
     swing, toss = 30, 14
     hit = swing + 3
-    bk, bk2, events = ball_keys(toss, hit, spec["second_toss"])
-    objects = [
+    if not spec.get("scene"):
+        bk, bk2, events = ball_keys(toss, hit, spec["second_toss"])
+    objects = objects if spec.get("scene") else [
         SceneObject(id="obj_floor", kind="set", size=(40, 20, 0.02), rest=TransformKey(time=0, pose=Pose(translation=(0, 0, -0.01)))),
         SceneObject(id="obj_wall", kind="set", size=(40, 0.2, 8), rest=TransformKey(time=0, pose=Pose(translation=(0, 6.0, 4.0)))),
         SceneObject(id="obj_paddle", kind="rigid", size=PADDLE, keys=paddle_keys(swing), status="human_confirmed",
@@ -151,7 +228,8 @@ def make_project(spec: dict):
     if bk2:
         objects.append(SceneObject(id="obj_ball_2", kind="rigid", size=(BALL, BALL, BALL), keys=bk2,
                                    status="human_confirmed", look={"all": (0.85, 0.95, 0.2)}))
-    events.append({"object": "obj_paddle", "kind": "swing", "frame": swing, "end_frame": swing + 6})
+    if not spec.get("scene"):
+        events.append({"object": "obj_paddle", "kind": "swing", "frame": swing, "end_frame": swing + 6})
     project = Project(
         id=f"proj_{spec['id']}",
         source=SourceVideo(file=FileRef(id="file_video", path="video.mp4"), fps=Rational(num=FPS, den=1),
@@ -162,7 +240,8 @@ def make_project(spec: dict):
                         "objects": objects,
                         "shot_mapping": [ShotMapping(shot_id="shot_001", scene_time_start=0.0)]})
     meta = {"id": spec["id"], "camera_motion": spec["camera"], "frames": FRAMES, "fps": FPS, "size": [W, H],
-            "motion_blur": {"shutter_frames": 0.5}, "prop_events": events,
+            "motion_blur": {"shutter_frames": 0.5}, "prop_events": events, "scene": spec.get("scene"),
+            "hands": sorted(hands) if hands else None,
             "note": "ground truth for evaluation only; reconstruction must not read gt.json or gt_passes/"}
     return project, meta
 

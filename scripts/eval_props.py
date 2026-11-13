@@ -61,6 +61,49 @@ def ang(a, b):
     return float(np.degrees(np.arccos(np.clip(a @ b, -1, 1))))
 
 
+def eval_hands(d, meta, gt, video, cams, fps, objs):
+    """Clips with hands (throw / catch / put down): the generic sphere fit (analysis/prop_fit.fit_sphere_track)
+    with the hands' positions from gt.json + 2 cm noise standing in for a body's contact joints."""
+    from vrecon.analysis import prop_fit as F
+
+    t_n = len(video)
+    rng = np.random.default_rng(0)
+    contacts = {}
+    for h in meta["hands"]:
+        pts = np.array([object_pose(gt, objs[h], "shot_001", f)[1] for f in range(t_n)])
+        # the ball sits on top of / under the hand: the contact point is the hand's centre moved to the ball
+        contacts[h] = pts + rng.normal(0, 0.02 / np.sqrt(3), pts.shape)
+    gt_ball = np.array([object_pose(gt, objs["obj_ball"], "shot_001", f)[1] for f in range(t_n)])
+    bm = colour_masks(video, (20, 35, 120), (45, 255, 255))  # one ball in these clips
+    times = P.frame_times(video, fps)
+    s, diam = 1.0, objs["obj_ball"].size[0]
+    tracks = F.tracklets(bm, link=120, min_track=3)
+    out = {"tracklets": len(tracks)}
+    if not tracks:
+        return out
+    tr = {f: v for t in tracks for f, v in t.items()}
+    # contact points: the hand centre is HAND/2 + ball radius away from the ball; a real joint is offset too
+    # (prop_table "reach"); the fit allows it through hand_px
+    pos, held, segs = F.fit_sphere_track(tr, t_n, contacts, cams, times, fps, diam, s, hand_px=40, max_rms=12)
+    notes = F.carry_on(pos, segs, times, fps, None, s, diam / 2)
+    ok = np.all(np.isfinite(pos), 1)
+    err = np.linalg.norm(pos - gt_ball, axis=1)
+    held_f = sorted(held)
+    free_f = [f for f in range(t_n) if ok[f] and f not in held]
+    ev = {e["kind"]: e["frame"] for e in meta["prop_events"]}
+    found = []
+    for sg in segs:
+        if sg.get("model") != "held":
+            found.append({"free": sg["frames"], "model": sg["model"], "rms_px": sg["rms_px"], "kept": sg.get("kept"),
+                          "release": sg.get("release"), "catch": sg.get("catch"),
+                          "error_m_median": round(float(np.median(err[sg["frames"][0]:sg["frames"][1] + 1])), 3)})
+    out.update({"events (gt)": ev, "segments": found,
+                "held_frames": len(held_f), "held_error_m_median": round(float(np.median(err[held_f])), 3) if held_f else None,
+                "free_error_m_median": round(float(np.median(err[free_f])), 3) if free_f else None,
+                "placed": int(ok.sum()), "unseen_notes": notes})
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("clip")
@@ -77,6 +120,14 @@ def main() -> int:
     objs = {o.id: o for o in gt.reconstruction.objects}
     size = (video.shape[2], video.shape[1])
     rep = {"clip": d.name, "stand_ins": "camera from gt.json; grip = paddle pivot from gt.json + 2 cm noise"}
+    if meta.get("hands"):
+        rep.update(eval_hands(d, meta, gt, video, cams, fps, objs))
+        txt = json.dumps(rep, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o))
+        print(txt)
+        if a.out:
+            Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(a.out).write_text(txt + "\n", encoding="utf-8")
+        return 0
 
     # ---- ball (yellow)
     bm = colour_masks(video, (20, 35, 120), (45, 255, 255), follow=True)
@@ -131,6 +182,18 @@ def main() -> int:
             hi = min(s for s in sharp if s > f)
             lin = P._slerp_dir(est[lo], est[hi], (f - lo) / (hi - lo))
             errs["interpolated (no sweep)"].append(ang(lin, gt_dir[f]))
+    from vrecon.analysis.prop_fit import smooth_dirs
+
+    for sig in (1.0, 1.5):
+        sm = smooth_dirs(est / np.linalg.norm(est, axis=1, keepdims=True), sig)
+        e_sm = [ang(sm[f], gt_dir[f]) for f in range(t_n) if np.all(np.isfinite(sm[f]))]
+        turn = np.degrees(np.arccos(np.clip((sm[1:] * sm[:-1]).sum(1), -1, 1)))
+        rep[f"paddle smoothed sigma {sig}"] = {"dir_error_deg_median": round(float(np.median(e_sm)), 1),
+                                               "dir_error_deg_p90": round(float(np.percentile(e_sm, 90)), 1),
+                                               "jitter_deg_median": round(float(np.nanmedian(np.abs(np.diff(turn)))), 2)}
+    raw_turn = np.degrees(np.arccos(np.clip(((est[1:] / np.linalg.norm(est[1:], axis=1, keepdims=True)) *
+                                             (est[:-1] / np.linalg.norm(est[:-1], axis=1, keepdims=True))).sum(1), -1, 1)))
+    rep["paddle raw jitter_deg_median"] = round(float(np.nanmedian(np.abs(np.diff(raw_turn)))), 2)
     swing = next(ev for ev in meta["prop_events"] if ev["object"] == "obj_paddle")
     every = [ang(est[f], gt_dir[f]) if np.all(np.isfinite(est[f])) else None for f in range(t_n)]
     ok_e = [x for x in every if x is not None]
