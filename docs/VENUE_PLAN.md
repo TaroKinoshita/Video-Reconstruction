@@ -203,3 +203,19 @@ Rerun with the LLM (runs/viewer3, same start scenes and budget; syn_03-06 rerun 
 Looker -> viewer -> +align -> +hold: timing 7.8 -> 7.8 -> 6.75 -> 6.08 frames, IoU .836 -> .829 -> .822 -> .828.
 syn_05 13 -> 6; syn_04 stays (obj_00's position drifts before its start, the drift the silhouette keeps). One run
 per clip: single-clip differences of 1-2 frames are noise.
+
+## Phase E: outside pictures (fal, 2026-11-14)
+- `scripts/fal_outside.py`: GPT Image 2.5 Sunburst edit on fal (`openai/gpt-image-2.5/sunburst/edit`), source at the
+  centre of a 2.0 x 1.6 canvas (long side 1280), mask white = draw; `X-Fal-Store-IO: 0`, `sync_mode`. The model
+  redraws the source area shifted/rescaled (up to x1.17, ~90 px), so the result is aligned to the canvas by SIFT +
+  a similarity fit before the source pixels are pasted back (without it the net and lines doubled at the seam).
+  Logged per candidate: inside change, seam step, alignment. Styles natural / structure; quality medium (high
+  looked the same on both clips; slightly clearer corner stands on ven_01). 12 images, estimated $0.26.
+- `scripts/llm_venue.py --image-prompt fal --outside DIR`: the medium candidates + mask + placement go into the
+  model's folder; it picks one ("outside_choice" with the reason), drawn-only parts stay hypotheses.
+- ven_01, stands IoU on new views (one LLM run each, large run-to-run spread):
+  none .785 / .660 / .657 (mean .70); fal .548 / .748 / .752 (mean .68). No measurable gain; fal picked the
+  structure pictures. fal1's low score: worse categories (same_category .739).
+- Tennis, plausibility judge (good of 7): none 3 / 3, hand-made 2, fal 5 / 6 (both picked natural_medium_0).
+  The judge has no ground truth and earlier runs were judged earlier, so read as a hint, not a result.
+- LLM cost with pictures: $0.18-0.28 per layout (vs ~$0.11 without).
