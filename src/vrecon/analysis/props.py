@@ -25,6 +25,17 @@ G = 9.81
 
 # ---------------------------------------------------------------- common base
 
+def frame_times(video: np.ndarray, fps: float, repeat_thresh: float = 0.8) -> np.ndarray:
+    """Seconds per frame when some frames repeat the previous one (frame-rate padding, e.g. 24 -> 30 fps: every
+    5th frame a copy). A repeat (mean abs difference under repeat_thresh grey levels) gets its predecessor's time;
+    the other frames are spread evenly at the clip's real rate (unique frames / duration)."""
+    g = video.astype(np.int16)
+    rep = np.r_[False, [float(np.abs(g[i] - g[i - 1]).mean()) < repeat_thresh for i in range(1, len(g))]]
+    k = np.cumsum(~rep) - 1  # index among unique frames
+    dur = len(video) / fps
+    return k * (dur / max(int((~rep).sum()), 1))
+
+
 def mask_sharpness(gray: np.ndarray, mask: np.ndarray) -> float:
     """Variance of the Laplacian inside the mask (higher = sharper edges)."""
     if mask.sum() < 4:
@@ -110,7 +121,8 @@ def _skew(d):
 
 
 def fit_trajectory(obs: list[tuple[float, np.ndarray, np.ndarray]], model: str = "ballistic", g: float = G,
-                   depths: list[tuple[float, np.ndarray, np.ndarray, float, float]] | None = None):
+                   depths: list[tuple[float, np.ndarray, np.ndarray, float, float]] | None = None,
+                   vpriors: list[tuple[float, np.ndarray, float]] | None = None):
     """Least squares p(t) on the rays: obs = [(time s, camera centre, unit ray)]. model: 'ballistic'
     (p0 + v t - g t^2/2 z), 'linear' (p0 + v t) or 'still' (p0). The constraint (p(t) - c) x d = 0 is linear in
     the unknowns. A still or straight path seen by one still camera has no depth from the rays alone (the camera
@@ -146,6 +158,16 @@ def fit_trajectory(obs: list[tuple[float, np.ndarray, np.ndarray]], model: str =
                 bz = bz + d @ np.array([0, 0, g * tt * tt / 2])
             rows.append(A)
             rhs.append(np.array([bz * w]))
+        # vpriors [(time, velocity, sigma m/s)]: the velocity at that time is known roughly (a released ball leaves
+        # with the hand's velocity); rows count like a ray row ~5 cm off at sigma 1 m/s
+        for t, vp, sig in (vpriors or []) if n == 6 else []:
+            tt = t - t0
+            w = 0.05 / max(sig, 1e-3)
+            A = np.zeros((3, n))
+            A[:, 3:] = np.eye(3) * w
+            bv = np.asarray(vp, float) + (np.array([0, 0, g * tt]) if model == "ballistic" else 0)
+            rows.append(A)
+            rhs.append(bv * w)
         x, *_ = np.linalg.lstsq(np.concatenate(rows), np.concatenate(rhs), rcond=None)
         return {"t0": t0, "p0": x[:3], "v": x[3:6] if n == 6 else np.zeros(3), "model": model, "g": g}
 
@@ -173,7 +195,8 @@ def trajectory_at(prm: dict, t: float) -> np.ndarray:
 
 def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, ends=None, min_obs: int = 3,
              splits: list[int] | None = None, floor_z: float | None = 0.0, widths=None, diameter: float | None = None,
-             anchors: dict | None = None):
+             anchors: dict | None = None, models=("still", "ballistic", "linear"), times=None,
+             vpriors: dict | None = None):
     """Ball positions per frame from its 2D centres [T,2] (NaN = unseen) and cameras [(R, c, K)] per frame.
     Segments are split where the 2D motion changes (split_at_changes) or at `splits`; each is fitted with
     the model that explains it best (still / ballistic / linear, by rms on the rays, preferring the simpler).
@@ -184,6 +207,8 @@ def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, 
     stretch) and the real `diameter` (m), each seen frame adds a depth f*diameter/width (sigma from 1 px of width).
     Model choice is by rms angle: 'still' when under 1 px, else ballistic unless linear is clearly better."""
     t_n = len(centres)
+    # times (s) per frame: a video with repeated frames (pulldown) gives two frames the same moment
+    T = np.arange(t_n) / fps if times is None else np.asarray(times, float)
     seen = np.all(np.isfinite(centres), axis=1)
     bounds = sorted(set(split_at_changes(centres) if splits is None else splits))
     edges = [0] + [b for b in bounds if 0 < b < t_n] + [t_n]
@@ -192,12 +217,13 @@ def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, 
     info = []
     for a, b in zip(edges[:-1], edges[1:]):
         fr = [f for f in range(a, b) if seen[f]]
+        fr = [f for i, f in enumerate(fr) if i == 0 or T[f] > T[fr[i - 1]] + 1e-6]  # a repeated frame adds nothing
         if len(fr) < min_obs:
             continue
         obs = []
         for f in fr:
             R, c, K = cams[f]
-            obs.append((f / fps, c, pixel_ray(centres[f], R, c, K)))
+            obs.append((T[f], c, pixel_ray(centres[f], R, c, K)))
         use_blur = ends is not None and shutter > 0
         if use_blur:
             for f in fr:
@@ -209,8 +235,8 @@ def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, 
                 R, c, K = cams[f]
                 nxt = centres[min(f + 1, t_n - 1)] if seen[min(f + 1, t_n - 1)] else centres[f]
                 e0, e1 = (e[0], e[1]) if np.dot(e[1] - e[0], nxt - centres[f]) >= 0 else (e[1], e[0])
-                obs.append(((f - shutter / 2) / fps, c, pixel_ray(e0, R, c, K)))
-                obs.append(((f + shutter / 2) / fps, c, pixel_ray(e1, R, c, K)))
+                obs.append((T[f] - shutter / 2 / fps, c, pixel_ray(e0, R, c, K)))
+                obs.append((T[f] + shutter / 2 / fps, c, pixel_ray(e1, R, c, K)))
             obs.sort(key=lambda o: o[0])
         deps = []
         if widths is not None and diameter:
@@ -219,7 +245,7 @@ def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, 
                 if np.isfinite(wpx) and wpx >= 2:
                     R, c, K = cams[f]
                     z = K[0, 0] * diameter / wpx
-                    deps.append((f / fps, c, pixel_ray(centres[f], R, c, K), z, z / wpx))
+                    deps.append((T[f], c, pixel_ray(centres[f], R, c, K), z, z / wpx))
         # gravity fixes a falling path's scale on its own and the size is the weaker cue (a few pixels wide), so
         # the size depths go only to the paths the rays leave without depth (still, straight)
         # anchors {frame: (depth along the ray, sigma)}: the ball known to be at another object then (in the hand
@@ -228,22 +254,29 @@ def ball_fit(centres: np.ndarray, cams: list, fps: float, shutter: float = 0.0, 
         for f in fr:
             if anchors and f in anchors:
                 R, c, K = cams[f]
-                anc.append((f / fps, c, pixel_ray(centres[f], R, c, K), anchors[f][0], anchors[f][1]))
-        fits = {m: fit_trajectory(obs, m, depths=(anc if m == "ballistic" else deps + anc) or None)
-                for m in ("still", "ballistic", "linear")}
+                anc.append((T[f], c, pixel_ray(centres[f], R, c, K), anchors[f][0], anchors[f][1]))
+        # a short arc (a few frames) leaves gravity too little time to fix the depth: then the size depths help it too
+        short = len(fr) < 8
+        vp = [(T[f], vpriors[f][0], vpriors[f][1]) for f in fr if vpriors and f in vpriors]
+        fits = {m: fit_trajectory(obs, m, depths=((deps if short else []) + anc if m == "ballistic" else deps + anc) or None,
+                                  vpriors=vp or None)
+                for m in models}
         px = 1.0 / cams[fr[0]][2][0, 0]  # one pixel as an angle
-        best = "still" if fits["still"][1] < px else min(("ballistic", "linear"), key=lambda m: fits[m][1] * (1.0 if m == "ballistic" else 1.3))
+        moving = [m for m in ("ballistic", "linear") if m in fits]
+        best = "still" if "still" in fits and (fits["still"][1] < px or not moving) else min(
+            moving, key=lambda m: fits[m][1] * (1.0 if m == "ballistic" else 1.3))
         prm, rms = fits[best]
         lo, hi = fr[0], fr[-1]
         for f in range(lo, hi + 1):
-            p = trajectory_at(prm, f / fps)
+            p = trajectory_at(prm, T[f])
             if floor_z is not None and p[2] < floor_z:
                 p = p.copy()
                 p[2] = floor_z
             pos[f] = p
             how[f] = "trajectory" if seen[f] else "interpolated"
         info.append({"frames": [lo, hi], "model": best, "rms_px": round(rms / px, 2), "observations": len(obs), "depth_rows": len(deps), "anchors": len(anc),
-                     "blur_ends": use_blur, "v": [round(float(x), 2) for x in prm["v"]]})
+                     "blur_ends": use_blur, "v": [round(float(x), 2) for x in prm["v"]],
+                     "fit": {"t0": float(prm["t0"]), "p0": [float(x) for x in prm["p0"]], "v_exact": [float(x) for x in prm["v"]], "model": best, "g": prm["g"]}})
     return pos, how, info
 
 
@@ -424,5 +457,5 @@ def held_poses(masks: np.ndarray, grips: np.ndarray, cams: list, length: float, 
     return tips, sides, how, score
 
 
-__all__ = ["ball_fit", "fit_trajectory", "held_poses", "iou", "mask_sharpness", "pixel_ray", "ray_sphere",
+__all__ = ["frame_times", "ball_fit", "fit_trajectory", "held_poses", "iou", "mask_sharpness", "pixel_ray", "ray_sphere",
            "sharp_frames", "silhouette", "split_at_changes", "streak", "trajectory_at"]
