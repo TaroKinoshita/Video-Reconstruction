@@ -26,6 +26,7 @@ def main() -> int:
     ap.add_argument("out")
     ap.add_argument("projects", nargs="+")
     ap.add_argument("--moves", default="source,orbit30,orbit-30", help="scripts/camera_moves.py moves")
+    ap.add_argument("--width", type=int, default=480, help="width of each cell")
     ap.add_argument("--frame", type=int, default=-1, help="frame to draw (default: the last, where a move ends)")
     ap.add_argument("--kind", default="clay", help="colour pass: clay, look, id")
     ap.add_argument("--drop", default="")
@@ -67,7 +68,7 @@ def main() -> int:
                 from vrecon.scene.color_passes import identity_colors
 
                 x = load_frames(render_color_pass(a.kind, tmp, [frame], identity_colors(q) if a.kind == "id" else {}))[0]
-            x = cv2.resize(x, (480, int(480 * x.shape[0] / x.shape[1])))
+            x = cv2.resize(x, (a.width, int(a.width * x.shape[0] / x.shape[1])))
             cv2.putText(x, f"{tag} {mv}", (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
             row.append(x)
         grid.append(np.concatenate(row, 1))

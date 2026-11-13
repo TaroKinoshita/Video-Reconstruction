@@ -97,6 +97,15 @@ def build_venue(layout: dict, base, out_dir: str | Path, replace: set[str], look
             path, ext = mesh(oid, rows_along(p["front"], p["rows"], p["row_depth"], p["rise"], p["base_height"], p.get("aisles"),
                                              colour=looks.get("stands", (0.2, 0.35, 0.65))))
             objs.append(_obj(oid, "set", ext, (0, 0, 0), st, note, asset=path))
+            dens = p.get("crowd", layout.get("crowd", 0.0))
+            if dens:
+                from .generate import crowd_along
+
+                cid = f"obj_crowd_{pid}"
+                path, ext = mesh(cid, crowd_along(p["front"], p["rows"], p["row_depth"], p["rise"], p["base_height"],
+                                                  p.get("aisles"), density=float(dens), seed=len(objs)))
+                objs.append(_obj(cid, "set", ext, (0, 0, 0), "hypothesis",
+                                 f"{pid}: seated spectators, density {dens} (assumed; simple figures)", asset=path))
         elif t == "wall":
             oid = f"obj_wall_{pid}"
             path, ext = mesh(oid, wall_along(p["line"], p["height"], p["thickness"]))

@@ -8,6 +8,8 @@ Codex, ...) can continue a run.
 from __future__ import annotations
 
 import json
+
+import numpy as np
 from pathlib import Path
 
 from vrecon.metrics import match_objects
@@ -299,7 +301,7 @@ def align_timing(run_dir: str, obj: str, note: str = "") -> dict:
 HOLD_TOLERANCE = 0.002  # draft: a hold may cost this much silhouette loss (a few degrees of wobble barely shows)
 
 
-def hold_keys(keys, fps: float, start: int | None, rotation_only: bool = False):
+def hold_keys(keys, fps: float, start: int | None, rotation_only: bool = False, mean_position: bool = False):
     """Keys before `start` (frame) take the pose of the first key at or after it: still until the video shows
     motion. start None = never moves: every key takes the first key's pose."""
     if not keys:
@@ -312,6 +314,9 @@ def hold_keys(keys, fps: float, start: int | None, rotation_only: bool = False):
     for k in keys:
         if start is None or k.time * fps < start - 0.5:
             pose = k.pose.model_copy(update={"rotation": ref.pose.rotation}) if rotation_only else ref.pose
+            if mean_position:
+                pre = [q.pose.translation for q in keys if start is None or q.time * fps < start - 0.5]
+                pose = ref.pose.model_copy(update={"translation": tuple(float(x) for x in np.median(pre, axis=0))})
             out.append(k.model_copy(update={"pose": pose}))
         else:
             out.append(k)
@@ -332,8 +337,10 @@ def hold_still(run_dir: str, obj: str, note: str = "") -> dict:
     o = next(x for x in mgr.adopted.reconstruction.objects if x.id == rec)
     fps = mgr.adopted.source.fps.num / mgr.adopted.source.fps.den
     tries = []
-    for what, rot in (("pose", False), ("facing", True)):  # whole pose held, else only the facing (the wobble)
-        new = hold_keys(o.keys, fps, so, rotation_only=rot)
+    # whole pose held at the start key; at the median position before the start (drift smaller than the shift to
+    # the start key); else only the facing (the wobble)
+    for what, rot, mean in (("pose", False, False), ("pose at median position", False, True), ("facing", True, False)):
+        new = hold_keys(o.keys, fps, so, rotation_only=rot, mean_position=mean)
         if all(a.pose == b.pose for a, b in zip(new, o.keys)):
             tries.append({"held": what, "status": "no change"})
             continue

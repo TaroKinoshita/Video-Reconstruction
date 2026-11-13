@@ -59,7 +59,7 @@ def _pieces(p0, p1, aisles):
     return blocks, gaps
 
 
-SEAT_TOP, SEAT_RISER, STAIR = 1.35, 0.55, (0.62, 0.62, 0.6)
+SEAT_TOP, SEAT_RISER, STAIR = 1.35, 0.55, (0.85, 0.83, 0.78)  # stairs light: they read as ways in between blocks
 
 
 def _two_tone(boxes_kinds, colour):
@@ -177,6 +177,42 @@ def join_corners(stands: list, max_gap: float = 12.0, centre=(0.0, 0.0)) -> list
     return corners
 
 
+CLOTHES = [(0.85, 0.85, 0.85), (0.15, 0.2, 0.45), (0.75, 0.2, 0.2), (0.95, 0.85, 0.3), (0.2, 0.5, 0.3),
+           (0.1, 0.1, 0.12), (0.9, 0.55, 0.25), (0.45, 0.6, 0.85), (0.6, 0.6, 0.62)]
+HEAD = (0.55, 0.42, 0.33)
+
+
+def crowd_along(front, rows: int, row_depth: float, rise: float, base_height: float, aisles=None,
+                density: float = 0.3, seat: float = 0.55, seed: int = 0, centre=(0.0, 0.0)):
+    """Seated spectators as simple figures (body box + head box) on a stand's seat rows (not on the stairs):
+    one seat every `seat` metres, each taken with probability `density`. Clothing colours vary; a hypothesis
+    unless the picture shows the crowd. Returns (verts, faces, colours)."""
+    rng = np.random.default_rng(seed)
+    out = []
+    pts = [np.asarray(q, float) for q in front]
+    for p0, p1 in zip(pts[:-1], pts[1:]):
+        n = _outward(p0, p1, centre)
+        blocks, _ = _pieces(p0, p1, aisles)
+        for a, b in blocks:
+            L = float(np.linalg.norm(b - a))
+            if L < seat:
+                continue
+            u = (b - a) / L
+            k = int(L // seat)
+            for i in range(int(rows)):
+                top = base_height + (i + 1) * rise
+                for j in range(k):
+                    if rng.random() > density:
+                        continue
+                    c2 = a + u * (j + 0.5) * L / k + n * (i + 0.62) * row_depth
+                    col = CLOTHES[rng.integers(len(CLOTHES))]
+                    out.append((((c2[0], c2[1], top + 0.3), (0.2, 0.14, 0.3), u), col))
+                    out.append((((c2[0], c2[1], top + 0.72), (0.1, 0.1, 0.12), u), HEAD))
+    v, f = boxes_mesh([bx for bx, _ in out])
+    cols = np.repeat(np.array([c for _, c in out], float), 8, axis=0) if out else np.zeros((0, 3))
+    return v, f, cols
+
+
 def court_lines_boxes(width: float = 0.05):
     """The ITF court's white lines as thin boxes on the ground (2 mm above the court surface)."""
     from vrecon.analysis.court import COURT_LINES
@@ -209,4 +245,4 @@ def canopy_along(front, depth: float, height: float, thickness: float = 0.4, cen
     return boxes_mesh(boxes)
 
 
-__all__ = ["boxes_mesh", "canopy_along", "corner_fan", "court_lines_boxes", "join_corners", "rows_along", "wall_along"]
+__all__ = ["boxes_mesh", "canopy_along", "corner_fan", "court_lines_boxes", "crowd_along", "join_corners", "rows_along", "wall_along"]

@@ -73,6 +73,9 @@ def main() -> int:
     ap.add_argument("--quality", default="medium", choices=list(PRICE))
     ap.add_argument("--reference", default=None)
     ap.add_argument("--model", default="openai/gpt-image-2.5/sunburst/edit")
+    ap.add_argument("--images", default=None, help="NAME=PNG,... still renders (scripts/clay_views.py --kind look) "
+                    "instead of control videos; the top --crop-top pixels (the label) are cut off")
+    ap.add_argument("--crop-top", type=int, default=32)
     a = ap.parse_args()
     if not os.environ.get("FAL_KEY"):
         raise SystemExit("FAL_KEY is not set")
@@ -81,8 +84,14 @@ def main() -> int:
     ref = _read(a.reference) if a.reference else None
     log = {"prompt": PROMPT + (REF_NOTE if ref is not None else ""), "model": a.model, "quality": a.quality,
            "frame": a.frame, "reference": a.reference, "views": []}
-    for m in a.moves.split(","):
-        render = np.ascontiguousarray(read_video_rgb(str(Path(a.root) / f"controls_{m}" / "control_look.mp4"))[a.frame][..., ::-1])
+    items = ([tuple(x.split("=", 1)) for x in a.images.split(",")] if a.images else
+             [(m, None) for m in a.moves.split(",")])
+    for m, png in items:
+        if png:
+            render = _read(png)[a.crop_top:]
+            render = np.ascontiguousarray(render[: render.shape[0] // 16 * 16, : render.shape[1] // 16 * 16])
+        else:
+            render = np.ascontiguousarray(read_video_rgb(str(Path(a.root) / f"controls_{m}" / "control_look.mp4"))[a.frame][..., ::-1])
         _write(out / f"{m}_render.png", render)
         t0 = time.time()
         try:

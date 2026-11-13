@@ -50,5 +50,17 @@ def test_corners_join_and_aisles_are_stairs():
     assert corners[0]["status"] == "hypothesis"
     v, f, cols = rows_along([[-10, 20], [10, 20]], 2, 1.0, 0.5, 0.0, aisles={"every": 10.0, "width": 1.4},
                             colour=(0.2, 0.3, 0.6))
-    grey = np.all(np.isclose(cols, [0.62, 0.62, 0.6], atol=0.01), axis=1)
+    from vrecon.venue.generate import STAIR
+
+    grey = np.all(np.isclose(cols, STAIR, atol=0.01), axis=1)
     assert grey.any()  # stair steps in the aisle
+
+
+def test_crowd_sits_on_seat_rows_not_aisles():
+    from vrecon.venue.generate import crowd_along
+
+    v, f, c = crowd_along([[-20, 15], [20, 15]], 10, 0.85, 0.45, 1.0, {"every": 10.0, "width": 1.2}, density=1.0)
+    assert len(v) and len(c) == len(v)
+    assert v[:, 1].min() > 15 and v[:, 2].min() > 1.4  # behind the front, above the first row's top
+    aisle_x = [-10.0, 0.0, 10.0]
+    assert all(np.abs(v[:, 0] - x).min() > 0.3 for x in aisle_x)

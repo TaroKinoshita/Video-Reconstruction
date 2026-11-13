@@ -8,7 +8,41 @@ from __future__ import annotations
 
 import numpy as np
 
-BODY_PARTS = ("head", "upper", "lower")  # parts a character's `look` can name (besides "all")
+BODY_PARTS = ("head", "upper", "lower", "skin", "shoes")  # parts a character's `look` can name (besides "all")
+SKIN, SHOES = (0.72, 0.55, 0.45), (0.92, 0.92, 0.9)  # assumed when the look does not name them
+
+
+def clothed_part(joint: str) -> str:
+    """Which look part a skinned body vertex takes from the joint that moves it most: forearms, hands and shins
+    show skin, feet are shoes, the rest as body_part (shirt / shorts / head). A whole body in one measured colour
+    reads as bare skin (and an image model's content checker refuses it)."""
+    if any(k in joint for k in ("elbow", "wrist", "hand", "knee")):
+        return "skin"
+    if any(k in joint for k in ("ankle", "foot")):
+        return "shoes"
+    return body_part(joint)
+
+
+PLAIN = {"upper": (0.55, 0.56, 0.58), "lower": (0.25, 0.26, 0.3)}  # plain shirt / shorts
+
+
+def skin_like(c) -> bool:
+    """A measured clothing colour that is itself skin-toned (warm, r > g > b, moderate saturation): the median
+    then mostly sampled arms or legs (crossed arms over the torso, bare legs), not the clothes."""
+    r, g, b = (float(x) for x in c)
+    return r > g > b and 0.08 < r - b < 0.4 and r > 0.35 and (g - b) < (r - g) * 1.6 + 0.08
+
+
+def part_colour(look: dict, part: str, default):
+    if part in look:
+        if part in PLAIN and skin_like(look[part]):
+            return PLAIN[part]
+        return look[part]
+    if part == "skin":
+        return SKIN
+    if part == "shoes":
+        return SHOES
+    return look.get("all", default)
 
 
 def body_part(bone: str) -> str:

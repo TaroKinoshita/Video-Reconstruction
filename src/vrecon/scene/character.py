@@ -106,7 +106,9 @@ def build_character(project: Project, obj: SceneObject, shot: Shot, root: Path |
         for poly in mesh.polygons:
             poly.use_smooth = True
         main = bw.argmax(1)
-        look = np.array([obj.look.get(body_part(names[j]), obj.look.get("all", DEFAULT_LOOK)) for j in main], float)
+        from vrecon.analysis.appearance import clothed_part, part_colour
+
+        look = np.array([part_colour(obj.look, clothed_part(names[j]), DEFAULT_LOOK) for j in main], float)
         set_look(mesh, look)
         body = bpy.data.objects.new(obj.name or obj.id, mesh)
         scene.collection.objects.link(body)
