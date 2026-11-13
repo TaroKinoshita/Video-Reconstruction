@@ -72,6 +72,7 @@ def main() -> int:
     ap.add_argument("--ball-masks", default=None, help="masks for the ball from scripts/props_recut.py merge "
                     "(every label in it is a ball candidate); default: the obj_ball label of MASKS")
     ap.add_argument("--one-track", action="store_true", help="all ball blobs are one ball (anchored recut)")
+    ap.add_argument("--one-ball", action="store_true", help="the kept tracklets are one ball (one in play)")
     ap.add_argument("--balls", action="store_true", help="also put the fitted ball tracklets in the scene "
                     "(off by default: on tennis they are other balls and blobs, not the served ball)")
     ap.add_argument("--hand-px", type=float, default=50.0, help="ball blob this close to a hand: in the hand")
@@ -207,6 +208,13 @@ def main() -> int:
             mid = (lo + hi) // 2
             sg["mid_xyz"] = [round(float(x), 2) for x in pos[mid]] if np.all(np.isfinite(pos[mid])) else None
             info.append(sg)
+        # a prop's free path starts or ends at a contact: a tracklet never by a hand is another object alike
+        # (a ball lying elsewhere, a yellow sign) and is left out
+        if not held:
+            for sg in segs:
+                sg["kept"] = False
+                sg["why_left_out"] = "never by a hand"
+            continue
         if np.any(np.all(np.isfinite(pos), 1)):
             balls.append((k, pos, [sg for sg in segs if sg["kept"]]))
     rep["ball_tracklets"] = len(tracks)
@@ -221,11 +229,27 @@ def main() -> int:
         evidence=[Evidence(note=f"SAM 'tennis racket' mask; held at the {hand} wrist (GVHMR) +{GRIP_BEYOND_WRIST} m; "
                                 "pose fitted to the silhouette (analysis/props.held_poses); standard racket size")]
         + [Evidence(source_frames=[f], note=h) for f, h in enumerate(rhow) if h not in ("sharp",)][:400]))
+    if balls and a.one_ball:
+        merged = np.full((t_n, 3), np.nan)
+        segs_all = []
+        for k, pos_k, kept in balls:
+            ok = np.all(np.isfinite(pos_k), 1) & ~np.all(np.isfinite(merged), 1)
+            merged[ok] = pos_k[ok]
+            segs_all += kept
+        # frames where it was not seen: in the hand that held it most (a hypothesis, marked), so the ball neither
+        # hangs in the air nor vanishes
+        held_hand = "left"
+        for f in range(t_n):
+            if not np.all(np.isfinite(merged[f])):
+                merged[f] = hands[held_hand][f]
+        segs_all.append({"frames": [0, t_n - 1], "model": f"unseen frames: in the {held_hand} hand (hypothesis)",
+                         "rms_px": 0.0})
+        balls = [(0, merged, segs_all)]
     for k, pos_k, kept in (balls if a.balls else []):
         bkeys = [TransformKey(time=f / fps, pose=Pose(translation=tuple(float(x) for x in pos_k[f])))
                  for f in range(t_n) if np.all(np.isfinite(pos_k[f]))]
         objs.append(SceneObject(
-            id=f"obj_ball_{k:02d}", name=f"ball {k}", kind="rigid", size=(BALL * s,) * 3, keys=bkeys,
+            id="obj_ball" if a.one_ball else f"obj_ball_{k:02d}", name="ball" if a.one_ball else f"ball {k}", kind="rigid", size=(BALL * s,) * 3, keys=bkeys,
             status="estimated", look={"all": (0.85, 0.95, 0.2)},
             evidence=[Evidence(note="SAM 'tennis ball' mask, one tracklet; path fitted per segment (still / ballistic / "
                                     "straight) on the camera rays, depth from the standard size; spin not observed; "
@@ -234,7 +258,7 @@ def main() -> int:
                         note=f"{sg['model']}, rms {sg['rms_px']} px") for sg in kept]))
     project = project.model_copy(deep=True)
     project.reconstruction.objects = objs
-    for f in proj_path.parent.glob("*.npz"):
+    for f in [*proj_path.parent.glob("*.npz"), *proj_path.parent.glob("units.json")]:
         shutil.copyfile(f, out / f.name)
     save_project(project, out / "project.json")
 

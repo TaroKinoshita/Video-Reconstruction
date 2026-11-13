@@ -80,6 +80,8 @@ def main() -> int:
     ap.add_argument("--max-objects", type=int, default=4, help="fewer tracked objects use less VRAM")
     ap.add_argument("--quick", action="store_true", help="stop trying mover prompts at the first clean candidate "
                     "(at least one track, quality and steadiness >= QUICK_OK): each try is a full tracking pass")
+    ap.add_argument("--keep-raw", action="store_true", help="keep every raw track (no selection); for anchored "
+                    "recuts, where the caller picks by the body part (scripts/props_recut.py)")
     ap.add_argument("--set", dest="sets", action="append", default=[], metavar="PROMPT=LABEL")
     args = ap.parse_args()
 
@@ -129,7 +131,7 @@ def main() -> int:
             continue
         break
     (word, pf, found), chosen = best(candidates) if len(candidates) > 1 else candidates[0]
-    if len(candidates) > 1 or args.quick:
+    if (len(candidates) > 1 or args.quick) and not args.keep_raw:
         found = {k: found[k] for k in chosen["kept"]}
     for oid, m in sorted(found.items()):
         number = len(id_map) + 1
