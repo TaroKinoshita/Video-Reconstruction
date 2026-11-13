@@ -3,6 +3,8 @@
 {
   "site": "short description",
   "assumptions": ["free text: what is assumed and why"],
+  "join_corners": true,      stands that meet are joined by a curved corner of rows (a bowl); false keeps
+                             corners open (separate stands, as at many smaller venues). A hypothesis either way.
   "parts": [
     {"id": "court",  "type": "court",  "status": "standard"},                 ITF surface (+ run-off as ground)
     {"id": "net",    "type": "net",    "status": "standard"},                 12.8 m, 1.07 m at the posts

@@ -88,6 +88,41 @@ if os.environ.get("VRECON_LOOKER") == "1":  # option 2 prototype; off so conditi
         info = {k: r[k] for k in ("revision", "frames", "legend", "how_to_read", "issues")}
         return [json.dumps(info), Image(path=r["path"])]
 
+    from vrecon.run import view
+
+    def _img(r: dict, keys: tuple) -> list:
+        return [json.dumps({k: r[k] for k in keys if k in r}), Image(path=r["path"])]
+
+    @server.tool()
+    def run_view_overview(run_dir: str, n: int = 16) -> list:
+        """First look: n numbered frames over the whole clip and each object's speed over time. Then use
+        run_view_events to see where things happen, and run_view_clip to step through those frames."""
+        return _img(view.overview(run_dir, n), ("frames", "frame_count", "fps", "how_to_read"))
+
+    @server.tool()
+    def run_view_events(run_dir: str) -> dict:
+        """Machine-found moments (starts, stops, sharp turns, appear/disappear, occlusion, cuts), relative to the
+        background (camera pan removed), each with a frame range to look at. It can miss things."""
+        return view.events(run_dir)
+
+    @server.tool()
+    def run_view_clip(run_dir: str, start: int, end: int, step: int = 1, region: str = "") -> list:
+        """Consecutive frames start..end at the video's own rate (at most 16), numbered. region: an observed
+        object's label to crop and enlarge around it (spatial zoom), or empty for the whole picture."""
+        return _img(view.clip(run_dir, start, end, step, region=region or None), ("frames", "crop_px", "zoom"))
+
+    @server.tool()
+    def run_view_compare(run_dir: str, frames: list[int], region: str = "") -> list:
+        """The video (left) and the reconstruction's silhouettes over it (right) on the same frames (at most 12),
+        cropped like run_view_clip: where and when they differ."""
+        return _img(view.compare(run_dir, frames, region=region or None), ("frames", "crop_px", "legend", "revision"))
+
+    @server.tool()
+    def run_view_track(run_dir: str, obj: str, start: int = 0, end: int = -1) -> dict:
+        """Numbers to confirm what you saw: per frame the observed centroid and area, the reconstruction's
+        centroid, the offset, and the start/stop frames of each. obj: observed label or scene object id."""
+        return view.track(run_dir, obj, start, None if end < 0 else end)
+
     @server.tool()
     def run_fix(run_dir: str, issue: str, target: str = "", note: str = "") -> dict:
         """Fix one thing you saw. issue: camera | misplaced | wrong_size | wrong_facing | wrong_timing.

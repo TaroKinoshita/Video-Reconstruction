@@ -1,0 +1,29 @@
+import numpy as np
+
+from vrecon.run.view import find_events, onsets
+
+
+def test_onsets_ignore_jitter_and_occlusion():
+    t = 60
+    c = np.zeros((t, 2)) + [100.0, 50.0]
+    c += np.random.default_rng(0).normal(0, 0.4, (t, 2))  # mask-edge jitter on a still object
+    c[20:40, 0] += np.linspace(0, 80, 20)  # moves 80 px between frames 20 and 40
+    c[40:, 0] += 80
+    area = np.full(t, 1000.0)
+    c[10, 0] += 15  # a frame where something covered half of it: the centroid jumps
+    area[10] = 500
+    start, stop = onsets(c, area=area)
+    assert abs(start - 21) <= 2 and abs(stop - 39) <= 2
+
+
+def test_events_find_start_stop_and_skip_set_pieces():
+    t = 50
+    c = np.zeros((t, 2)) + [10.0, 10.0]
+    c[15:30, 0] += np.linspace(0, 60, 15)
+    c[30:, 0] += 60
+    tracks = {"obs_0": {"label": 1, "centroid": c, "area": np.full(t, 500.0)},
+              "obj_floor": {"label": 2, "centroid": c[::-1].copy(), "area": np.full(t, 9000.0)}}
+    ev = find_events(tracks, np.ones(t))
+    kinds = {(e["object"], e["kind"]) for e in ev}
+    assert ("obs_0", "starts moving") in kinds and ("obs_0", "stops") in kinds
+    assert not any(e["object"] == "obj_floor" for e in ev)
