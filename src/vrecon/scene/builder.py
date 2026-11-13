@@ -327,7 +327,29 @@ def render_frames(
     return paths
 
 
-def save_blend(path: str | os.PathLike[str]) -> Path:
+def show_look_in_viewport() -> None:
+    """Make the saved file open with the appearance colours visible: the 'look' attribute is each mesh's active
+    colour, and every 3D view draws solid shading with attribute colours (the colours are vertex attributes, so
+    the default solid view shows plain grey)."""
+    for me in bpy.data.meshes:
+        attr = me.color_attributes.get(LOOK_ATTR)
+        if attr is not None:
+            me.color_attributes.active_color = attr
+            me.color_attributes.render_color_index = me.color_attributes.active_color_index
+    for screen in bpy.data.screens:
+        for area in screen.areas:
+            if area.type != "VIEW_3D":
+                continue
+            for space in area.spaces:
+                if space.type == "VIEW_3D":
+                    space.shading.type = "SOLID"
+                    space.shading.color_type = "VERTEX"
+    bpy.context.scene.display.shading.color_type = "VERTEX"
+
+
+def save_blend(path: str | os.PathLike[str], show_look: bool = True) -> Path:
+    if show_look:
+        show_look_in_viewport()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(path.resolve()))

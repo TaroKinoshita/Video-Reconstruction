@@ -68,3 +68,41 @@ def test_seated_figure_and_steps():
     assert rows == round(8 * np.sin(t) / 0.45)
     w = v @ r.T  # local -> world offsets
     assert abs(np.ptp(w[:, 2]) - 8 * np.sin(t)) < 1e-6
+
+
+def test_enclose_pushes_copies_outside():
+    from vrecon.run.complete import enclose
+    from vrecon.schema import Pose, Project, Rational, SceneObject, Shot, SourceVideo, TransformKey
+    from vrecon.schema import FileRef
+
+    wall = SceneObject(id="obj_wall", kind="set", size=(10.0, 0.1, 3.0),
+                       rest=TransformKey(time=0.0, pose=Pose(translation=(0.0, 5.0, 1.5))))
+    p = Project(id="proj_t", source=SourceVideo(file=FileRef(id="file_v", path="v.mp4"), fps=Rational(num=24, den=1),
+                                                frame_count=10, width=64, height=64),
+                shots=[Shot(id="shot_001", start=0, end=10, transition_from_previous="first")],
+                reconstruction={"objects": [wall]})
+    # the camera stands at y = -8: the 180 deg copy (y = -5) would stand in front of it; it must go behind
+    q, r = enclose(p, (0.0, 0.0, 0.0), ["obj_wall"], contain=[np.array([0.0, -8.0, 1.5])], margin=1.0)
+    back = next(o for o in q.reconstruction.objects if o.id == "obj_wall_encl180")
+    assert back.rest.pose.translation[1] <= -9.0 + 1e-6 and back.status == "assumed"
+    side = next(o for o in q.reconstruction.objects if o.id == "obj_wall_encl090")
+    assert abs(side.rest.pose.translation[0] + 5.0) < 1e-6  # turned +90: the wall at +y goes to -x
+
+
+def test_camera_moves():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from camera_moves import apply_move
+
+    r = np.array([[1.0, 0, 0], [0, 0, 1], [0, -1, 0]])  # looking along +y
+    c, pivot = np.array([0.0, -10.0, 1.5]), np.zeros(3)
+    r2, c2 = apply_move(r, c, "orbit90", 1.0, pivot, 1.0)
+    assert np.allclose(c2, [10.0, 0.0, 1.5]) and np.allclose(r2[:, 2], [-1.0, 0, 0])
+    _, c3 = apply_move(r, c, "dolly50", 1.0, pivot, 1.0)
+    assert np.allclose(c3, [0.0, -5.0, 1.5])
+    r4, c4 = apply_move(r, c, "crane5", 1.0, pivot, 1.0)
+    assert np.allclose(c4, [0.0, -10.0, 6.5]) and r4[2, 2] < 0  # risen and looking down
+    r5, _ = apply_move(r, c, "crane5", 0.0, pivot, 1.0)
+    assert np.allclose(r5, r)

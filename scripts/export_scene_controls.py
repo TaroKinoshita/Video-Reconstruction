@@ -10,8 +10,7 @@ ROOT/stands_steps.npz. OUT_DIR/project.json + scene.blend hold the finished scen
 Controls, per camera move, in OUT_DIR/controls_<move>/ (scene/controls.export_controls): the scene re-timed to
 24 fps and --frames frames (17n+5; object keys are in seconds, so they keep their timing), the picture --size
 (multiples of 32; the source intrinsics scaled to the new height and centred). Moves:
-    source    the source camera
-    orbitN    the source camera turning N degrees about the main character over the clip
+    any scripts/camera_moves.py move: source, orbitN, dollyN, craneN, combined with "+"
 --drop leaves objects out of the controls (the background reference mesh: it tears off the source view).
 """
 
@@ -34,14 +33,13 @@ def main() -> int:
     ap.add_argument("project")
     ap.add_argument("root")
     ap.add_argument("out")
-    ap.add_argument("--moves", default="source,orbit30")
+    ap.add_argument("--moves", default="source,orbit30,orbit90,dolly50,crane6")
     ap.add_argument("--size", default="800x704")
     ap.add_argument("--frames", type=int, default=243)
     ap.add_argument("--kinds", default="depth,canny,clay,id,look")
     ap.add_argument("--drop", default="obj_background_rest")
     ap.add_argument("--rise-m", type=float, default=0.45)
     a = ap.parse_args()
-    from coverage_scene import orbit
 
     from vrecon.analysis.proxies import stepped_mesh
     from vrecon.control.core import check_h3_constraints
@@ -82,20 +80,14 @@ def main() -> int:
                       cy=(h - 1) / 2 + (si.cy - (si.height - 1) / 2) * k)
     n = a.frames
     drop = set(filter(None, a.drop.split(",")))
+    from camera_moves import move_camera, pivot_of
+
     for move in a.moves.split(","):
-        deg = float(move.removeprefix("orbit")) if move.startswith("orbit") else 0.0
-        keys = []
-        for fr in sorted(set(range(0, n, 6)) | {n - 1}):
-            r, c, _ = camera_pose(src, fr / H3_FPS * fps_src)
-            ang = np.radians(deg * fr / (n - 1))
-            rz = np.array([[np.cos(ang), -np.sin(ang), 0], [np.sin(ang), np.cos(ang), 0], [0, 0, 1.0]])
-            c2 = rz @ (np.asarray(c) - pivot) + pivot
-            keys.append(CameraKey(shot_frame=fr, pose=Pose(translation=tuple(map(float, c2)),
-                                                           rotation=matrix_to_quat((rz @ np.asarray(r)).tolist()))))
+        cam_m = move_camera(src, move, pivot_of(p), s, n, H3_FPS, fps_src, intrinsics=intr)
         d = p.model_dump(mode="json")  # changed together, then validated once (fields are checked on assignment)
         d["shots"] = [{**d["shots"][0], "start": 0, "end": n}]
         d["source"].update({"fps": {"num": H3_FPS, "den": 1}, "frame_count": n, "width": w, "height": h})
-        d["reconstruction"]["cameras"] = [src.model_copy(update={"intrinsics": intr, "keys": keys}).model_dump(mode="json")]
+        d["reconstruction"]["cameras"] = [cam_m.model_dump(mode="json")]
         d["reconstruction"]["objects"] = [o for o in d["reconstruction"]["objects"] if o["id"] not in drop]
         q = Project.model_validate(d)
         man = export_controls(q, out / f"controls_{move}", kinds=tuple(a.kinds.split(",")), root=root)

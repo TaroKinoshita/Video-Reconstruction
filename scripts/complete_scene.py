@@ -1,16 +1,20 @@
 """Plan step 4 on a reconstructed scene: rule-based completion for camera moves (run/complete.py), then coverage
-from those cameras to see what got filled.
+from those moves' last frames to see what got filled.
 
-    python scripts/complete_scene.py PROJECT.json OUT_DIR [--orbits 30,-30] [--frames 0,120,240] [--step 13]
+    python scripts/complete_scene.py PROJECT.json OUT_DIR [--moves orbit30,orbit-30,orbit90,orbit180,dolly50,crane6]
+        [--no-enclose] [--step 13]
 
-Rules applied (no judgement, no ground truth): every flat set piece without a mesh file (floor, stands, walls)
-that bounds the scene (nothing else beyond its plane, seen from the source camera)
-is grown in its plane to fill each new camera's view (extend_set_to_view, all sampled frames), but not into
-the source camera's picture (protect=source camera: the extension must not cover what was observed). The cameras are
-orbits about the main character (scripts/coverage_scene.orbit), standing for the camera move a user asks for.
-Writes OUT_DIR/project.json (completed; changed objects are status "assumed" with a "rule:" note),
-OUT_DIR/<before|after>/<view>/ coverage renders, OUT_DIR/completion.json (operations; per view the share of the
-picture with nothing in it (black) and the share showing unseen faces (red), before and after).
+Rules applied (no judgement, no ground truth):
+    enclose   boundary pieces facing the scene's centre (the middle of the people and things in it) are copied
+              around it at 90, 180, 270 deg: the sides the source camera never faced (run/complete.enclose)
+    extend    every flat set piece without a mesh file that bounds the scene (no person/thing beyond its plane,
+              seen from the source camera), copies included, grows in its plane to fill each move's view
+              (extend_set_to_view over sampled frames), but never in front of what the source camera saw
+              (protect_depth).
+The moves (scripts/camera_moves.py) stand for the camera moves a user asks for.
+Writes OUT_DIR/project.json (completed; changed and added objects are status "assumed" with a "rule:" note),
+OUT_DIR/<before|after>/<move>/ coverage renders of each move's last frame, OUT_DIR/completion.json (operations;
+per move the share of the picture with nothing in it (black) and showing unseen faces (red), before and after).
 """
 
 from __future__ import annotations
@@ -38,14 +42,15 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("project")
     ap.add_argument("out")
-    ap.add_argument("--orbits", default="30,-30")
-    ap.add_argument("--frames", default="0,120,240")
+    ap.add_argument("--moves", default="orbit30,orbit-30,orbit90,orbit180,dolly50,crane6",
+                    help="camera moves to build for (scripts/camera_moves.py)")
+    ap.add_argument("--no-enclose", action="store_true", help="do not copy the boundary pieces around")
     ap.add_argument("--step", type=int, default=13)
     a = ap.parse_args()
-    from coverage_scene import orbit
+    from camera_moves import move_camera
 
     from vrecon.metrics.poses import camera_pose
-    from vrecon.run.complete import extend_set_to_view
+    from vrecon.run.complete import enclose, extend_set_to_view
     from vrecon.scene.coverage import render_coverage
     from vrecon.schema import load_project, save_project
 
@@ -60,8 +65,10 @@ def main() -> int:
     pivot[2] = 0.0
     n = p.source.frame_count
     src = list(range(0, n, a.step))
-    frames = [int(f) for f in a.frames.split(",")]
-    views = {f"orbit{int(x):+d}": orbit(cam, float(x), pivot) for x in a.orbits.split(",")}
+    place = json.loads((root.parent / "scene" / "placement.json").read_text(encoding="utf-8"))
+    upm = float(place["scale_units_per_metre"])
+    fps = p.source.fps.num / p.source.fps.den
+    views = {mv: move_camera(cam, mv, pivot, upm, n, fps, fps, step=a.step) for mv in a.moves.split(",")}
 
     from vrecon.metrics.poses import _rot
 
@@ -100,22 +107,117 @@ def main() -> int:
         dep = np.load(Path(tmp) / "depth.npz")["depth"]
     pdepth = {f: dep[i] for i, f in enumerate(src)}
     done, ops = p, [{"op": "boundary_check", "grow": grow, "not_boundary": skipped}]
+    if not a.no_enclose:
+        # the sides the source never faced: boundary pieces facing the scene's centre (the middle of the things in
+        # it: people, net, chairs), copied around it
+        things = [np.array((x.keys[0] if x.keys else x.rest).pose.translation) for x in p.reconstruction.objects
+                  if x.kind != "set"]
+        centre = np.mean(things, 0)
+        centre[2] = 0.0
+        far = []
+        for oid in grow:
+            if oid == "obj_floor":
+                continue
+            o = next(x for x in p.reconstruction.objects if x.id == oid)
+            r = np.asarray(_rot(o.rest.pose.rotation))
+            nn = r[:, int(np.argmin(o.size))]
+            c = np.array(o.rest.pose.translation)
+            to_c = (centre - c) / np.linalg.norm(centre - c)
+            if abs(nn @ to_c) > np.cos(np.radians(45)):
+                far.append(oid)
+        contain = things + [np.array(camera_pose(v, f)[1]) for v in views.values() for f in (0, n - 1)]
+        contain += [np.array(camera_pose(cam, 0)[1])]
+        done, r = enclose(done, centre, far, contain=contain, margin=2.0 * upm)
+        # a copy may not show in front of what the source camera saw: pushed outwards in steps, else dropped
+        from vrecon.run.complete import box_face_points, covers_source
+
+        kept, moved, dropped = [], {}, []
+        for nid in r["new"]:
+            o = next(x for x in done.reconstruction.objects if x.id == nid)
+            t0 = np.array(o.rest.pose.translation)
+            u = np.r_[(t0 - centre)[:2] / np.linalg.norm((t0 - centre)[:2]), 0.0]
+            ok = False
+            for k in range(9):
+                t = t0 + u * k * 2.0 * upm
+                o.rest = o.rest.model_copy(update={"pose": o.rest.pose.model_copy(update={"translation": tuple(map(float, t))})})
+                if not covers_source(box_face_points(o, 48), cam, src, pdepth, empty_is_seen=True).any():
+                    ok = True
+                    break
+            if ok:
+                kept.append(nid)
+                if k:
+                    moved[nid] = round(k * 2.0, 1)
+            else:
+                dropped.append(nid)
+        done.reconstruction.objects = [x for x in done.reconstruction.objects if x.id not in dropped]
+        r.update({"new": kept, "pushed_out_m": moved, "dropped_covering_source": dropped})
+        ops.append(r)
+        grow = grow + r["new"]
     for name, v in views.items():
         for o in [o for o in done.reconstruction.objects if o.id in grow]:
-            done, r = extend_set_to_view(done, o.id, v, frames=src, protect=cam, protect_frames=src, protect_depth=pdepth)
+            done, r = extend_set_to_view(done, o.id, v, frames=src, protect=cam, protect_frames=src, protect_depth=pdepth,
+                                         empty_is_seen="_encl" in o.id)
             ops.append({"view": name, **r})
+    # final check by rendering the source view: an assumed piece that now covers something built there (by more
+    # than 0.1% of the pixels: edges) is grown again with empty source pixels counted as seen; if it still covers,
+    # it is put back to how it was before completion, or dropped if it is a copy.
+    # The analytic checks above miss overlaps between pieces grown in different moves.
+    def ids_at(proj):
+        build_scene(proj, root=root)
+        with tempfile.TemporaryDirectory() as tmp:
+            render_passes(tmp, shot_frames=chk, shaded=False)
+            idx = np.load(Path(tmp) / "index.npz")["index"]
+            mp = {int(k): v for k, v in json.loads((Path(tmp) / "id_map.json").read_text(encoding="utf-8")).items()}
+        lut = np.array([mp.get(i, "") for i in range(int(idx.max()) + 1)], dtype=object)
+        return lut[idx]
+
+    chk = [src[0], src[len(src) // 2], src[-1]]
+    before_ids = ids_at(p)
+    repaired = []
+    strict_tried = set()
+    for _ in range(8):
+        after_ids = ids_at(done)
+        bad = (before_ids != "") & (after_ids != before_ids)
+        names, counts = np.unique(after_ids[bad], return_counts=True)
+        culprits = [nm for nm, c in zip(names, counts) if c > 0.001 * bad.size and nm != ""]  # 0.1% of the pixels
+        culprits = [nm for nm in culprits if next(o for o in done.reconstruction.objects if o.id == nm).status == "assumed"]
+        if not culprits:
+            break
+        orig = {o.id: o for o in p.reconstruction.objects}
+        objs, regrow = [], []
+        for o in done.reconstruction.objects:
+            if o.id in culprits:
+                px = int(counts[list(names).index(o.id)])
+                if o.id in orig and o.id not in strict_tried:
+                    strict_tried.add(o.id)
+                    regrow.append(o.id)
+                    repaired.append({"id": o.id, "pixels": px, "action": "regrown strictly"})
+                    objs.append(orig[o.id])
+                    continue
+                repaired.append({"id": o.id, "pixels": px, "action": "reverted" if o.id in orig else "dropped"})
+                if o.id in orig:
+                    objs.append(orig[o.id])
+                continue
+            objs.append(o)
+        done.reconstruction.objects = objs
+        for oid in regrow:
+            for v in views.values():
+                done, _ = extend_set_to_view(done, oid, v, frames=src, protect=cam, protect_frames=src,
+                                             protect_depth=pdepth, empty_is_seen=True)
+    ops.append({"op": "source_view_repair", "repaired": repaired})
     save_project(done, out / "project.json")
 
     res = {"ops": ops, "views": {}}
     for name, v in views.items():
         row = {}
         for tag, proj in (("before", p), ("after", done)):
-            paths, _ = render_coverage(proj, out / tag / name, src, view=v, view_frames=frames, root=root)
+            paths, _ = render_coverage(proj, out / tag / name, src, view=v, view_frames=[n - 1], root=root)
             row[tag] = shares(paths)
         res["views"][name] = row
     (out / "completion.json").write_text(json.dumps(res, indent=1) + "\n", encoding="utf-8")
     print(json.dumps(res["views"], indent=1))
     print(json.dumps(ops[0]))
+    print(json.dumps([o for o in ops if o.get("op") == "enclose"]))
     return 0
 
 

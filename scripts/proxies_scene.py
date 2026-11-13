@@ -75,7 +75,9 @@ def main() -> int:
         n_, lab, st, _ = cv2.connectedComponentsWithStats(mk.astype(np.uint8), connectivity=8)
         return lab == 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA])) if n_ > 1 else mk
 
-    def ground_object(oid, num, name, depth_ratio):
+    s_units = float(place["scale_units_per_metre"])
+
+    def ground_object(oid, num, name, depth_ratio, person=False):
         """Box from the masks' floor contact per sampled frame (proxies.ground_box); one rest pose unless it moves."""
         per, capped = [], 0
         for i, f in enumerate(frames):
@@ -88,13 +90,33 @@ def main() -> int:
             # far away the ray to the feet runs almost along the floor, so a small floor error moves the foot point
             # metres (tennis line judges landed 1-4 m behind the wall); above the horizon (spectators in the
             # stands) it never meets the floor. Then the foot point goes at the 4RC points' distance instead.
-            if d4 is not None and (g is None or np.linalg.norm(g[0][:2] - c_[:2]) > 1.2 * d4):
+            if person and mk.any():
+                # people have a known size: 1.7 m standing, 1.25 m sitting (mask height / width under 2). The
+                # distance that gives the mask's height in pixels beats 4RC's depth far away, where its scale
+                # drifts (spectators came out a third of a person tall, 2026-11-13)
+                ys, xs = np.nonzero(mk)
+                hp, wp = ys.max() - ys.min() + 1, xs.max() - xs.min() + 1
+                h_m = 1.25 if hp / wp < 2.0 else 1.7
+                prior = float(k_[1, 1]) * h_m * s_units / hp
+                # but not behind the surface 4RC sees at the person's own pixels (a person partly hidden by seats
+                # has a short mask and would land far behind the stands; measured on tennis: 4RC and the prior
+                # agree at 31 m for a standing line judge, the prior is 2-4x too far for seated, half-hidden ones)
+                d4 = min(prior, d4) if d4 is not None else prior
+            dg = np.linalg.norm(g[0][:2] - c_[:2]) if g is not None else None
+            if d4 is not None and (g is None or (abs(dg - d4) > 0.3 * d4 if person else dg > 1.2 * d4)):
                 g2 = ground_box(mk, r_, c_, k_, depth_ratio, distance=d4)
                 if g2 is not None:
                     g, capped = g2, capped + 1
             if g is None:
                 continue
             ctr, yw, sz = g
+            if person and sz[2] < 0.8 * h_m * s_units:
+                # a short mask at a person's distance: only the top shows (behind seats or a wall). The figure
+                # keeps its top and gets a person's height; the hidden part stays hidden behind what covers it
+                top = ctr[2] + sz[2] / 2
+                hh = h_m * s_units
+                ctr = np.array([ctr[0], ctr[1], top - hh / 2])
+                sz = (max(sz[0], 0.45 * hh / 1.7), max(sz[1], 0.27 * hh / 1.7), hh)
             per.append((f, ctr, yw, sz))
         if len(per) < 3:
             return None, {"skipped": f"floor contact seen in {len(per)} sampled frames"}
@@ -178,7 +200,7 @@ def main() -> int:
     rep["people"]["ground"] = {}
     for k, v in others.items():  # floor contact first; the 4RC points' box when the feet are never seen
         oid = "obj_person_box_" + v.removeprefix("obs_").zfill(2)
-        o, r = ground_object(oid, k, v, depth_ratio=0.6)
+        o, r = ground_object(oid, k, v, depth_ratio=0.6, person=True)
         rep["people"]["ground"][v] = r
         if o is not None:
             pobjs = [x for x in pobjs if x.id != oid] + [o]

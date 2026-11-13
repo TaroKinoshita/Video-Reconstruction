@@ -1,6 +1,7 @@
-"""Clay renders of several projects from the source camera and orbits about the main character, in one grid.
+"""Colour-pass renders of several projects from camera moves (scripts/camera_moves.py), in one grid.
 
-    python scripts/clay_views.py OUT.png TAG=PROJECT.json [TAG=PROJECT.json ...] [--orbits 30,-30] [--frame 120]
+    python scripts/clay_views.py OUT.png TAG=PROJECT.json [TAG=PROJECT.json ...] [--moves source,orbit30] [--frame N]
+        [--kind clay|look|id]
         [--drop obj_background_rest]
 
 Mesh files resolve against each project's folder, or the nearest parent holding skeleton.npz. --drop leaves objects out (e.g. the reference mesh that
@@ -10,6 +11,7 @@ should not go into control videos for new cameras).
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -23,12 +25,13 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("out")
     ap.add_argument("projects", nargs="+")
-    ap.add_argument("--orbits", default="30,-30")
-    ap.add_argument("--frame", type=int, default=120)
+    ap.add_argument("--moves", default="source,orbit30,orbit-30", help="scripts/camera_moves.py moves")
+    ap.add_argument("--frame", type=int, default=-1, help="frame to draw (default: the last, where a move ends)")
+    ap.add_argument("--kind", default="clay", help="colour pass: clay, look, id")
     ap.add_argument("--drop", default="")
     a = ap.parse_args()
     import cv2
-    from coverage_scene import orbit
+    from camera_moves import move_camera, pivot_of
 
     from vrecon.control.core import load_frames
     from vrecon.scene.builder import build_scene
@@ -44,19 +47,24 @@ def main() -> int:
         # mesh files: the project's folder, or the nearest parent that has them (completion outputs sit in a subfolder)
         root = next((d for d in [path.parent, *path.parents] if (d / "skeleton.npz").exists()), path.parent)
         cam = p.reconstruction.cameras[0]
-        ch = next(o for o in p.reconstruction.objects if o.kind == "character")
-        pv = np.array((ch.keys[0] if ch.keys else ch.rest).pose.translation, float)
-        pv[2] = 0.0
+        pv = pivot_of(p)
+        place = next((d / "scene" / "placement.json" for d in path.parents if (d / "scene" / "placement.json").exists()), None)
+        upm = float(json.loads(place.read_text(encoding="utf-8"))["scale_units_per_metre"]) if place else 1.0
+        n = p.source.frame_count
+        fps = p.source.fps.num / p.source.fps.den
+        frame = a.frame if a.frame >= 0 else n - 1
         row = []
-        for deg in [0.0] + [float(x) for x in a.orbits.split(",")]:
+        for mv in a.moves.split(","):
             q = p.model_copy(deep=True)
-            q.reconstruction.cameras = [orbit(cam, deg, pv) if deg else cam]
+            q.reconstruction.cameras = [move_camera(cam, mv, pv, upm, n, fps, fps)]
             q.reconstruction.objects = [o for o in q.reconstruction.objects if o.id not in drop]
             build_scene(q, root=root)
             with tempfile.TemporaryDirectory() as tmp:
-                x = load_frames(render_color_pass("clay", tmp, [a.frame], {}))[0]
+                from vrecon.scene.color_passes import identity_colors
+
+                x = load_frames(render_color_pass(a.kind, tmp, [frame], identity_colors(q) if a.kind == "id" else {}))[0]
             x = cv2.resize(x, (480, int(480 * x.shape[0] / x.shape[1])))
-            cv2.putText(x, f"{tag} {deg:+.0f}", (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+            cv2.putText(x, f"{tag} {mv}", (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
             row.append(x)
         grid.append(np.concatenate(row, 1))
     ok, buf = cv2.imencode(".png", cv2.cvtColor(np.concatenate(grid, 0), cv2.COLOR_RGB2BGR))

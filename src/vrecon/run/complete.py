@@ -37,10 +37,50 @@ def _view_rays(cam: Camera, frame: int, samples: int = 9):
     return c, d @ r.T
 
 
+def covers_source(points: np.ndarray, protect: Camera, frames: list[int], depth: dict | None,
+                  depth_tol: float = 0.005, empty_is_seen: bool = False) -> np.ndarray:
+    """Per world point: would it show in front of what the source camera's depth shows (depth[f]; 0 = nothing
+    built there, which counts as covered only with empty_is_seen)? Without depth, any point in the picture counts.
+    empty_is_seen is for new pieces (enclose copies): an empty pixel of the source view still showed something
+    (often a masked thing cut out of the background), and a copy standing there would hide what grows into it."""
+    pw, ph = protect.intrinsics.width, protect.intrinsics.height
+    bad = np.zeros(len(points), bool)
+    for f in frames:
+        rr, cc, kk = camera_pose(protect, f)
+        q = (points - cc) @ np.asarray(rr)
+        z = np.where(q[:, 2] > 1e-9, q[:, 2], np.nan)
+        uu, vv = kk[0, 0] * q[:, 0] / z + kk[0, 2], kk[1, 1] * q[:, 1] / z + kk[1, 2]
+        inf = (uu >= 0) & (uu < pw) & (vv >= 0) & (vv < ph)
+        if depth is None:
+            bad |= inf
+            continue
+        dm = depth[f]
+        ui = np.clip(np.nan_to_num(uu * dm.shape[1] / pw).astype(int), 0, dm.shape[1] - 1)
+        vi = np.clip(np.nan_to_num(vv * dm.shape[0] / ph).astype(int), 0, dm.shape[0] - 1)
+        d = dm[vi, ui].astype(float)
+        bad |= inf & (((d > 0) & (z < d * (1 - depth_tol))) | ((d <= 0) & empty_is_seen))
+    return bad
+
+
+def box_face_points(o: SceneObject, n: int = 24) -> np.ndarray:
+    """A grid of points on a flat piece's plane (its two long axes), in world coordinates."""
+    r = np.asarray(_rot(o.rest.pose.rotation))
+    size = np.array(o.size, float)
+    thin = int(np.argmin(size))
+    ax = [a for a in range(3) if a != thin]
+    g = np.linspace(-0.5, 0.5, n)
+    u, v = np.meshgrid(g, g)
+    loc = np.zeros((u.size, 3))
+    loc[:, ax[0]] = u.ravel() * size[ax[0]]
+    loc[:, ax[1]] = v.ravel() * size[ax[1]]
+    return np.array(o.rest.pose.translation) + loc @ r.T
+
+
 def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[int] | None = None,
                        max_factor: float = 20.0, margin: float = 0.05, sideways_only: bool | None = None,
                        protect: Camera | None = None, protect_frames: list[int] | None = None,
-                       protect_depth: dict | None = None, depth_tol: float = 0.005) -> tuple[Project, dict]:
+                       protect_depth: dict | None = None, depth_tol: float = 0.005,
+                       empty_is_seen: bool = False) -> tuple[Project, dict]:
     """Grow a flat set piece in its plane so that it covers what `cam` sees of that plane (rays through a grid of
     the picture hitting the plane). The thin axis and the plane's position stay; the far side is capped at
     max_factor times the current size (a floor seen up to the horizon would grow without end).
@@ -96,25 +136,9 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     cut = {}
     if protect is not None:
         pf = protect_frames or sorted({k.shot_frame for k in protect.keys})
-        pw, ph = protect.intrinsics.width, protect.intrinsics.height
-        views = [(f, *camera_pose(protect, f)) for f in pf]
 
         def covers(w_: np.ndarray) -> np.ndarray:
-            bad = np.zeros(len(w_), bool)
-            for f, rr, cc, kk in views:
-                q = (w_ - cc) @ np.asarray(rr)
-                z = np.where(q[:, 2] > 1e-9, q[:, 2], np.nan)
-                uu, vv = kk[0, 0] * q[:, 0] / z + kk[0, 2], kk[1, 1] * q[:, 1] / z + kk[1, 2]
-                inf = (uu >= 0) & (uu < pw) & (vv >= 0) & (vv < ph)
-                if protect_depth is None:
-                    bad |= inf
-                    continue
-                dm = protect_depth[f]
-                ui = np.clip(np.nan_to_num(uu * dm.shape[1] / pw).astype(int), 0, dm.shape[1] - 1)
-                vi = np.clip(np.nan_to_num(vv * dm.shape[0] / ph).astype(int), 0, dm.shape[0] - 1)
-                d = dm[vi, ui].astype(float)
-                bad |= inf & (d > 0) & (z < d * (1 - depth_tol))
-            return bad
+            return covers_source(w_, protect, pf, protect_depth, depth_tol, empty_is_seen)
 
         inside = np.all(np.abs(local) <= size / 2 + 1e-9, axis=1)
         vis = covers(pts)
@@ -129,37 +153,52 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
         cut["dropped_hits"] = int((vis & ~inside).sum())
         if sideways_only:
             lo[keep], hi[keep] = -size[keep] / 2, size[keep] / 2
-        g = np.linspace(0, 1, 64)
-        # pass 1: each strip beside the piece (the other axis at its old extent); pass 2: the full strips, corners
-        # included, cutting the other direction back where a corner still covers the source view
-        for band_full, (A, B) in [(False, ax2), (False, ax2[::-1]), (True, ax2), (True, ax2[::-1])]:
-            for side in (0, 1):
-                orig = (-size[A] / 2, size[A] / 2)[side]
-                far = (lo[A], hi[A])[side]
-                if abs(far - orig) < 1e-12:
-                    continue
-
-                def strip_bad(f):
-                    edge = orig + f * (far - orig)
-                    uu, vv = np.meshgrid(g, g)
-                    loc = np.zeros((uu.size, 3))
-                    loc[:, A] = orig + uu.ravel() * (edge - orig)
-                    b0, b1 = (lo[B], hi[B]) if band_full else (-size[B] / 2, size[B] / 2)
-                    loc[:, B] = b0 + vv.ravel() * (b1 - b0)
-                    return covers(centre + loc @ r.T).any()
-
-                if not strip_bad(1.0):
-                    continue
-                a_, b_ = 0.0, 1.0
-                for _ in range(12):
-                    m_ = (a_ + b_) / 2
-                    a_, b_ = (m_, b_) if not strip_bad(m_) else (a_, m_)
-                new = orig + a_ * (far - orig)
-                cut[f"axis{A}_{'lo' if side == 0 else 'hi'}_kept{'_full' if band_full else ''}"] = round(a_, 3)
-                if side == 0:
-                    lo[A] = new
-                else:
-                    hi[A] = new
+        # exact check in the source picture: rays through a pixel grid hit the plane; those hits that would cover
+        # (in front of the source depth) and lie outside the old piece must stay outside the grown one. Cut the
+        # rectangle back along the axis where such a hit sticks out furthest, until none is inside. (A sampled
+        # check on the grown rectangle missed thin overlaps once pieces grew hundreds of metres.)
+        pw, ph = protect.intrinsics.width, protect.intrinsics.height
+        us, vs = np.meshgrid(np.arange(0, pw, 6) + 0.5, np.arange(0, ph, 6) + 0.5)
+        bad_loc = []
+        for f in pf:
+            rr, cc, kk = camera_pose(protect, f)
+            dd = np.stack([(us.ravel() - kk[0, 2]) / kk[0, 0], (vs.ravel() - kk[1, 2]) / kk[1, 1], np.ones(us.size)], 1) @ np.asarray(rr).T
+            den = dd @ n
+            okk = np.abs(den) > 1e-12
+            tt = ((centre - cc) @ n) / np.where(okk, den, 1.0)
+            hit = cc + tt[:, None] * dd
+            sel = okk & (tt > 0)
+            if sel.any():
+                bb = covers_source(hit[sel], protect, [f], protect_depth, depth_tol, empty_is_seen)
+                bad_loc.append((hit[sel][bb] - centre) @ r)
+        bad_loc = np.concatenate(bad_loc) if bad_loc else np.zeros((0, 3))
+        bad_loc = bad_loc[~np.all(np.abs(bad_loc) <= size / 2 + 1e-9, axis=1)]
+        cut["covering_hits"] = int(len(bad_loc))
+        for _ in range(256):
+            inside_new = np.all((bad_loc >= lo - 1e-12) & (bad_loc <= hi + 1e-12), axis=1)
+            if not inside_new.any():
+                break
+            q = bad_loc[inside_new]
+            best = None
+            for A in ax2:
+                for side in (0, 1):
+                    edge = size[A] / 2
+                    if (hi[A] if side else -lo[A]) <= edge + 1e-12:
+                        continue  # not grown on this side: nothing to cut
+                    out = (q[:, A] - edge) if side else (-edge - q[:, A])
+                    if (out > 0).any():
+                        # cut just inside the nearest offending hit beyond the old edge on this side
+                        new = (q[out > 0, A].min() if side else q[out > 0, A].max())
+                        loss = abs((hi[A] if side else lo[A]) - new)
+                        cand = (loss, A, side, new)
+                        best = cand if best is None or cand[0] < best[0] else best
+            if best is None:
+                break
+            _, A, side, new = best
+            if side:
+                hi[A] = max(new - 1e-9, size[A] / 2)
+            else:
+                lo[A] = min(new + 1e-9, -size[A] / 2)
         grow = (hi - lo) - size  # margin only on the grown part, so it does not creep into the source view
         span = size + grow * (1 + margin)
         span[thin] = size[thin]
@@ -230,4 +269,42 @@ def repeat(project: Project, obj_id: str, offset, count: int) -> tuple[Project, 
     return p, {"op": "repeat", "target": obj_id, "new": new_ids}
 
 
-__all__ = ["extend_set_to_view", "mirror", "repeat"]
+def enclose(project: Project, centre, ids: list[str], angles=(90.0, 180.0, 270.0), contain=None,
+            margin: float = 0.0) -> tuple[Project, dict]:
+    """Build the sides the camera never faced: copies of the boundary pieces (stands, back walls) turned about the
+    vertical axis through `centre` (rule "the surroundings go on around": a stadium ring, the walls of a room).
+    The copies keep their distance from the centre, but are pushed outwards (along the direction from the centre)
+    until every point of `contain` (the cameras, the people and things) is inside by `margin`: a copy turned
+    180 deg about the middle of the things otherwise stood between the camera and the player and filled the view
+    (tennis, 2026-11-13). The copies are status "assumed" with a "rule: enclose" note."""
+    from vrecon.scene.convert import matrix_to_quat
+    from vrecon.schema import Pose
+
+    p = project.model_copy(deep=True)
+    centre = np.asarray(centre, float)
+    new = []
+    for oid in ids:
+        o = next(x for x in p.reconstruction.objects if x.id == oid)
+        for ang in angles:
+            a = np.radians(ang)
+            rz = np.array([[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1.0]])
+            t = rz @ (np.array(o.rest.pose.translation) - centre) + centre
+            u = t[:2] - centre[:2]
+            u = np.r_[u / np.linalg.norm(u), 0.0]
+            if contain is not None:
+                need = max(float((np.asarray(x, float) - centre) @ u) for x in contain) + margin
+                now = float((t - centre) @ u) - 0.5 * float(np.min(o.size[:2]))
+                if now < need:
+                    t = t + u * (need - now)
+            q = matrix_to_quat((rz @ np.asarray(_rot(o.rest.pose.rotation))).tolist())
+            nid = f"{oid}_encl{int(ang):03d}"
+            p.reconstruction.objects.append(o.model_copy(deep=True, update={
+                "id": nid, "name": f"{o.name or o.id} (around {int(ang)})", "keys": [], "status": "assumed",
+                "rest": o.rest.model_copy(update={"pose": Pose(translation=tuple(map(float, t)), rotation=q)}),
+                "evidence": [Evidence(note=f"rule: enclose, copy of {oid} turned {ang:g} deg about "
+                                           f"{np.round(centre, 4).tolist()}")]}))
+            new.append(nid)
+    return p, {"op": "enclose", "centre": centre.tolist(), "sources": ids, "new": new}
+
+
+__all__ = ["box_face_points", "covers_source", "enclose", "extend_set_to_view", "mirror", "repeat"]

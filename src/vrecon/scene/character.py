@@ -94,39 +94,65 @@ def build_character(project: Project, obj: SceneObject, shot: Shot, root: Path |
             ebs[j].use_connect = False
     bpy.ops.object.mode_set(mode="OBJECT")
 
-    # body mesh: a cylinder from each joint's parent to the joint, bound to the parent bone; a box for the head
-    verts, faces, groups = [], [], []
-    for j, p in enumerate(parents):
-        if p < 0:
-            continue
-        v, f = _cylinder(rest[p], rest[j], _radius(names[p]))
-        base = len(verts)
-        verts += v
-        faces += [tuple(i + base for i in face) for face in f]
-        groups.append((names[p], range(base, base + len(v))))
-    h = names.index("head") if "head" in names else None
-    if h is not None:
-        v, f = _box(rest[h] + np.array([0, 0, 0.09]), (0.16, 0.19, 0.22))
-        base = len(verts)
-        verts += v
-        faces += [tuple(i + base for i in face) for face in f]
-        groups.append(("head", range(base, base + len(v))))
-    mesh = bpy.data.meshes.new(obj.id)
-    mesh.from_pydata(verts, [], faces)
-    mesh.update()
     from .builder import DEFAULT_LOOK, set_look
 
-    part_of = {bone: body_part(bone) for bone, _ in groups}
-    look = np.zeros((len(verts), 3))
-    for bone, idx in groups:
-        look[list(idx)] = obj.look.get(part_of[bone], obj.look.get("all", DEFAULT_LOOK))
-    set_look(mesh, look)
-    body = bpy.data.objects.new(obj.name or obj.id, mesh)
-    scene.collection.objects.link(body)
-    body[id_prop] = obj.id
-    for bone, idx in groups:
-        vg = body.vertex_groups.get(bone) or body.vertex_groups.new(name=bone)
-        vg.add(list(idx), 1.0, "REPLACE")
+    if "body_verts" in d.files:
+        # the person's SMPL-X body (gpu/observe/gvhmr_body_mesh.py), skinned on the same joints: Blender's armature
+        # deform with these weights is SMPL-X's linear blend skinning (without pose correctives)
+        bv, bf, bw = d["body_verts"].astype(float), d["body_faces"].astype(int), d["body_weights"].astype(float)
+        mesh = bpy.data.meshes.new(obj.id)
+        mesh.from_pydata(bv.tolist(), [], bf.tolist())
+        mesh.update()
+        for poly in mesh.polygons:
+            poly.use_smooth = True
+        main = bw.argmax(1)
+        look = np.array([obj.look.get(body_part(names[j]), obj.look.get("all", DEFAULT_LOOK)) for j in main], float)
+        set_look(mesh, look)
+        body = bpy.data.objects.new(obj.name or obj.id, mesh)
+        scene.collection.objects.link(body)
+        body[id_prop] = obj.id
+        for j, n in enumerate(names):
+            idx = np.nonzero(bw[:, j] > 1e-4)[0]
+            if len(idx) == 0:
+                continue
+            vg = body.vertex_groups.new(name=n)
+            for wv in np.unique(np.round(bw[idx, j], 4)):  # add() takes one weight per call: group equal weights
+                sel = idx[np.round(bw[idx, j], 4) == wv]
+                vg.add(sel.tolist(), float(wv), "REPLACE")
+        body_note = "SMPL-X body"
+    else:
+        # body mesh: a cylinder from each joint's parent to the joint, bound to the parent bone; a box for the head
+        verts, faces, groups = [], [], []
+        for j, p in enumerate(parents):
+            if p < 0:
+                continue
+            v, f = _cylinder(rest[p], rest[j], _radius(names[p]))
+            base = len(verts)
+            verts += v
+            faces += [tuple(i + base for i in face) for face in f]
+            groups.append((names[p], range(base, base + len(v))))
+        h = names.index("head") if "head" in names else None
+        if h is not None:
+            v, f = _box(rest[h] + np.array([0, 0, 0.09]), (0.16, 0.19, 0.22))
+            base = len(verts)
+            verts += v
+            faces += [tuple(i + base for i in face) for face in f]
+            groups.append(("head", range(base, base + len(v))))
+        mesh = bpy.data.meshes.new(obj.id)
+        mesh.from_pydata(verts, [], faces)
+        mesh.update()
+        part_of = {bone: body_part(bone) for bone, _ in groups}
+        look = np.zeros((len(verts), 3))
+        for bone, idx in groups:
+            look[list(idx)] = obj.look.get(part_of[bone], obj.look.get("all", DEFAULT_LOOK))
+        set_look(mesh, look)
+        body = bpy.data.objects.new(obj.name or obj.id, mesh)
+        scene.collection.objects.link(body)
+        body[id_prop] = obj.id
+        for bone, idx in groups:
+            vg = body.vertex_groups.get(bone) or body.vertex_groups.new(name=bone)
+            vg.add(list(idx), 1.0, "REPLACE")
+        body_note = "simple cylinders"
     body.parent = arm
     mod = body.modifiers.new("skeleton", "ARMATURE")
     mod.object = arm
@@ -150,5 +176,5 @@ def build_character(project: Project, obj: SceneObject, shot: Shot, root: Path |
         # the rig's unscaled space
         pbs[root_j].location = Vector(np.array(key.pose.translation) / sc - rest[root_j])
         pbs[root_j].keyframe_insert("location", frame=frame)
-    report.warnings.append(f"{obj.id}: skeleton with {len(names)} joints, {len(obj.keys)} frames (body = simple cylinders)")
+    report.warnings.append(f"{obj.id}: skeleton with {len(names)} joints, {len(obj.keys)} frames (body = {body_note})")
     return True
