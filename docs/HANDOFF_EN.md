@@ -14,8 +14,9 @@ in the Japanese documents listed in section 10; this file points into them.
 - **An outside design review was done** (Claude Fable 5.2, commit `0a4d0f3`): `docs/REVIEW_INSTRUCTIONS.md`.
   It lists findings F-01..F-31, eight decisions for the user (D1..D8), work packages WP-0..WP-9, a stop/defer list,
   RQ1 protocol v2 and a V2V session runbook. Its section 0 says what was already done (scorer v2, schema 0.4.0).
-- **Next step: ask the user decisions D1..D8** (review section 6), in Japanese, one at a time, recommendation first;
-  record the answers as a new `docs/PLAN.md` section 16.6; then start WP-0. None of D1..D8 has been answered yet.
+- **D1..D8 answered on 2026-11-15**, recorded in `docs/PLAN.md` 16.6. All as recommended except D6 (keep the
+  12 stock real clips, no self-shot clips with truth) and D7 (`runs/` and `.venv` stay inside OneDrive, no
+  `VRECON_RUNS`). Next: WP-0 (`evaluation/RESULTS.md`).
 - The user's own wish was "finish the Blender scene before V2V" (done) and then Phase F (V2V on a rented GPU).
   The review recommends doing WP-1, WP-3 and WP-4 (CPU only) before the GPU session, and running Phase 1a first
   inside that same rental (D4). The user has not decided.
@@ -170,7 +171,8 @@ From the review (`docs/REVIEW_INSTRUCTIONS.md`), in its recommended order:
 - Stop/defer list (review section 8): stop fal outside pictures for layout, look/view tools for repair order,
   ray placement, MegaSaM/MoRe; defer venue polish, more sports, LLM-written prop tables, 2D layers, multi-cut.
 
-Older open items still true: GPT condition B for syn_03..06 to redo (credit limit); `evaluation/thresholds.yaml`
+Older open items still true (WP-0 found GPT condition B complete for all six clips, `runs/gpt/b/*/score.json`;
+the "redo syn_03..06" item is closed, see `evaluation/RESULTS.md`): `evaluation/thresholds.yaml`
 not frozen; no real test clips with truth; syn_04 camera translation; `docs/DIRECTION_OPTIONS.md` superseded in
 practice by the review's protocol v2 but not formally closed.
 
