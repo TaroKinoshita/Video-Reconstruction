@@ -160,13 +160,13 @@ class RunManager:
         self.rule = rule
         self.max_attempts = max_attempts
         self.history_path = self.run_dir / "history.jsonl"
-        self.attempts = sum(1 for _ in self.history_path.open()) if self.history_path.exists() else 0  # resumable
+        self.attempts = sum(1 for _ in self.history_path.open(encoding="utf-8")) if self.history_path.exists() else 0  # resumable
         self.adopted = load_project(self.project_path)
         self.metrics = evaluate(self.adopted)
 
     def _log(self, outcome: Outcome, proposal: Proposal) -> Outcome:
         rec = {"outcome": outcome.model_dump(mode="json"), "proposal": proposal.model_dump(mode="json")}
-        with self.history_path.open("a") as fh:
+        with self.history_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(rec) + "\n")
         return outcome
 

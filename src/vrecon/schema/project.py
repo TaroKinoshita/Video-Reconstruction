@@ -28,7 +28,9 @@ from .common import (
     utcnow,
 )
 
-SCHEMA_VERSION = "0.3.0"  # 0.2.0: reconstruction.layers (2D layers); 0.3.0: SceneObject.look
+# 0.2.0: reconstruction.layers (2D layers); 0.3.0: SceneObject.look; 0.4.0: status vocabulary (observed /
+# standard / hypothesis; "assumed" -> "hypothesis"), SceneObject.spans, Evidence.kind, Scale.units_per_metre
+SCHEMA_VERSION = "0.4.0"
 
 
 # --- source and shots ---------------------------------------------------------
@@ -88,6 +90,22 @@ class TransformKey(Model):
     scale: Vec3 = (1.0, 1.0, 1.0)
 
 
+class StatusSpan(Model):
+    """Status of an object over part of its time, [start, end] in scene_time seconds: a ball seen in the hand,
+    then carried on by physics, then a guess after the strike. Outside every span the object's own status holds."""
+
+    start: float
+    end: float
+    status: Status
+    basis: str = ""  # e.g. "held (mask at the left wrist)", "physics from the release", "serve into the service box"
+
+    @model_validator(mode="after")
+    def _range(self) -> StatusSpan:
+        if self.end < self.start:
+            raise ValueError(f"span ends ({self.end}) before it starts ({self.start})")
+        return self
+
+
 class SceneObject(Model):
     id: Id
     name: str = ""
@@ -101,7 +119,15 @@ class SceneObject(Model):
     # Not the identity colour of ID passes, which is derived from the id and never stored.
     look: dict[str, tuple[float, float, float]] = Field(default_factory=dict)
     status: Status = "estimated"
+    spans: list[StatusSpan] = Field(default_factory=list)  # where the status differs over time; may be empty
     evidence: list[Evidence] = Field(default_factory=list)
+
+    def status_at(self, time: float) -> Status:
+        """Status at a scene_time: the last span that covers it, else the object's own status."""
+        for span in reversed(self.spans):
+            if span.start <= time <= span.end:
+                return span.status
+        return self.status
 
 
 class CameraKey(Model):

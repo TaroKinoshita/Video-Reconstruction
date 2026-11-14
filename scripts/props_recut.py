@@ -137,7 +137,7 @@ def merge(a) -> int:
         if not p.exists():
             print("missing", p)
             continue
-        z = np.load(p, allow_pickle=True)
+        z = np.load(p)
         local = json.loads(str(z["id_map"]))
         metas.append({"window": win["name"], **json.loads(str(z["meta"]))})
         remap = {}

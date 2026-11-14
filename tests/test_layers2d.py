@@ -74,7 +74,7 @@ def test_schema_0_1_0_projects_still_load(tmp_path):
     p = tmp_path / "p.json"
     p.write_text(json.dumps(raw), encoding="utf-8")
     proj = load_project(p)
-    assert proj.schema_version == "0.3.0" and proj.reconstruction.layers == []
+    assert proj.schema_version == "0.4.0" and proj.reconstruction.layers == []
 
 
 def test_triage_route_rule():

@@ -7,11 +7,12 @@ from .core import (
     match_objects,
     mask_iou,
     onset_frame,
+    onset_frame_relative,
     timing_errors,
     umeyama,
 )
 
 __all__ = [
     "anchored_reprojection_error", "camera_errors", "centroid_error", "match_objects", "mask_iou",
-    "onset_frame", "timing_errors", "umeyama",
+    "onset_frame", "onset_frame_relative", "timing_errors", "umeyama",
 ]

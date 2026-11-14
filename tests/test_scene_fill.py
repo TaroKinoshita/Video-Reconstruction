@@ -141,10 +141,10 @@ def test_rule_completions():
                  keys=[CameraKey(shot_frame=0, pose=Pose(translation=(0.0, -3.0, 2.0), rotation=q))])
     p2, r = extend_set_to_view(p, "obj_floor", cam, frames=[0])
     f2 = next(o for o in p2.reconstruction.objects if o.id == "obj_floor")
-    assert r["changed"] and f2.size[0] > 2.0 and f2.size[2] == pytest.approx(0.002) and f2.status == "assumed"
+    assert r["changed"] and f2.size[0] > 2.0 and f2.size[2] == pytest.approx(0.002) and f2.status == "hypothesis"
     assert f2.rest.pose.translation[2] == pytest.approx(-0.001)  # stays in its plane
     p3, r = mirror(p, "obj_box", point=(0, 0, 0), normal=(1, 0, 0))
     m = next(o for o in p3.reconstruction.objects if o.id == r["new"])
-    assert m.rest.pose.translation == pytest.approx((-2.0, 1.0, 0.25)) and m.status == "assumed"
+    assert m.rest.pose.translation == pytest.approx((-2.0, 1.0, 0.25)) and m.status == "hypothesis"
     p4, r = repeat(p, "obj_box", offset=(0, 1.0, 0), count=2)
     assert [o.rest.pose.translation[1] for o in p4.reconstruction.objects if o.id in r["new"]] == pytest.approx([2.0, 3.0])

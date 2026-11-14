@@ -202,3 +202,41 @@ def test_onset_definition_matches_keyframe():
     gt = gt_project()  # obj_a's starting key is at frame 4
     assert onset_frame(gt, "obj_a", "shot_001") == 4
     assert onset_frame(gt, "obj_b", "shot_001") is None  # never moves
+
+
+def test_lost_object_counts_as_zero(reference):
+    rec = gt_project()
+    rec.reconstruction.objects = [o for o in rec.reconstruction.objects if o.id != "obj_b"]
+    s = score(reference, rec)["summary"]
+    assert s["objects"] == 2 and s["matched"] == 1 and s["matched_share"] == pytest.approx(0.5)
+    assert s["mask_iou_mean"] == pytest.approx(1.0)  # over the matched objects: blind to the loss
+    assert s["mask_iou_all_mean"] == pytest.approx(0.5)
+    full = score(reference, gt_project())["summary"]
+    assert full["mask_iou_all_mean"] == pytest.approx(1.0) and full["matched_share"] == 1.0
+
+
+def test_relative_onset_ignores_wobble_and_units(reference):
+    from vrecon.metrics import onset_frame_relative
+
+    gt = gt_project()
+    assert onset_frame_relative(gt, "obj_a", "shot_001") == 4
+    assert onset_frame_relative(gt, "obj_b", "shot_001") is None  # never moves
+    big = transformed(gt, s=2.5, angle=0.7, t=(3.0, -1.0, 0.5))  # other units, same motion
+    assert onset_frame_relative(big, "obj_a", "shot_001") == 4
+
+    # still until frame 4, but wobbling: 2 cm and 2 degrees at frame 2
+    rec = gt_project()
+    a = next(o for o in rec.reconstruction.objects if o.id == "obj_a")
+    w = math.radians(2.0)
+    a.keys = [TransformKey(time=0.0, pose=a.keys[0].pose),
+              TransformKey(time=2 / 24, pose=Pose(translation=(-1.18, 0.5, 0.4), rotation=(math.cos(w / 2), 0, 0, math.sin(w / 2)))),
+              *a.keys]
+    rep = score(reference, rec)
+    assert rep["timing"]["obj_a"]["error_frames"] < 0  # the absolute rule takes the wobble for the start
+    assert rep["timing_relative"]["obj_a"]["error_frames"] == 0
+    assert rep["summary"]["timing_rel_error_frames_mean"] == 0 and rep["summary"]["timing_rel_found_share"] == 1.0
+
+    late = gt_project()
+    a = next(o for o in late.reconstruction.objects if o.id == "obj_a")
+    a.keys = [k.model_copy(update={"time": k.time + 3 / 24}) for k in a.keys]
+    assert score(reference, late)["timing_relative"]["obj_a"]["error_frames"] == 3

@@ -79,7 +79,7 @@ def hero(size, start: float) -> SceneObject:
             TransformKey(time=start, pose=Pose(translation=(-2.0, 1.0, z))),
             TransformKey(time=start + 3.0, pose=Pose(translation=(2.0, 1.0, z))),
         ],
-        status="assumed",
+        status="hypothesis",
     )
 
 
@@ -99,7 +99,7 @@ def scene(name: str, width: int, height: int, cam_path="dolly_in", hero_size=(0.
         reconstruction={
             "scale": {"source": "assumed", "note": "synthetic test scene, meters"},
             "cameras": [
-                Camera(id="cam_001", shot_id="shot_001", intrinsics=intr, keys=camera_keys(cam_path), status="assumed")
+                Camera(id="cam_001", shot_id="shot_001", intrinsics=intr, keys=camera_keys(cam_path), status="hypothesis")
             ],
             "objects": [
                 SceneObject(id="obj_floor", kind="set", size=(14, 14, 0.02), rest=TransformKey(time=0, pose=Pose(translation=(0, 0, -0.01)))),

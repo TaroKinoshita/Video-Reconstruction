@@ -41,7 +41,7 @@ def summary(p, s: float, cams: dict) -> dict:
             e["kind"] = "floor/wall/stands (flat)" if o.kind == "set" else "object"
             e["size"] = [round(float(v) / s, 2) for v in o.size]
             e["yaw_deg"] = round(math.degrees(2 * math.atan2(q[3], q[0])), 1)
-            if o.status == "assumed":
+            if o.status == "hypothesis":
                 e["note"] = "already extended by a rule (assumed)"
         objs.append(e)
 

@@ -22,6 +22,7 @@ from vrecon.metrics import (
     centroid_error,
     mask_iou,
     match_objects,
+    onset_frame_relative,
     timing_errors,
 )
 from vrecon.schema import Project, load_project
@@ -85,13 +86,26 @@ def score(reference_dir: str | Path, rec: Project, shot_id: str | None = None,
             report["anchored_reprojection"] = anchored_reprojection_error(
                 gt, rec, shot_id, depth, ref_index, ref_map, pairs)
     if meta.get("events"):
-        report["timing"] = timing_errors({e["object"]: e["onset_frame"] for e in meta["events"]}, rec, shot_id, pairs)
+        annotated = {e["object"]: e["onset_frame"] for e in meta["events"]}
+        report["timing"] = timing_errors(annotated, rec, shot_id, pairs)
+        # the same events by the relative rule (metrics.onset_frame_relative): independent of scene units and
+        # of wobble before the start. The reference onset is measured the same way on the ground truth when it
+        # is there, so the rule's small delay is on both sides.
+        ref_rel = {a: onset_frame_relative(gt, a, shot_id) for a in annotated} if gt is not None else annotated
+        report["timing_relative"] = timing_errors({a: v for a, v in ref_rel.items() if v is not None}, rec, shot_id,
+                                                  pairs, rule="relative")
 
     movers = [a for a in ref_map.values() if a not in set_ids]
+    matched = sum(a in pairs for a in movers)
     summary = {
         "objects": len(movers),
-        "matched": sum(a in pairs for a in movers),
+        "matched": matched,
+        "matched_share": matched / len(movers) if movers else None,
+        # over the matched objects only: a reconstruction that lost an object is not penalised here
         "mask_iou_mean": _mean(iou[a]["mean"] for a in movers if a in iou),
+        # over every reference object, a lost one counting 0 (docs/REVIEW_INSTRUCTIONS.md F-14)
+        "mask_iou_all_mean": float(np.mean([(iou[a]["mean"] or 0.0) if a in iou else 0.0 for a in movers]))
+        if movers else None,
         "centroid_error_mean": _mean(cen[a]["mean"] for a in movers if a in cen),
     }
     if "anchored_reprojection" in report:
@@ -106,8 +120,13 @@ def score(reference_dir: str | Path, rec: Project, shot_id: str | None = None,
         errs = [abs(v["error_frames"]) for v in report["timing"].values() if v["error_frames"] is not None]
         summary["timing_abs_error_frames_mean"] = float(np.mean(errs)) if errs else None
         summary["timing_missing"] = sum(v["error_frames"] is None for v in report["timing"].values())
+        rel = report["timing_relative"]
+        errs = [abs(v["error_frames"]) for v in rel.values() if v["error_frames"] is not None]
+        summary["timing_rel_error_frames_mean"] = float(np.mean(errs)) if errs else None
+        summary["timing_rel_found_share"] = len(errs) / len(rel) if rel else None
     report["summary"] = summary
     report["measures"] = {
+        "scorer_version": 2,  # 2: mask_iou_all_mean, matched_share, timing_relative added (older keys unchanged)
         "note": "image-space measures use rendered masks on both sides; 3D measures use ground truth "
                 "(evaluation only, PLAN.md 11.8)",
         "normalisation": "pixel distances are divided by the image diagonal",

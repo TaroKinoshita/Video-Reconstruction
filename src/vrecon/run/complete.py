@@ -1,6 +1,6 @@
 """Rule-based completion (plan step 4): fill what the video never showed with simple, named assumptions.
 
-Every operation returns a new project and a record; what it adds or changes gets status "assumed" and an evidence
+Every operation returns a new project and a record; what it adds or changes gets status "hypothesis" and an evidence
 note "rule: <name> ...", so it can be told apart from what the video showed (scene/coverage.py) and swapped out.
 Nothing here reads ground truth. Operations:
 
@@ -207,8 +207,8 @@ def extend_set_to_view(project: Project, obj_id: str, cam: Camera, frames: list[
     new_centre = centre + r @ mid
     o.size = tuple(float(x) for x in span)
     o.rest = o.rest.model_copy(update={"pose": o.rest.pose.model_copy(update={"translation": tuple(map(float, new_centre))})})
-    o.status = "assumed"
-    o.evidence = list(o.evidence) + [Evidence(note=f"rule: extend_set_to_view from camera {cam.id}, size {np.round(size, 4).tolist()} "
+    o.status = "hypothesis"
+    o.evidence = list(o.evidence) + [Evidence(kind="rule", note=f"rule: extend_set_to_view from camera {cam.id}, size {np.round(size, 4).tolist()} "
                                                    f"-> {np.round(span, 4).tolist()}")]
     return p, {"op": "extend_set_to_view", "target": obj_id, "changed": True, "size_before": size.tolist(),
                "size_after": span.tolist(), "protect_cut": cut, "capped": bool(np.any((np.abs(lo) >= cap - 1e-9) | (np.abs(hi) >= cap - 1e-9)))}
@@ -242,8 +242,8 @@ def mirror(project: Project, obj_id: str, point, normal, new_id: str | None = No
         return k.model_copy(update={"pose": Pose(translation=tuple(map(float, t)), rotation=q)})
 
     new = o.model_copy(deep=True, update={"id": new_id or f"{obj_id}_mirror", "name": f"{o.name or o.id} (mirror)",
-                                          "rest": key(o.rest), "keys": [key(k) for k in o.keys], "status": "assumed",
-                                          "evidence": [Evidence(note=f"rule: mirror of {obj_id} across plane through "
+                                          "rest": key(o.rest), "keys": [key(k) for k in o.keys], "status": "hypothesis",
+                                          "evidence": [Evidence(kind="rule", note=f"rule: mirror of {obj_id} across plane through "
                                                                      f"{point.round(4).tolist()} normal {normal.round(4).tolist()}")]})
     p.reconstruction.objects.append(new)
     return p, {"op": "mirror", "target": obj_id, "new": new.id}
@@ -264,7 +264,7 @@ def repeat(project: Project, obj_id: str, offset, count: int) -> tuple[Project, 
         nid = f"{obj_id}_rep{i:02d}"
         p.reconstruction.objects.append(o.model_copy(deep=True, update={
             "id": nid, "name": f"{o.name or o.id} (repeat {i})", "rest": key(o.rest), "keys": [key(k) for k in o.keys],
-            "status": "assumed", "evidence": [Evidence(note=f"rule: repeat of {obj_id}, offset {offset.round(4).tolist()} x{i}")]}))
+            "status": "hypothesis", "evidence": [Evidence(kind="rule", note=f"rule: repeat of {obj_id}, offset {offset.round(4).tolist()} x{i}")]}))
         new_ids.append(nid)
     return p, {"op": "repeat", "target": obj_id, "new": new_ids}
 
@@ -276,7 +276,7 @@ def enclose(project: Project, centre, ids: list[str], angles=(90.0, 180.0, 270.0
     The copies keep their distance from the centre, but are pushed outwards (along the direction from the centre)
     until every point of `contain` (the cameras, the people and things) is inside by `margin`: a copy turned
     180 deg about the middle of the things otherwise stood between the camera and the player and filled the view
-    (tennis, 2026-11-13). The copies are status "assumed" with a "rule: enclose" note."""
+    (tennis, 2026-11-13). The copies are status "hypothesis" with a "rule: enclose" note."""
     from vrecon.scene.convert import matrix_to_quat
     from vrecon.schema import Pose
 
@@ -299,9 +299,9 @@ def enclose(project: Project, centre, ids: list[str], angles=(90.0, 180.0, 270.0
             q = matrix_to_quat((rz @ np.asarray(_rot(o.rest.pose.rotation))).tolist())
             nid = f"{oid}_encl{int(ang):03d}"
             p.reconstruction.objects.append(o.model_copy(deep=True, update={
-                "id": nid, "name": f"{o.name or o.id} (around {int(ang)})", "keys": [], "status": "assumed",
+                "id": nid, "name": f"{o.name or o.id} (around {int(ang)})", "keys": [], "status": "hypothesis",
                 "rest": o.rest.model_copy(update={"pose": Pose(translation=tuple(map(float, t)), rotation=q)}),
-                "evidence": [Evidence(note=f"rule: enclose, copy of {oid} turned {ang:g} deg about "
+                "evidence": [Evidence(kind="rule", note=f"rule: enclose, copy of {oid} turned {ang:g} deg about "
                                            f"{np.round(centre, 4).tolist()}")]}))
             new.append(nid)
     return p, {"op": "enclose", "centre": centre.tolist(), "sources": ids, "new": new}

@@ -6,7 +6,7 @@ build_venue(layout, base, out_dir, replace)
     replace: ids of base objects the venue takes over (the old floor, net, stands, background ...).
     Parts become objects: court -> obj_court (+ obj_floor run-off unless a ground part), net -> obj_net,
     ground -> obj_floor, stand -> obj_stand_<id>, wall -> obj_wall_<id>, box -> obj_<category prefix>_<id>,
-    canopy -> obj_roof_<id>. Status: standard/observed -> "estimated", hypothesis -> "assumed"; the part's
+    canopy -> obj_roof_<id>. The part's status (standard / observed / hypothesis) is the object's status; the part's
     status and id go into the evidence note.
 """
 
@@ -30,12 +30,13 @@ NET = (12.8, 0.05, 1.07)
 def _obj(oid, kind, size, centre, status, note, asset=None, yaw=0.0, look=None):
     q = (float(np.cos(yaw / 2)), 0.0, 0.0, float(np.sin(yaw / 2)))
     return SceneObject(id=oid, name=oid.removeprefix("obj_"), kind=kind, size=tuple(float(x) for x in size),
-                       status="assumed" if status == "hypothesis" else "estimated",
+                       status=status,  # standard / observed / hypothesis are scene statuses since schema 0.4.0
                        rest=TransformKey(time=0.0, pose=Pose(translation=tuple(float(x) for x in centre), rotation=q)),
                        asset=FileRef(id="file_" + oid.removeprefix("obj_"), path=asset,
                                      media_type="application/x-vrecon-mesh+npz") if asset else None,
                        look={"all": tuple(look)} if look else {},
-                       evidence=[Evidence(note=f"venue layout part ({status}): {note}")])
+                       evidence=[Evidence(kind={"standard": "standard", "observed": "observation"}.get(status, "llm"),
+                                          note=f"venue layout part ({status}): {note}")])
 
 
 def build_venue(layout: dict, base, out_dir: str | Path, replace: set[str], looks: dict | None = None):

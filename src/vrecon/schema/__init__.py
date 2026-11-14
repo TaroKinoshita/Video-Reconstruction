@@ -24,6 +24,7 @@ from .project import (
     ShotMapping,
     ShotOverride,
     SourceVideo,
+    StatusSpan,
     TransformKey,
 )
 
@@ -32,6 +33,6 @@ __all__ = [
     "Artifact", "Camera", "CameraKey", "Event", "Evidence", "FileRef", "HumanEdit", "HumanLayer",
     "Intrinsics", "Layer2D", "LayerKey", "Lock", "Observation", "Pose", "Project", "Provenance", "Rational",
     "Reconstruction", "Scale", "SceneObject", "Shot", "ShotMapping", "ShotOverride",
-    "SourceVideo", "TransformKey",
+    "SourceVideo", "StatusSpan", "TransformKey",
     "json_schema", "load_project", "migrate", "save_project",
 ]

@@ -235,11 +235,43 @@ def onset_frame(project: Project, obj_id: str, shot_id: str, eps: float = 0.01) 
     return None
 
 
-def timing_errors(ref_onsets: dict[str, int], rec: Project, shot_id: str, pairs: dict[str, str]) -> dict[str, dict]:
+def onset_frame_relative(project: Project, obj_id: str, shot_id: str, share: float = 0.05, min_travel: float = 0.1,
+                         min_turn_deg: float = 5.0) -> int | None:
+    """Motion onset that does not depend on the scene's units or on wobble while the object stands still: the
+    last frame before the object is further from its frame-0 position than `share` of its largest displacement
+    in the shot (the rule run/view.onsets uses on the video). An object travels when that displacement exceeds
+    `min_travel` times its largest size; one that only turns (more than `min_turn_deg`) gets its onset from the
+    turn in the same way. None: it does neither.
+
+    onset_frame() counts 0.01 scene units or 0.6 degrees from frame 0 as the start, so a still object that
+    wobbles "starts" at frame 0, and the 0.01 means something else in every scene that is not in metres
+    (docs/REVIEW_INSTRUCTIONS.md F-15).
+    """
+    obj = next((o for o in project.reconstruction.objects if o.id == obj_id), None)
+    if obj is None:
+        return None
+    shot = next(s for s in project.shots if s.id == shot_id)
+    poses = [object_pose(project, obj, shot_id, f) for f in range(shot.end - shot.start)]
+    r0, t0, s0 = poses[0]
+    size = float(np.max(np.abs(np.asarray(obj.size or (1.0, 1.0, 1.0), float) * np.asarray(s0, float))))
+    dist = np.array([np.linalg.norm(np.asarray(t) - np.asarray(t0)) for _, t, _ in poses])
+    turn = np.array([_rot_angle_deg(np.asarray(r0).T @ np.asarray(r)) for r, _, _ in poses])
+    for values, least in ((dist, min_travel * size), (turn, min_turn_deg)):
+        if values.max() > least:
+            first = int(np.argmax(values > share * values.max()))
+            return max(first - 1, 0)
+    return None
+
+
+def timing_errors(ref_onsets: dict[str, int], rec: Project, shot_id: str, pairs: dict[str, str],
+                  rule: str = "absolute") -> dict[str, dict]:
+    """rule 'absolute': onset_frame (the original measure); 'relative': onset_frame_relative. The reference onsets
+    must come from the same rule (evaluate.score takes them from gt.json when it is there)."""
+    find = {"absolute": onset_frame, "relative": onset_frame_relative}[rule]
     out = {}
     for a, onset in ref_onsets.items():
         b = pairs.get(a)
-        got = onset_frame(rec, b, shot_id) if b else None
+        got = find(rec, b, shot_id) if b else None
         out[a] = {"matched": b, "ref_onset": onset, "rec_onset": got,
                   "error_frames": None if got is None else got - onset}
     return out

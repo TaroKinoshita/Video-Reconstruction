@@ -12,7 +12,7 @@ Rules applied (no judgement, no ground truth):
               (extend_set_to_view over sampled frames), but never in front of what the source camera saw
               (protect_depth).
 The moves (scripts/camera_moves.py) stand for the camera moves a user asks for.
-Writes OUT_DIR/project.json (completed; changed and added objects are status "assumed" with a "rule:" note),
+Writes OUT_DIR/project.json (completed; changed and added objects are status "hypothesis" with a "rule:" note),
 OUT_DIR/<before|after>/<move>/ coverage renders of each move's last frame, OUT_DIR/completion.json (operations;
 per move the share of the picture with nothing in it (black) and showing unseen faces (red), before and after).
 """
@@ -181,7 +181,7 @@ def main() -> int:
         bad = (before_ids != "") & (after_ids != before_ids)
         names, counts = np.unique(after_ids[bad], return_counts=True)
         culprits = [nm for nm, c in zip(names, counts) if c > 0.001 * bad.size and nm != ""]  # 0.1% of the pixels
-        culprits = [nm for nm in culprits if next(o for o in done.reconstruction.objects if o.id == nm).status == "assumed"]
+        culprits = [nm for nm in culprits if next(o for o in done.reconstruction.objects if o.id == nm).status == "hypothesis"]
         if not culprits:
             break
         orig = {o.id: o for o in p.reconstruction.objects}

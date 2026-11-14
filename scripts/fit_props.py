@@ -41,7 +41,7 @@ from vrecon.schema import Evidence, FileRef, Pose, SceneObject, TransformKey, lo
 
 def load_mask(spec: str, t_n: int):
     path, _, labels = spec.partition(":")
-    z = np.load(path, allow_pickle=True)
+    z = np.load(path)
     m = z["masks"]
     id_map = json.loads(str(z["id_map"]))
     want = [x for x in labels.split(",") if x] if labels else list(id_map.values())

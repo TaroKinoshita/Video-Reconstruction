@@ -188,3 +188,39 @@ def test_json_schema_exports():
     schema = json_schema()
     assert schema["title"] == "Project"
     assert "reconstruction" in schema["properties"]
+
+
+def test_0_3_0_assumed_becomes_hypothesis(tmp_path):
+    from vrecon.schema import load_project
+
+    box = {"id": "obj_a", "size": [1, 1, 1], "status": "assumed"}
+    raw = {"schema_version": "0.3.0", "id": "proj_x",
+           "source": {"file": {"id": "file_v", "path": "v.mp4"}, "fps": {"num": 24, "den": 1}, "frame_count": 10,
+                      "width": 64, "height": 48},
+           "shots": [{"id": "shot_001", "start": 0, "end": 10}],
+           "reconstruction": {"scale": {"source": "assumed", "note": "guess"},
+                              "objects": [box, {"id": "obj_b", "size": [1, 1, 1], "status": "estimated",
+                                                "evidence": [{"note": "old entry"}]}]}}
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    p = load_project(path)
+    a, b = p.reconstruction.objects
+    assert p.schema_version == SCHEMA_VERSION == "0.4.0"
+    assert a.status == "hypothesis" and b.status == "estimated" and b.evidence[0].kind is None
+    assert p.reconstruction.scale.source == "assumed" and p.reconstruction.scale.units_per_metre is None
+    with pytest.raises(ValueError):
+        Project.model_validate({**json.loads(p.model_dump_json()),
+                                "reconstruction": {"objects": [{**box, "status": "assumed"}]}})
+
+
+def test_status_spans():
+    from vrecon.schema import SceneObject, StatusSpan
+
+    o = SceneObject(id="obj_ball", size=(0.07, 0.07, 0.07), status="estimated", spans=[
+        StatusSpan(start=0.0, end=2.0, status="observed", basis="held (mask at the wrist)"),
+        StatusSpan(start=2.0, end=2.5, status="estimated", basis="physics from the release"),
+        StatusSpan(start=2.5, end=4.0, status="hypothesis", basis="where a serve goes")])
+    assert [o.status_at(t) for t in (1.0, 2.2, 3.0, 9.0)] == ["observed", "estimated", "hypothesis", "estimated"]
+    assert o.status_at(2.0) == "estimated"  # a shared boundary belongs to the later span
+    with pytest.raises(ValueError):
+        StatusSpan(start=2.0, end=1.0, status="observed")

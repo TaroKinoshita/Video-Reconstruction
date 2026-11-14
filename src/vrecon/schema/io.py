@@ -21,7 +21,22 @@ def _0_2_0_to_0_3_0(raw: dict[str, Any]) -> dict[str, Any]:
     return {**raw, "schema_version": "0.3.0"}  # SceneObject.look added, defaults to {}
 
 
-MIGRATIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {"0.1.0": _0_1_0_to_0_2_0, "0.2.0": _0_2_0_to_0_3_0}
+def _0_3_0_to_0_4_0(raw: dict[str, Any]) -> dict[str, Any]:
+    """Status "assumed" (things placed by a rule or a guess) is now "hypothesis". The new fields (spans,
+    Evidence.kind, Scale.units_per_metre / basis) have defaults. Scale.source keeps its own "assumed"."""
+    rec = raw.get("reconstruction")
+    if not isinstance(rec, dict):
+        return {**raw, "schema_version": "0.4.0"}
+    rec = dict(rec)
+    for group in ("objects", "cameras", "events", "layers"):
+        if isinstance(rec.get(group), list):
+            rec[group] = [{**x, "status": "hypothesis"} if isinstance(x, dict) and x.get("status") == "assumed" else x
+                          for x in rec[group]]
+    return {**raw, "reconstruction": rec, "schema_version": "0.4.0"}
+
+
+MIGRATIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    "0.1.0": _0_1_0_to_0_2_0, "0.2.0": _0_2_0_to_0_3_0, "0.3.0": _0_3_0_to_0_4_0}
 
 
 class SchemaVersionError(ValueError):

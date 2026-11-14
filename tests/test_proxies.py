@@ -84,7 +84,7 @@ def test_enclose_pushes_copies_outside():
     # the camera stands at y = -8: the 180 deg copy (y = -5) would stand in front of it; it must go behind
     q, r = enclose(p, (0.0, 0.0, 0.0), ["obj_wall"], contain=[np.array([0.0, -8.0, 1.5])], margin=1.0)
     back = next(o for o in q.reconstruction.objects if o.id == "obj_wall_encl180")
-    assert back.rest.pose.translation[1] <= -9.0 + 1e-6 and back.status == "assumed"
+    assert back.rest.pose.translation[1] <= -9.0 + 1e-6 and back.status == "hypothesis"
     side = next(o for o in q.reconstruction.objects if o.id == "obj_wall_encl090")
     assert abs(side.rest.pose.translation[0] + 5.0) < 1e-6  # turned +90: the wall at +y goes to -x
 

@@ -105,14 +105,29 @@ class Scale(Model):
 
     source: Literal["assumed", "estimated", "human"] = "assumed"
     note: str = ""
+    # scene units per metre, when known (1.0 = the scene is in metres). None = unknown: a scene from a 4D model
+    # or an LLM is in its own units, and thresholds in metres must not be applied to it.
+    units_per_metre: float | None = Field(default=None, gt=0)
+    basis: str = ""  # what fixed it, e.g. "court lines (ITF)", "feet on the floor, body model height"
 
 
-Status = Literal["estimated", "assumed", "human_confirmed"]
+# How much the video supports a thing (an object, a camera, an event, a layer, or a span of an object's time):
+#   observed         measured from the video (masks, points, lines) by a tool
+#   estimated        derived from observations by a model or a fit; the default
+#   standard         fixed by a published standard once the thing is recognised (court lines, net height)
+#   hypothesis       not seen: placed by a rule, physics, an LLM or a generated picture; consistent with the
+#                    video, not supported by it (was "assumed" up to schema 0.3.0)
+#   human_confirmed  a person decided it
+Status = Literal["observed", "estimated", "standard", "hypothesis", "human_confirmed"]
+
+# What kind of support an Evidence entry is. None = not recorded (data from before schema 0.4.0).
+EvidenceKind = Literal["observation", "standard", "rule", "physics", "llm", "generated_image", "human"]
 
 
 class Evidence(Model):
     """Why a value was adopted: which observation and frames support it."""
 
+    kind: EvidenceKind | None = None
     observation_id: Id | None = None
     shot_id: Id | None = None
     source_frames: list[int] = Field(default_factory=list)
