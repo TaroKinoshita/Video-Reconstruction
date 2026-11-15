@@ -1,11 +1,10 @@
 {
   "_note": "PLAN.md 11.6, 16.6. JSON syntax (valid YAML). Freeze in two commits: (1) this content, (2) status 'frozen' and frozen_commit = the hash of (1). Only then run any method on clips.held_out. Do not change after held-out results exist; if you must, record why in changes.",
-  "status": "draft",
-  "frozen_commit": null,
+  "status": "frozen",
+  "frozen_commit": "ff8c6b0",
   "scorer_version": 3,
   "tuning_sha256": "6eb6345d550c78b94e661ac18b52e490d905690af9c4bfb9f050cf1f83b93f25",
   "tuning_file": "src/vrecon/tuning.py",
-
   "primary_metric": "mask_iou_all_mean",
   "lower_is_better": {
     "mask_iou_all_mean": false,
@@ -20,17 +19,87 @@
   "headline_set": {
     "_note": "D3: reported together, none alone. mask_iou_mean (matched only) and timing_abs_error_frames_mean are secondary columns kept for comparison with older numbers.",
     "source_iou": "mask_iou_all_mean",
-    "novel_iou": ["novel_iou_10", "novel_iou_30"],
+    "novel_iou": [
+      "novel_iou_10",
+      "novel_iou_30"
+    ],
     "focal_error": "camera_focal_rel_mean",
-    "timing": ["timing_rel_error_frames_mean", "timing_rel_found_share"]
+    "timing": [
+      "timing_rel_error_frames_mean",
+      "timing_rel_found_share"
+    ]
   },
   "claims": {
     "_note": "RQ1 protocol v2 (PLAN 16.6). Cells: S0/S1/S2 = 4RC start with no / fixed-order / LLM-directed finishing; L0/L1/L2 = LLM-built start likewise. Each claim is decided by its measure only.",
-    "H1": {"claim": "the tools improve a scene whatever its origin", "measure": "mask_iou_all_mean", "comparisons": [["S0", "S1"], ["L0", "L1"]]},
-    "H2": {"claim": "the tools reduce run-to-run spread and failures of an LLM-built scene", "measure": "mask_iou_all_mean", "statistic": "SD over runs per clip; share of runs below the clip's S0", "comparisons": [["L0", "L1"]]},
-    "H3": {"claim": "a 4RC start is more consistent in 3D than an LLM-built start", "measure": ["novel_iou_10", "novel_iou_30", "camera_focal_rel_mean"], "comparisons": [["L1", "S1"]]},
-    "H4": {"claim": "letting the LLM choose repairs adds nothing over the fixed order in this action space", "measure": "mask_iou_all_mean", "comparisons": [["S1", "S2"], ["L1", "L2"]], "supported_when": "not separated on most clips"},
-    "H5": {"claim": "a schema-backed scene accepts the three scripted edits without repair more often", "measure": "edit_success_share", "comparisons": [["L0", "S1"], ["L1", "S1"]], "note": "measure defined in WP-7 step 4 (evaluation/phase1a/edits.json); not implemented at freeze"}
+    "H1": {
+      "claim": "the tools improve a scene whatever its origin",
+      "measure": "mask_iou_all_mean",
+      "comparisons": [
+        [
+          "S0",
+          "S1"
+        ],
+        [
+          "L0",
+          "L1"
+        ]
+      ]
+    },
+    "H2": {
+      "claim": "the tools reduce run-to-run spread and failures of an LLM-built scene",
+      "measure": "mask_iou_all_mean",
+      "statistic": "SD over runs per clip; share of runs below the clip's S0",
+      "comparisons": [
+        [
+          "L0",
+          "L1"
+        ]
+      ]
+    },
+    "H3": {
+      "claim": "a 4RC start is more consistent in 3D than an LLM-built start",
+      "measure": [
+        "novel_iou_10",
+        "novel_iou_30",
+        "camera_focal_rel_mean"
+      ],
+      "comparisons": [
+        [
+          "L1",
+          "S1"
+        ]
+      ]
+    },
+    "H4": {
+      "claim": "letting the LLM choose repairs adds nothing over the fixed order in this action space",
+      "measure": "mask_iou_all_mean",
+      "comparisons": [
+        [
+          "S1",
+          "S2"
+        ],
+        [
+          "L1",
+          "L2"
+        ]
+      ],
+      "supported_when": "not separated on most clips"
+    },
+    "H5": {
+      "claim": "a schema-backed scene accepts the three scripted edits without repair more often",
+      "measure": "edit_success_share",
+      "comparisons": [
+        [
+          "L0",
+          "S1"
+        ],
+        [
+          "L1",
+          "S1"
+        ]
+      ],
+      "note": "measure defined in WP-7 step 4 (evaluation/phase1a/edits.json); not implemented at freeze"
+    }
   },
   "decision_rule": {
     "_note": "F-16: replaces the old +-0.02 band. scripts/compare_conditions.py.",
@@ -42,21 +111,63 @@
   },
   "budget": {
     "_note": "per run. Cost in dollars and minutes is recorded as an outcome, not equalised (RQ1 protocol v2).",
-    "llm_start_minutes": 60, "llm_start_max_turns": 200,
+    "llm_start_minutes": 60,
+    "llm_start_max_turns": 200,
     "tools_repair_attempts": 30,
     "llm_directed_finish_extra_minutes": 30
   },
-  "attempts_per_condition": {"default": 3, "when_dev_sd_above_0.03": 5, "expected_5": ["L0", "L1", "L2"]},
+  "attempts_per_condition": {
+    "default": 3,
+    "when_dev_sd_above_0.03": 5,
+    "expected_5": [
+      "L0",
+      "L1",
+      "L2"
+    ]
+  },
   "masks": "SAM 3.1 for every cell; ground-truth stand-in masks are for machinery tests only and never appear in a results table",
   "clips": {
     "_note": "evaluation/synthetic_v2/split.json (scripts/make_synthetic_clips.py --set v2, seeded). syn_01..06 (v1) are the regression set: tuned on, reported as such.",
-    "dev": ["syn2_02", "syn2_04", "syn2_05", "syn2_07", "syn2_09", "syn2_12"],
-    "held_out": ["syn2_01", "syn2_03", "syn2_06", "syn2_08", "syn2_10", "syn2_11"],
-    "regression": ["syn_01", "syn_02", "syn_03", "syn_04", "syn_05", "syn_06"],
-    "real_stock": {"count": 12, "note": "D6: stock clips, no ground truth; only 'runs end to end' and truth-free measures; selection in evaluation/clips/SELECTION.md, not part of the claims"}
+    "dev": [
+      "syn2_02",
+      "syn2_04",
+      "syn2_05",
+      "syn2_07",
+      "syn2_09",
+      "syn2_12"
+    ],
+    "held_out": [
+      "syn2_01",
+      "syn2_03",
+      "syn2_06",
+      "syn2_08",
+      "syn2_10",
+      "syn2_11"
+    ],
+    "regression": [
+      "syn_01",
+      "syn_02",
+      "syn_03",
+      "syn_04",
+      "syn_05",
+      "syn_06"
+    ],
+    "real_stock": {
+      "count": 12,
+      "note": "D6: stock clips, no ground truth; only 'runs end to end' and truth-free measures; selection in evaluation/clips/SELECTION.md, not part of the claims"
+    }
   },
   "improvement_threshold": null,
   "changes": [
-    {"date": "2026-11-15", "what": "content filled for the freeze (WP-1 step 8): primary metric mask_iou_all_mean (was reprojection_error_mean), bootstrap decision rule, v2 clip split, tuning hash", "why": "docs/PLAN.md 16.6 (D1-D3), docs/REVIEW_INSTRUCTIONS.md F-14..F-17"}
+    {
+      "date": "2026-11-15",
+      "what": "content filled for the freeze (WP-1 step 8): primary metric mask_iou_all_mean (was reprojection_error_mean), bootstrap decision rule, v2 clip split, tuning hash",
+      "why": "docs/PLAN.md 16.6 (D1-D3), docs/REVIEW_INSTRUCTIONS.md F-14..F-17"
+    },
+    {
+      "date": "2026-11-15",
+      "what": "frozen at ff8c6b0 (content commit); held-out clips may now be run",
+      "why": "WP-1 step 8"
+    }
   ]
 }
