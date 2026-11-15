@@ -47,8 +47,23 @@ def _mean(values) -> float | None:
     return float(np.mean(vals)) if vals else None
 
 
+NOVEL_SUMMARY = {"novel_iou_10": ("orbit_l10",), "novel_iou_30": ("orbit_l30", "orbit_r30"),
+                 "novel_iou_back": ("back_1p5",)}
+
+
+def add_novel(report: dict, ref_dir: Path, rec: Project, shot_id: str | None = None) -> None:
+    """Novel-view scores (metrics/novel.py) into report["novel"] and the summary. A mover the reconstruction lost
+    counts 0 there already (novel_scores draws an empty mask for it)."""
+    nov = score_novel(ref_dir, rec, shot_id, pairs=report["pairs"])
+    report["novel"] = nov
+    for key, views in NOVEL_SUMMARY.items():
+        vals = [nov["views"][v]["iou_movers"] for v in views if v in nov["views"]]
+        vals = [v for v in vals if v is not None]
+        report["summary"][key] = float(np.mean(vals)) if vals else None
+
+
 def score(reference_dir: str | Path, rec: Project, shot_id: str | None = None,
-          rec_passes: tuple | None = None) -> dict:
+          rec_passes: tuple | None = None, novel: bool = False) -> dict:
     ref_dir = Path(reference_dir)
     ref_index = np.load(ref_dir / "gt_passes" / "index.npz")["index"]
     ref_map = _load_map(ref_dir / "gt_passes" / "id_map.json")
@@ -106,6 +121,7 @@ def score(reference_dir: str | Path, rec: Project, shot_id: str | None = None,
         # over every reference object, a lost one counting 0 (docs/REVIEW_INSTRUCTIONS.md F-14)
         "mask_iou_all_mean": float(np.mean([(iou[a]["mean"] or 0.0) if a in iou else 0.0 for a in movers]))
         if movers else None,
+        # centroid error exists only for matched objects; read it together with matched_share
         "centroid_error_mean": _mean(cen[a]["mean"] for a in movers if a in cen),
     }
     if "anchored_reprojection" in report:
@@ -120,13 +136,18 @@ def score(reference_dir: str | Path, rec: Project, shot_id: str | None = None,
         errs = [abs(v["error_frames"]) for v in report["timing"].values() if v["error_frames"] is not None]
         summary["timing_abs_error_frames_mean"] = float(np.mean(errs)) if errs else None
         summary["timing_missing"] = sum(v["error_frames"] is None for v in report["timing"].values())
+        summary["timing_found_share"] = len(errs) / len(report["timing"]) if report["timing"] else None
         rel = report["timing_relative"]
         errs = [abs(v["error_frames"]) for v in rel.values() if v["error_frames"] is not None]
         summary["timing_rel_error_frames_mean"] = float(np.mean(errs)) if errs else None
         summary["timing_rel_found_share"] = len(errs) / len(rel) if rel else None
     report["summary"] = summary
+    if novel and (ref_dir / "gt_passes" / "novel").is_dir() and gt is not None:
+        add_novel(report, ref_dir, rec, shot_id)
     report["measures"] = {
-        "scorer_version": 2,  # 2: mask_iou_all_mean, matched_share, timing_relative added (older keys unchanged)
+        # 2: mask_iou_all_mean, matched_share, timing_relative added (older keys unchanged)
+        # 3: timing_found_share; novel-view scores in the report when asked (novel=True)
+        "scorer_version": 3,
         "note": "image-space measures use rendered masks on both sides; 3D measures use ground truth "
                 "(evaluation only, PLAN.md 11.8)",
         "normalisation": "pixel distances are divided by the image diagonal",
@@ -134,8 +155,9 @@ def score(reference_dir: str | Path, rec: Project, shot_id: str | None = None,
     return report
 
 
-def score_blend(reference_dir: str | Path, blend: str | Path) -> dict:
-    """Score any .blend (e.g. an LLM's scene.blend) against a reference clip folder."""
+def score_blend(reference_dir: str | Path, blend: str | Path, novel: bool = False) -> dict:
+    """Score any .blend (e.g. an LLM's scene.blend) against a reference clip folder. Novel views render the
+    imported objects as boxes of their bounding-box size (the import keeps no meshes)."""
     from vrecon.scene.blend_import import import_blend
 
     ref_dir = Path(reference_dir)
@@ -147,7 +169,7 @@ def score_blend(reference_dir: str | Path, blend: str | Path) -> dict:
                   _load_map(Path(tmp) / "id_map.json"))
     if passes[0].shape[0] != t:
         raise ValueError(f".blend has {passes[0].shape[0]} frames, reference has {t}")
-    report = score(ref_dir, project, rec_passes=passes)
+    report = score(ref_dir, project, rec_passes=passes, novel=novel)
     report["reconstruction"] = str(blend)
     report["import_warnings"] = warnings
     return report

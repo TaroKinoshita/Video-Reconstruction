@@ -71,7 +71,7 @@ def main() -> int:
 
     w, h = (int(x) for x in a.size.split("x"))
     src = p.reconstruction.cameras[0]
-    fps_src = p.source.fps.num / p.source.fps.den
+    fps_src = p.source.fps.value
     ch = next(o for o in p.reconstruction.objects if o.kind == "character")
     pivot = np.array((ch.keys[0] if ch.keys else ch.rest).pose.translation, float)
     pivot[2] = 0.0

@@ -1,0 +1,31 @@
+{
+  "id": "syn2_08",
+  "set": "v2",
+  "seed": 108,
+  "camera_motion": "dolly",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "surfaces": {
+    "floor": "wood",
+    "wall": "brick"
+  },
+  "split": "held_out",
+  "events": [
+    {
+      "object": "obj_01",
+      "shape": "cylinder",
+      "onset_frame": 9,
+      "end_frame": 64,
+      "extra": "stop",
+      "hold": [
+        26,
+        42
+      ]
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json, gt_assets/ or gt_passes/"
+}

@@ -741,3 +741,18 @@ counted.
 - Numbers quoted from the documents were not recomputed, except the test count (156 passed) and the summary of
   the final tennis `project.json`.
 - `runs/` beyond the final tennis folder and the names of top-level folders was not inspected.
+
+Found on closer reading during M1 (2026-11-15):
+- **F-22, the body's motion.** "The body holds still for one frame in five" does not hold. GVHMR does not
+  repeat its output on repeated video frames: its root moves 0.47x the median step there, not 0. Sampled at
+  24 fps as the export does, 0.4% of control frames are still before removing the padding and 0.8% after, and
+  the unevenness of the steps is the same (0.20 / 0.20). `scripts/check_time_base.py`,
+  `runs/time_base/tennis.json`. What does hold: the padding is there (period 5, 54 of 62 phase frames are
+  copies), and removing it gives 249 frames at 24000/1001 fps, frame for frame an H3 clip. WP-2's acceptance
+  test passes; its step-4 expectation (about 20% still frames before) was wrong.
+- **Tennis frame rate.** The container's `r_frame_rate` is 60/1 while the 312 frames span 10.46 s (29.83 fps).
+  `video.new_project` used `r_frame_rate`, so importing this clip would have set 60 fps and transcoded it at 60
+  (doubling frames). Fixed: `video.frame_rate` uses the average rate when the two differ by more than 1%.
+- **L1 used ground-truth masks.** The option-4 runs (`runs/opt4`, `opt4_rep`: "B + tools .881") have
+  `mask_source: gt_stand_in` in their config. By section 9's rule they are machinery tests, not results; L1 must
+  be re-run with SAM masks before it enters a results table (`evaluation/RESULTS.md`).

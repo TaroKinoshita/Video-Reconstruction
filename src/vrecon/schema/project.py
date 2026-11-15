@@ -36,12 +36,26 @@ SCHEMA_VERSION = "0.4.0"
 # --- source and shots ---------------------------------------------------------
 
 
+class Cadence(Model):
+    """Frame-rate padding removed at import (docs/REVIEW_INSTRUCTIONS.md F-22, video.detect_cadence): the original
+    repeated one frame every `period` frames (e.g. 24 -> 30 fps). The project's source is the de-duplicated clip;
+    kept_frames[i] is the original frame index of source frame i."""
+
+    original: FileRef
+    original_fps: Rational
+    original_frame_count: int = Field(gt=0)
+    period: int = Field(gt=1)
+    phase: int = Field(ge=0)
+    kept_frames: list[int]
+
+
 class SourceVideo(Model):
     file: FileRef
     fps: Rational
     frame_count: int = Field(gt=0)
     width: int = Field(gt=0)
     height: int = Field(gt=0)
+    cadence: Cadence | None = None  # set when padded frames were removed at import
 
 
 Transition = Literal["first", "continuous", "time_jump", "same_moment_other_view", "unknown"]
@@ -376,3 +390,30 @@ class Project(Model):
             if a == "*" or b == "*" or a == b or b.startswith(a + ".") or a.startswith(b + "."):
                 return True
         return False
+
+
+def frame_time(project: Project, shot_frame: float, shot_id: str | None = None) -> float:
+    """Scene time (seconds) of a shot frame: the one place frames turn into seconds (docs/REVIEW_INSTRUCTIONS.md
+    F-22). Frames are the project's source frames, which are evenly spaced (padding is removed at import, see
+    SourceVideo.cadence)."""
+    shot_id = shot_id or project.shots[0].id
+    m = next((m for m in project.reconstruction.shot_mapping if m.shot_id == shot_id), None)
+    return (m.scene_time_start if m else 0.0) + project.source.fps.seconds(shot_frame)
+
+
+def time_frame(project: Project, time: float, shot_id: str | None = None) -> float:
+    """Inverse of frame_time (may be fractional)."""
+    shot_id = shot_id or project.shots[0].id
+    m = next((m for m in project.reconstruction.shot_mapping if m.shot_id == shot_id), None)
+    return project.source.fps.frames(time - (m.scene_time_start if m else 0.0))
+
+
+def source_frames_of(source: SourceVideo, n: int) -> list[int | None]:
+    """For per-frame data with n frames: the project's source frame of each, or None for a padded frame that was
+    removed at import. Data made on the original padded video (n == original frame count) is mapped through
+    cadence.kept_frames; data made on the project's source (n == frame_count) maps to itself."""
+    c = source.cadence
+    if c is None or n != c.original_frame_count:
+        return list(range(n))
+    where = {orig: i for i, orig in enumerate(c.kept_frames)}
+    return [where.get(i) for i in range(n)]

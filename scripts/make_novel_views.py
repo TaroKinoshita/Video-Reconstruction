@@ -65,7 +65,7 @@ def main() -> int:
             proj = gt.model_copy(deep=True)
             proj.reconstruction.cameras = [cam]
             out = (Path(clip) / "gt_passes" / "novel" / name).resolve()
-            build_scene(proj)
+            build_scene(proj, root=Path(clip))  # root: v2 movers are meshes in <clip>/gt_assets
             render_passes(out, shot_frames=fr, shaded=False)
             (out / "camera.json").write_text(json.dumps({"camera": cam.model_dump(mode="json"), "frames": fr,
                                                          "kind": kind, "value": value, "centre": centre.tolist()},

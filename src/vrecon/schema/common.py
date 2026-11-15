@@ -43,6 +43,13 @@ class Rational(Model):
     def seconds(self, frames: float) -> float:
         return frames * self.den / self.num
 
+    def frames(self, seconds: float) -> float:
+        return seconds * self.num / self.den
+
+    @property
+    def value(self) -> float:
+        return self.num / self.den
+
 
 def _check_quat(q: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
     norm = math.sqrt(sum(c * c for c in q))

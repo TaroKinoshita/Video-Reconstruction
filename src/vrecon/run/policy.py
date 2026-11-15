@@ -12,16 +12,17 @@ import numpy as np
 from vrecon.optimize import Param, apply_params, combined_loss, optimize
 
 from .manager import AcceptRule, RunManager
+from vrecon.tuning import CAMERA_GUARD, FOCAL_PROBE, FOCAL_MIN_RISE, MOVE_STEP, SIZE_STEP, YAW_STEP  # noqa: E402,F401  (tuned values, one place)
 
 # camera proposals are judged on camera evidence, and may not make the whole fit worse: otherwise a focal
 # change that pulls objects off their observations is adopted (syn_04, condition C trial 2026-11-09)
 # Tolerance: with objects still misplaced, the correct focal can first raise the whole loss a little (up to
 # +0.024 on the injected-error benchmark, syn_06); the harmful LLM focal changes raised it by about +0.1.
 # 0.03 is a draft value chosen on those six synthetic clips.
-CAMERA_GUARD = 0.03
+# CAMERA_GUARD: value in vrecon/tuning.py
 CAMERA_RULE = AcceptRule(primary="camera_loss", min_gain=1e-4, guards={"silhouette_loss": CAMERA_GUARD})
-FOCAL_PROBE = 0.1  # relative change of focal length used to test the evidence
-FOCAL_MIN_RISE = 0.001  # draft value: smallest loss rise on both sides that counts as evidence
+# FOCAL_PROBE: value in vrecon/tuning.py
+# FOCAL_MIN_RISE: value in vrecon/tuning.py
 
 
 def focal_is_weak(loss, found: float, probe: float = FOCAL_PROBE, min_rise: float = FOCAL_MIN_RISE) -> bool:
@@ -34,9 +35,9 @@ def focal_is_weak(loss, found: float, probe: float = FOCAL_PROBE, min_rise: floa
     return min(loss((1 + found) * (1 - probe) - 1), loss((1 + found) * (1 + probe) - 1)) - base < min_rise
 
 
-MOVE_STEP = 0.035  # first search step for position, as a share of the camera-to-object distance
-SIZE_STEP = 0.02  # same for size
-YAW_STEP = 0.3  # first search step for orientation, radians (about 17 degrees)
+# MOVE_STEP: value in vrecon/tuning.py
+# SIZE_STEP: value in vrecon/tuning.py
+# YAW_STEP: value in vrecon/tuning.py
 
 
 def _distance(project, o) -> float:

@@ -1,0 +1,39 @@
+{
+  "id": "syn2_11",
+  "set": "v2",
+  "seed": 111,
+  "camera_motion": "orbit",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "surfaces": {
+    "floor": "tiles",
+    "wall": "plain"
+  },
+  "split": "held_out",
+  "events": [
+    {
+      "object": "obj_01",
+      "shape": "box",
+      "onset_frame": 18,
+      "end_frame": 64,
+      "extra": "tilt"
+    },
+    {
+      "object": "obj_02",
+      "shape": "sphere",
+      "onset_frame": 17,
+      "end_frame": 72
+    },
+    {
+      "object": "obj_03",
+      "shape": "cylinder",
+      "onset_frame": 19,
+      "end_frame": 67
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json, gt_assets/ or gt_passes/"
+}

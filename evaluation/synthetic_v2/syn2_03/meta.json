@@ -1,0 +1,33 @@
+{
+  "id": "syn2_03",
+  "set": "v2",
+  "seed": 103,
+  "camera_motion": "pan",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "surfaces": {
+    "floor": "tiles",
+    "wall": "brick"
+  },
+  "split": "held_out",
+  "events": [
+    {
+      "object": "obj_01",
+      "shape": "two_box",
+      "onset_frame": 16,
+      "end_frame": 47
+    },
+    {
+      "object": "obj_02",
+      "shape": "box",
+      "onset_frame": 0,
+      "end_frame": 62,
+      "extra": "from0"
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json, gt_assets/ or gt_passes/"
+}

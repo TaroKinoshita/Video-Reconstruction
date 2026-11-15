@@ -225,7 +225,7 @@ def overview(run_dir: str, n: int = 16, cols: int = 4, cell_width: int = 320) ->
         cv2.putText(strip, str(f), (x, 12), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
     img = np.concatenate([sheet, strip], 0)
     return {"path": _save(rd, "overview.png", img), "frames": frames, "frame_count": t,
-            "fps": float(mgr.adopted.source.fps.num / mgr.adopted.source.fps.den),
+            "fps": mgr.adopted.source.fps.value,
             "how_to_read": "numbered frames over the whole clip; below, each object's speed over time (bars, camera "
                            "pan removed). "
                            "Next: run_view_events for machine-found moments, run_view_clip to step through a range."}

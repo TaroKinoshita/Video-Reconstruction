@@ -85,7 +85,8 @@ def probe(path: str | Path) -> VideoInfo:
         frames=int(s["nb_read_frames"]),
         rotation=rotation % 360,
         codec=s.get("codec_name", ""),
-        variable_frame_rate=_uneven_timestamps(path, fps),
+        variable_frame_rate=_uneven_timestamps(path, fps if abs(float(avg_fps - fps)) <= 0.01 * float(fps)
+                                               else avg_fps),
     )
 
 
@@ -95,6 +96,14 @@ def sha256(path: str | Path) -> str:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def frame_rate(info: VideoInfo) -> Fraction:
+    """The rate frames actually come at. r_frame_rate can be a multiple of it (tennis: 60/1 while 312 frames span
+    10.46 s, avg 29.83): when the two differ by more than 1%, the average rate is used."""
+    if abs(float(info.avg_fps - info.fps)) > 0.01 * float(info.fps):
+        return Fraction(info.avg_fps).limit_denominator(1001)
+    return Fraction(info.fps).limit_denominator(1001)
 
 
 def normalize(src: Path, dst_dir: Path) -> tuple[Path, dict]:
@@ -108,7 +117,7 @@ def normalize(src: Path, dst_dir: Path) -> tuple[Path, dict]:
         shutil.copyfile(src, dst)
         record["transcoded"] = False
         return dst, record
-    fps = Fraction(info.fps).limit_denominator(1001)
+    fps = frame_rate(info)
     dst = dst_dir / "source.mp4"
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-an", "-fps_mode", "cfr", "-r", str(fps),
            "-c:v", "libx264", "-crf", "14", "-preset", "medium", "-pix_fmt", "yuv420p", str(dst)]
@@ -135,13 +144,107 @@ def detect_shots(path: str | Path, frames: int, threshold: float = 27.0, min_len
     return shots, params
 
 
+STANDARD_RATES = (Fraction(24000, 1001), Fraction(24), Fraction(25), Fraction(30000, 1001), Fraction(30))
+
+
+@dataclass
+class CadenceInfo:
+    period: int  # one repeated frame every `period` frames
+    phase: int  # repeated frames are those with index % period == phase
+    repeats: list[int]  # indices of the frames found to be copies of the one before
+    share: float  # share of repeat candidates that fall on this phase
+    frames: int = 0  # length of the clip
+
+    @property
+    def phase_frames(self) -> list[int]:
+        """Every frame on the cadence's phase. Removing all of them (not only those found to be copies) keeps the
+        rest evenly spaced; on tennis 54 of the 62 phase frames were found to be copies, the other 8 differ from
+        their predecessor by about as much as ordinary frames (re-encoding)."""
+        return [i for i in range(1, self.frames) if i % self.period == self.phase]
+
+
+def detect_cadence(video, ratio: float = 0.35, min_share: float = 0.7) -> CadenceInfo | None:
+    """Frame-rate padding (e.g. 24 -> 30 fps: every 5th frame a copy of the one before). video: [T, H, W(, C)]
+    uint8. A frame is a repeat candidate when its difference from the previous one is under `ratio` times the
+    median difference around it; it is a cadence only when at least `min_share` of the candidates fall on one
+    phase of one period (4-6 frames) and that phase holds at least half its frames: a nearly still shot has small
+    differences everywhere but no cadence. None: no cadence."""
+    import numpy as np
+
+    g = np.asarray(video).astype(np.int16)
+    t_n = len(g)
+    d = np.r_[np.inf, [float(np.abs(g[i] - g[i - 1]).mean()) for i in range(1, t_n)]]
+    cand = []
+    for i in range(1, t_n):
+        lo, hi = max(1, i - 6), min(t_n, i + 7)
+        if d[i] < ratio * float(np.median(d[lo:hi])):
+            cand.append(i)
+    if len(cand) < 3:
+        return None
+    best = None
+    for per in (4, 5, 6):
+        phases = np.bincount(np.array(cand) % per, minlength=per)
+        ph = int(np.argmax(phases))
+        share = phases[ph] / len(cand)
+        if share >= min_share and phases[ph] >= 0.5 * len(range(ph, t_n, per)) and (best is None or share > best[2]):
+            best = (per, ph, share)
+    if best is None:
+        return None
+    return CadenceInfo(period=best[0], phase=best[1], repeats=[i for i in cand if i % best[0] == best[1]],
+                       share=float(best[2]), frames=t_n)
+
+
+def frame_times(video, fps: float, ratio: float = 0.35, min_share: float = 0.7):
+    """Seconds per frame of a clip that may still contain padded frames: repeats get their predecessor's time, the
+    other frames are spread evenly over the clip (detect_cadence). Without a cadence: i / fps."""
+    import numpy as np
+
+    t_n = len(video)
+    rep = np.zeros(t_n, bool)
+    cad = detect_cadence(video, ratio, min_share)
+    if cad is not None:
+        rep[cad.repeats] = True
+    k = np.cumsum(~rep) - 1
+    return k * ((t_n / fps) / max(int((~rep).sum()), 1))
+
+
+def remove_padding(src: Path, dst_dir: Path, fps: Fraction) -> tuple[Path, CadenceInfo, list[int], Fraction] | None:
+    """When src has a cadence: write the de-duplicated clip at the true rate (fps * kept / total) as
+    dst_dir/source_dedup.mp4 and return it with the cadence, the kept original frames and the new rate."""
+    import numpy as np
+
+    from vrecon.control.core import encode_mp4, read_video_rgb
+
+    frames = read_video_rgb(src)
+    gray = frames.mean(axis=3).astype(np.uint8)
+    cad = detect_cadence(gray)
+    if cad is None:
+        return None
+    rep = set(cad.phase_frames)
+    kept = [i for i in range(len(frames)) if i not in rep]
+    new_fps = (fps * Fraction(len(kept), len(frames))).limit_denominator(1001)
+    # a padded clip was made from a standard rate; container rates of padded files are often slightly off
+    # (tennis: 29.827 fps -> 23.86), so snap to a standard rate within 1%
+    near = min(STANDARD_RATES, key=lambda r: abs(float(r - new_fps)))
+    if abs(float(near - new_fps)) < 0.01 * float(near):
+        new_fps = near
+    dst = dst_dir / "source_dedup.mp4"
+    encode_mp4(frames[kept], dst, fps=f"{new_fps.numerator}/{new_fps.denominator}", crf=12)
+    return dst, cad, kept, new_fps
+
+
 def _slug(text: str) -> str:
     s = re.sub(r"[^A-Za-z0-9_-]+", "_", text).strip("_").lower()
     return s or "video"
 
 
 def new_project(video: str | Path, out_dir: str | Path, project_id: str | None = None,
-                shots: bool = True, threshold: float = 27.0) -> Project:
+                shots: bool = True, threshold: float = 27.0, dedup: bool = True) -> Project:
+    """dedup: when the video repeats frames in a regular cadence (frame-rate padding), the project's source becomes
+    the de-duplicated clip at the true rate and SourceVideo.cadence keeps the original and the frame map; observers
+    then run on that clip (docs/REVIEW_INSTRUCTIONS.md F-22)."""
+    from vrecon.schema import Cadence
+
     video, out = Path(video), Path(out_dir)
     if (out / "project.json").exists():
         raise FileExistsError(f"{out / 'project.json'} already exists")
@@ -150,7 +253,21 @@ def new_project(video: str | Path, out_dir: str | Path, project_id: str | None =
     width, height = info.width, info.height
     if info.rotation in (90, 270):  # only possible if copied; normalize() bakes rotation otherwise
         width, height = height, width
-    fps = Fraction(info.fps).limit_denominator(1001)
+    fps = frame_rate(info)
+    cadence = None
+    if dedup:
+        found = remove_padding(src, out / "input", fps)
+        if found is not None:
+            dst, cad, kept, new_fps = found
+            cadence = Cadence(original=FileRef(id="file_original", path=src.relative_to(out).as_posix(),
+                                               sha256=sha256(src)),
+                              original_fps=Rational(num=fps.numerator, den=fps.denominator),
+                              original_frame_count=info.frames, period=cad.period, phase=cad.phase, kept_frames=kept)
+            record["dedup"] = {"period": cad.period, "phase": cad.phase, "removed": len(cad.phase_frames),
+                               "found_copies": len(cad.repeats),
+                               "share": cad.share, "fps": f"{new_fps.numerator}/{new_fps.denominator}"}
+            src, fps = dst, new_fps
+            info = probe(src)
 
     observations = []
     if shots:
@@ -171,6 +288,7 @@ def new_project(video: str | Path, out_dir: str | Path, project_id: str | None =
             frame_count=info.frames,
             width=width,
             height=height,
+            cadence=cadence,
         ),
         shots=[
             Shot(id=f"shot_{i:03d}", start=a, end=b, transition_from_previous="first" if i == 1 else "unknown")

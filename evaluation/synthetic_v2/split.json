@@ -1,0 +1,21 @@
+{
+  "dev": [
+    "syn2_02",
+    "syn2_04",
+    "syn2_05",
+    "syn2_07",
+    "syn2_09",
+    "syn2_12"
+  ],
+  "held_out": [
+    "syn2_01",
+    "syn2_03",
+    "syn2_06",
+    "syn2_08",
+    "syn2_10",
+    "syn2_11"
+  ],
+  "seed": 20261115,
+  "rule": "one clip of each same-camera pair per side, seeded coin",
+  "note": "do not run any method on held_out before evaluation/thresholds.yaml is frozen"
+}

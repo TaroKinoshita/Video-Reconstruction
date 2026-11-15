@@ -90,10 +90,15 @@ def _cmd_control(args: argparse.Namespace) -> int:
 def _cmd_new(args: argparse.Namespace) -> int:
     from vrecon.video import new_project
 
-    p = new_project(args.video, args.out, args.id, shots=not args.no_shots, threshold=args.threshold)
+    p = new_project(args.video, args.out, args.id, shots=not args.no_shots, threshold=args.threshold,
+                    dedup=not args.keep_padding)
     src = p.source
     print(f"created {args.out}/project.json ({p.id})")
     print(f"  video: {src.width}x{src.height}, {src.fps.num}/{src.fps.den} fps, {src.frame_count} frames")
+    if src.cadence:
+        c = src.cadence
+        print(f"  padding removed: 1 of every {c.period} frames repeated; {c.original_frame_count} -> "
+              f"{src.frame_count} frames ({c.original_fps.num}/{c.original_fps.den} -> {src.fps.num}/{src.fps.den} fps)")
     for s in p.shots:
         print(f"  {s.id}: frames {s.start}-{s.end - 1} ({s.end - s.start} frames)")
     return 0
@@ -107,9 +112,9 @@ def _cmd_score(args: argparse.Namespace) -> int:
     if args.cmd == "score-blend":
         from vrecon.evaluate import score_blend
 
-        report = score_blend(args.reference, args.project)
+        report = score_blend(args.reference, args.project, novel=args.novel)
     else:
-        report = score(args.reference, load_project(args.project), args.shot)
+        report = score(args.reference, load_project(args.project), args.shot, novel=args.novel)
     text = json.dumps(report, indent=2)
     if args.out:
         from pathlib import Path
@@ -207,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
     n.add_argument("--id")
     n.add_argument("--threshold", type=float, default=27.0, help="PySceneDetect content threshold")
     n.add_argument("--no-shots", action="store_true", help="treat the whole video as one shot")
+    n.add_argument("--keep-padding", action="store_true",
+                   help="keep repeated frames (frame-rate padding) instead of removing them at import")
     n.set_defaults(func=_cmd_new)
 
     t = sub.add_parser("triage", help="cut a video into shots and say per shot which path fits (camera still/moving)")
@@ -219,12 +226,14 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("project")
     sc.add_argument("--shot")
     sc.add_argument("--out")
+    sc.add_argument("--novel", action="store_true", help="also score the clip's novel views (gt_passes/novel)")
     sc.set_defaults(func=_cmd_score)
 
     sb = sub.add_parser("score-blend", help="score any .blend (e.g. from an LLM) against a reference clip folder")
     sb.add_argument("reference")
     sb.add_argument("project", metavar="blend")
     sb.add_argument("--out")
+    sb.add_argument("--novel", action="store_true", help="also score the clip's novel views (gt_passes/novel)")
     sb.set_defaults(func=_cmd_score)
 
     r = sub.add_parser("run", help="repair loop: try proposals on a copy, adopt only improvements")

@@ -17,6 +17,7 @@ from vrecon.scene.convert import matrix_to_quat
 from vrecon.schema import Pose
 from vrecon.schema.common import Evidence, Intrinsics, Scale
 from vrecon.schema.project import Camera, CameraKey, SceneObject, TransformKey
+from vrecon.tuning import MIN_DEPTH_RATIO, STILL_PROGRESS, TOP_DOWN, ROUND_RATIO, MIN_FLOOR_POINTS, MOVE_FRACTION  # noqa: E402,F401  (tuned values, one place)
 
 
 @dataclass
@@ -104,7 +105,7 @@ def _touches_border(mask: np.ndarray) -> bool:
     return bool(mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any())
 
 
-MIN_DEPTH_RATIO = 0.5  # side facing away from the camera, at least this share of the other horizontal side
+# MIN_DEPTH_RATIO: value in vrecon/tuning.py
 
 
 def _deepen(xy: np.ndarray, yaw: float, size: tuple, ratio: float = MIN_DEPTH_RATIO):
@@ -123,7 +124,7 @@ def _deepen(xy: np.ndarray, yaw: float, size: tuple, ratio: float = MIN_DEPTH_RA
     return xy + d * (want - size[k]) / 2, tuple(new)
 
 
-STILL_PROGRESS = 0.1  # share of the start-to-end travel below which a key counts as still at an end
+# STILL_PROGRESS: value in vrecon/tuning.py
 
 
 def _snap_still_ends(frames: list[int], xy: np.ndarray, yaw: np.ndarray, n_end: int = 3):
@@ -150,11 +151,11 @@ def _snap_still_ends(frames: list[int], xy: np.ndarray, yaw: np.ndarray, n_end: 
     return f, p, y
 
 
-TOP_DOWN = 0.3  # view direction within about 17 degrees of straight down: heading from the image's up instead
-ROUND_RATIO = 0.8  # draft: footprint sides within this ratio -> no facing (a ball's turn is its roll, not a yaw)
-MIN_FLOOR_POINTS = 500  # draft: fewer floor-mask points than this and the floor plane is not trusted
+# TOP_DOWN: value in vrecon/tuning.py
+# ROUND_RATIO: value in vrecon/tuning.py
+# MIN_FLOOR_POINTS: value in vrecon/tuning.py
 
-MOVE_FRACTION = 0.5 # an object moves when its per-frame box centres spread more than this share of its size
+# MOVE_FRACTION: value in vrecon/tuning.py
 
 
 def floor_frame(m: Model4D, floor_pts: np.ndarray) -> tuple[np.ndarray, dict]:

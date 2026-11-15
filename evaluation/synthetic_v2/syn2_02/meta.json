@@ -1,0 +1,31 @@
+{
+  "id": "syn2_02",
+  "set": "v2",
+  "seed": 102,
+  "camera_motion": "static",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "surfaces": {
+    "floor": "plain",
+    "wall": "brick"
+  },
+  "split": "dev",
+  "events": [
+    {
+      "object": "obj_01",
+      "shape": "sphere",
+      "onset_frame": 15,
+      "end_frame": 57,
+      "extra": "stop",
+      "hold": [
+        30,
+        44
+      ]
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json, gt_assets/ or gt_passes/"
+}

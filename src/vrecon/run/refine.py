@@ -11,8 +11,9 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from vrecon.tuning import FLAT  # noqa: E402,F401  (tuned values, one place)
 
-FLAT = 0.02  # thinnest side / longest side below this: a plane (floor, wall, backdrop)
+# FLAT: value in vrecon/tuning.py
 
 
 def mark_set(project) -> dict:

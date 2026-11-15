@@ -1,0 +1,725 @@
+{
+  "schema_version": "0.4.0",
+  "id": "proj_syn2_04",
+  "revision": 0,
+  "source": {
+    "file": {
+      "id": "file_video",
+      "path": "video.mp4",
+      "sha256": null,
+      "media_type": null
+    },
+    "fps": {
+      "num": 24,
+      "den": 1
+    },
+    "frame_count": 73,
+    "width": 640,
+    "height": 352,
+    "cadence": null
+  },
+  "shots": [
+    {
+      "id": "shot_001",
+      "start": 0,
+      "end": 73,
+      "transition_from_previous": "first"
+    }
+  ],
+  "observations": [],
+  "reconstruction": {
+    "scale": {
+      "source": "human",
+      "note": "synthetic ground truth, meters",
+      "units_per_metre": 1.0,
+      "basis": "measured"
+    },
+    "objects": [
+      {
+        "id": "obj_floor",
+        "name": "",
+        "kind": "set",
+        "asset": null,
+        "size": [
+          40.0,
+          20.0,
+          0.02
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              0.0,
+              0.0,
+              -0.01
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "spans": [],
+        "evidence": []
+      },
+      {
+        "id": "obj_wall",
+        "name": "",
+        "kind": "set",
+        "asset": null,
+        "size": [
+          40.0,
+          0.2,
+          8.0
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              0.0,
+              5.1,
+              4.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [],
+        "look": {},
+        "status": "estimated",
+        "spans": [],
+        "evidence": []
+      },
+      {
+        "id": "obj_01",
+        "name": "",
+        "kind": "rigid",
+        "asset": {
+          "id": "file_obj_01",
+          "path": "gt_assets/obj_01.npz",
+          "sha256": null,
+          "media_type": null
+        },
+        "size": [
+          0.5259631518184322,
+          0.5259631518184322,
+          0.5060690659465608
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [
+          {
+            "time": 0.4166666666666667,
+            "pose": {
+              "translation": [
+                -2.0248420482174074,
+                0.8,
+                0.2530345329732804
+              ],
+              "rotation": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "time": 1.7083333333333333,
+            "pose": {
+              "translation": [
+                1.9447896258787256,
+                0.8,
+                0.2530345329732804
+              ],
+              "rotation": [
+                0.8897121141575828,
+                0.0,
+                0.0,
+                -0.45652201909792295
+              ]
+            },
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        ],
+        "look": {},
+        "status": "human_confirmed",
+        "spans": [],
+        "evidence": []
+      },
+      {
+        "id": "obj_02",
+        "name": "",
+        "kind": "rigid",
+        "asset": {
+          "id": "file_obj_02",
+          "path": "gt_assets/obj_02.npz",
+          "sha256": null,
+          "media_type": null
+        },
+        "size": [
+          0.4843552775300889,
+          0.4843552775300889,
+          0.4843552775300889
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [
+          {
+            "time": 0.5,
+            "pose": {
+              "translation": [
+                1.3162469484187886,
+                1.6,
+                0.24217763876504445
+              ],
+              "rotation": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "time": 2.1666666666666665,
+            "pose": {
+              "translation": [
+                -1.145104451018675,
+                1.6,
+                0.24217763876504445
+              ],
+              "rotation": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        ],
+        "look": {},
+        "status": "human_confirmed",
+        "spans": [],
+        "evidence": []
+      },
+      {
+        "id": "obj_03",
+        "name": "",
+        "kind": "rigid",
+        "asset": {
+          "id": "file_obj_03",
+          "path": "gt_assets/obj_03.npz",
+          "sha256": null,
+          "media_type": null
+        },
+        "size": [
+          0.6346853806907425,
+          0.5933944044137724,
+          1.0592837643206319
+        ],
+        "rest": {
+          "time": 0.0,
+          "pose": {
+            "translation": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "keys": [
+          {
+            "time": 0.0,
+            "pose": {
+              "translation": [
+                1.3734111864642011,
+                0.0,
+                0.5296418821603159
+              ],
+              "rotation": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "time": 1.6666666666666667,
+            "pose": {
+              "translation": [
+                -1.3203614352736008,
+                0.0,
+                0.5296418821603159
+              ],
+              "rotation": [
+                0.99904986586486,
+                0.0,
+                0.0,
+                0.04358171079025193
+              ]
+            },
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        ],
+        "look": {},
+        "status": "human_confirmed",
+        "spans": [],
+        "evidence": []
+      }
+    ],
+    "cameras": [
+      {
+        "id": "cam_001",
+        "shot_id": "shot_001",
+        "intrinsics": {
+          "width": 640,
+          "height": 352,
+          "fx": 695.0312483636701,
+          "fy": 695.0312483636701,
+          "cx": 319.5,
+          "cy": 175.5,
+          "distortion": null
+        },
+        "keys": [
+          {
+            "shot_frame": 0,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6475779937404474,
+                -0.7546813559786685,
+                -0.07995121033066013,
+                0.06860464217498553
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 4,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6480571030038373,
+                -0.755771972527105,
+                -0.0713370002778769,
+                0.06116983881061669
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 8,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6484841839395071,
+                -0.756746473461478,
+                -0.0626302529379265,
+                0.05367019192120973
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 12,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6488576650312077,
+                -0.7576004734428512,
+                -0.053841007915831525,
+                0.04611289446590942
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 16,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.649176148380965,
+                -0.758330050486414,
+                -0.04497988665542976,
+                0.038505489205992366
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 20,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6494384243401845,
+                -0.7589317948850968,
+                -0.036058029611091606,
+                0.030855829329148723
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 24,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6496434844618463,
+                -0.7594028529124962,
+                -0.027087024641361895,
+                0.023172034453425826
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 28,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6497905325040422,
+                -0.759740964230791,
+                -0.018078827611817692,
+                0.015462442561361225
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 32,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.649878993249697,
+                -0.7599444920550634,
+                -0.00904567643676431,
+                0.007735558527557496
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 36,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6499085189501159,
+                -0.760012445290251,
+                0.0,
+                -0.0
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 40,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.649878993249697,
+                -0.7599444920550634,
+                0.00904567643676431,
+                -0.007735558527557496
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 44,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6497905325040422,
+                -0.759740964230791,
+                0.018078827611817706,
+                -0.015462442561361239
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 48,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6496434844618463,
+                -0.7594028529124962,
+                0.027087024641361895,
+                -0.023172034453425826
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 52,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6494384243401845,
+                -0.7589317948850968,
+                0.0360580296110916,
+                -0.030855829329148717
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 56,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.649176148380965,
+                -0.758330050486414,
+                0.04497988665542977,
+                -0.03850548920599238
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 60,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6488576650312077,
+                -0.7576004734428512,
+                0.053841007915831525,
+                -0.04611289446590942
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 64,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6484841839395071,
+                -0.756746473461478,
+                0.06263025293792648,
+                -0.053670191921209726
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 68,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6480571030038373,
+                -0.7557719725271049,
+                0.07133700027787686,
+                -0.06116983881061666
+              ]
+            },
+            "intrinsics": null
+          },
+          {
+            "shot_frame": 72,
+            "pose": {
+              "translation": [
+                0.0,
+                -6.0,
+                1.6
+              ],
+              "rotation": [
+                0.6475779937404474,
+                -0.7546813559786685,
+                0.07995121033066013,
+                -0.06860464217498553
+              ]
+            },
+            "intrinsics": null
+          }
+        ],
+        "status": "human_confirmed",
+        "evidence": []
+      }
+    ],
+    "events": [],
+    "shot_mapping": [
+      {
+        "shot_id": "shot_001",
+        "scene_time_start": 0.0
+      }
+    ],
+    "overrides": [],
+    "layers": []
+  },
+  "human": {
+    "edits": [],
+    "locks": []
+  },
+  "artifacts": []
+}

@@ -18,6 +18,7 @@ from vrecon.optimize import (MaskObservation, Param, combined_loss, gt_stand_in_
 from vrecon.schema import load_project
 
 from .manager import AcceptRule, Proposal, RunManager
+from vrecon.tuning import HOLD_TOLERANCE  # noqa: E402,F401  (tuned values, one place)
 
 
 def _config(run_dir: Path) -> dict:
@@ -83,7 +84,7 @@ def _start_from_4d(project: str, npz: str, masks: str, rd: Path) -> tuple[str, d
     frames = [int(f) for f in np.linspace(0, t - 1, n, dtype=int)]
     shot = p.shots[0]
     cams, objs, scale, report = initialize(load_4rc(npz, w, h, frames), m, id_map, w, h, shot.id, shot_start=shot.start,
-                                           fps=p.source.fps.num / p.source.fps.den, observation_id="obs_4rc")
+                                           fps=p.source.fps.value, observation_id="obs_4rc")
     p.observations = [o for o in p.observations if o.id != "obs_4rc"] + [Observation(
         id="obs_4rc", kind="camera", shot_id=shot.id, summary={"frames": frames, "model": "4RC"},
         provenance=Provenance(tool="4RC", params={"npz": str(Path(npz).resolve())}))]
@@ -275,7 +276,7 @@ def align_timing(run_dir: str, obj: str, note: str = "") -> dict:
     o = next(x for x in mgr.adopted.reconstruction.objects if x.id == rec)
     if not o.keys:
         return {"status": "skipped", "reason": f"{rec} has no keys"}
-    fps = mgr.adopted.source.fps.num / mgr.adopted.source.fps.den
+    fps = mgr.adopted.source.fps.value
     times = [k.time for k in o.keys]
     tries = [("start+stop", warp_times(times, (rs, re_), (so, se), fps)),
              ("start only", warp_times(times, (rs, None), (so, None), fps))]
@@ -298,7 +299,7 @@ def align_timing(run_dir: str, obj: str, note: str = "") -> dict:
             "hold": hold_still(run_dir, obj, note)}
 
 
-HOLD_TOLERANCE = 0.002  # draft: a hold may cost this much silhouette loss (a few degrees of wobble barely shows)
+# HOLD_TOLERANCE: value in vrecon/tuning.py
 
 
 def hold_keys(keys, fps: float, start: int | None, rotation_only: bool = False, mean_position: bool = False):
@@ -335,7 +336,7 @@ def hold_still(run_dir: str, obj: str, note: str = "") -> dict:
         return {"status": "skipped", "reason": "no paired scene object"}
     mgr, _, _ = _manager(Path(run_dir))
     o = next(x for x in mgr.adopted.reconstruction.objects if x.id == rec)
-    fps = mgr.adopted.source.fps.num / mgr.adopted.source.fps.den
+    fps = mgr.adopted.source.fps.value
     tries = []
     # whole pose held at the start key; at the median position before the start (drift smaller than the shift to
     # the start key); else only the facing (the wobble)

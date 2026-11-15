@@ -1,0 +1,33 @@
+{
+  "id": "syn2_05",
+  "set": "v2",
+  "seed": 105,
+  "camera_motion": "truck",
+  "frames": 73,
+  "fps": 24,
+  "size": [
+    640,
+    352
+  ],
+  "surfaces": {
+    "floor": "checker",
+    "wall": "brick"
+  },
+  "split": "dev",
+  "events": [
+    {
+      "object": "obj_01",
+      "shape": "box",
+      "onset_frame": 30,
+      "end_frame": 58
+    },
+    {
+      "object": "obj_02",
+      "shape": "cylinder",
+      "onset_frame": 27,
+      "end_frame": 58,
+      "extra": "tilt"
+    }
+  ],
+  "note": "ground truth for evaluation only; reconstruction must not read gt.json, gt_assets/ or gt_passes/"
+}

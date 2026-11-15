@@ -8,6 +8,7 @@ from .io import MIGRATIONS, SchemaVersionError, json_schema, load_project, migra
 from .project import (
     SCHEMA_VERSION,
     Artifact,
+    Cadence,
     Camera,
     CameraKey,
     Event,
@@ -26,13 +27,15 @@ from .project import (
     SourceVideo,
     StatusSpan,
     TransformKey,
+    frame_time,
+    time_frame,
 )
 
 __all__ = [
     "SCHEMA_VERSION", "MIGRATIONS", "SchemaVersionError",
-    "Artifact", "Camera", "CameraKey", "Event", "Evidence", "FileRef", "HumanEdit", "HumanLayer",
+    "Artifact", "Cadence", "Camera", "CameraKey", "Event", "Evidence", "FileRef", "HumanEdit", "HumanLayer",
     "Intrinsics", "Layer2D", "LayerKey", "Lock", "Observation", "Pose", "Project", "Provenance", "Rational",
     "Reconstruction", "Scale", "SceneObject", "Shot", "ShotMapping", "ShotOverride",
     "SourceVideo", "StatusSpan", "TransformKey",
-    "json_schema", "load_project", "migrate", "save_project",
+    "frame_time", "json_schema", "load_project", "time_frame", "migrate", "save_project",
 ]

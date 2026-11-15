@@ -76,8 +76,42 @@ and the source file. Re-run the script for the full tables; group means:
 | Looker / viewer / viewer2 / viewer3 | .836 / .829 / .822 / .828 | 6 each |
 | Fixed order (4RC start, focal fixed) | .837 | 6 |
 
-## 5. What WP-1 has to fill in
+## 5. Re-scored with scorer v3 (WP-1 step 4, 2026-11-15)
 
-- Score `runs/opt4*/refined.blend` and the rev-0 start scenes so S0, L1 have stored scores.
-- Re-score every row above with scorer v2 (`mask_iou_all_mean`, `timing_relative`) and add the novel-view scores.
-- Re-read the venue, props and timing values from their files and add them here with their source.
+`scripts/rescore_runs.py` -> `runs/rescore_v3/<run>.json` and `runs/rescore_v3/all.json` (100 runs, 0 errors;
+stored runs untouched). Clips v1 syn_01..06 (regression set). Means over clips (and runs) per group.
+IoU all = unmatched objects count 0; novel = mover IoU in views turned 10 / 30 deg (the 30 is the mean of left and
+right); timing in frames, old rule and relative rule (D2); onset found = share of reference onsets found.
+
+| group | n | IoU matched | IoU all | novel 10 | novel 30 | focal err | timing old | timing rel | onset found |
+|---|---|---|---|---|---|---|---|---|---|
+| S0 4RC start (rev 0 of `bench_rays/*_base`) | 6 | .753 | .753 | .444 | .340 | 16.7% | 8.0 | 6.8 | .89 |
+| S1 fixed order (`bench_rays/*_base`) | 6 | .837 | .837 | .489 | .368 | 16.7% | 7.7 | 6.5 | .89 |
+| S2 Claude `llm_c2` / `c2b` / `c2c` | 6 each | .817 / .803 / .811 | same | .494 / .464 / .467 | .384 / .354 / .361 | 15.5-16.7% | 7.5-7.8 | 6.2-6.3 | .89 |
+| S2 Claude `llm_c4` | 6 | .827 | .827 | .475 | .362 | 16.2% | 7.7 | 6.1 | .89 |
+| S2 GPT | 6 | .828 | .828 | .484 | .364 | 16.2% | 7.8 | 6.3 | .89 |
+| looker / viewer / viewer2 / viewer3 | 6 each | .836 / .829 / .821 / .828 | same | .486-.496 | .361-.384 | 14.2-16.5% | 6.1-7.7 | 4.6-6.6 | .89 |
+| `llm_c` (before the guard fix) | 6 | .663 | **.655** | .395 | .252 | 28.6% | 7.5 | 5.2 | .81 |
+| L0 B Claude (syn_01 only, 2 runs) | 2 | .951 | .951 | .717 | .635 | 1.9% | 0.0 | 0.0 | 1.00 |
+| L0 B GPT run 1 | 6 | .861 | .861 | .432 | .334 | 14.9% | 15.7 | **6.0** | .83 |
+| L0 B GPT repeats (syn_01, syn_04) | 4 | .779 | .779 | .516 | .427 | 16.3% | 13.3 | 11.9 | 1.00 |
+| L1 B GPT + tools **(GT masks)** | 6 | .881 | .881 | .421 | .329 | 14.9% | 15.9 | 6.0 | .83 |
+| L1 repeats + tools **(GT masks)** | 4 | .827 | .827 | .531 | .437 | 16.3% | 15.0 | 11.8 | 1.00 |
+
+What changes:
+- **F-14 (unmatched objects) changes almost nothing**: every group matched all objects except `llm_c` (.663 -> .655).
+- **F-15 (relative onset) changes B's timing**: GPT B 15.7 -> 6.0 frames, now on par with C (6.1-6.5). The
+  old "B gets the overlap, C gets the timing" split does not survive the relative rule.
+- **Novel views do not favour C overall**: S1 .489 / .368 against L0 GPT .432 / .334 (10 / 30 deg) on the
+  means; per clip it differs (section 4 of the old novel file). Both are far below their source IoU.
+- **S2 Claude three runs re-score lower** (.817/.803/.811, mean .810) than the stored .823/.817/.819: the stored
+  value was computed by the run itself at the time; the code changed since (scene build, scorer). The fixed
+  order (.837) and `llm_c4` (.827) reproduce exactly. Not investigated further.
+- **L1 is not a result**: both L1 groups used ground-truth stand-in masks (`mask_source: gt_stand_in`). They stay
+  in this table as machinery tests only; L1 has to be re-run with SAM masks.
+- The bootstrap comparison (`scripts/compare_conditions.py`) gives "one run" for every clip of S1 vs L0 and S1 vs
+  S2: S1 is one deterministic run, L0 one run on four of six clips. No verdict on any claim is possible from the
+  stored runs; that is what WP-7 has to produce (three or five runs per cell, held-out v2).
+
+Still to re-read from their own files (not RQ1 numbers): venue (`runs/venue/ven_01/*/scores.json`), props
+(`runs/props/*.json`).

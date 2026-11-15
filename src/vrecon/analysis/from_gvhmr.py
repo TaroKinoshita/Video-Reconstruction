@@ -22,7 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
-from vrecon.schema import Camera, Evidence, FileRef, Pose, SceneObject, TransformKey
+from vrecon.schema import Camera, Evidence, FileRef, Pose, SceneObject, SourceVideo, TransformKey
+from vrecon.schema.project import source_frames_of
 
 
 def load_skeleton(path: str | Path) -> dict:
@@ -34,14 +35,21 @@ def load_skeleton(path: str | Path) -> dict:
 
 
 def character_from_gvhmr(path: str | Path, rel_path: str, obj_id: str = "obj_person_01", start_time: float = 0.0,
-                         name: str = "", camera: Camera | None = None, first_shot_frame: int = 0) -> SceneObject:
+                         name: str = "", camera: Camera | None = None, first_shot_frame: int = 0,
+                         source: SourceVideo | None = None) -> SceneObject:
     """path: the skeleton file; rel_path: how the project refers to it (relative to the project file).
-    camera: place through this camera; skeleton frame i is the camera's shot frame first_shot_frame + i."""
+    camera: place through this camera; skeleton frame i is the camera's shot frame first_shot_frame + i.
+    source: the project's source video. When GVHMR ran on the original padded video (SourceVideo.cadence), its
+    repeated frames are dropped and the others keyed at the project's frame times (docs/REVIEW_INSTRUCTIONS.md
+    F-22); otherwise frame i is keyed at i / the skeleton's fps."""
     from vrecon.scene.convert import matrix_to_quat, quat_to_matrix
 
     d = load_skeleton(path)
     fps = float(d["fps"])
     n = int(d["frames"])
+    mapped = source_frames_of(source, n) if source is not None else list(range(n))
+    if source is not None and source.cadence is not None and n == source.cadence.original_frame_count:
+        fps = source.fps.value  # kept frames are evenly spaced at the project's rate
     if camera is None:
         pos = d["root_pos"]
         rot = [tuple(float(x) for x in q) for q in d["local_rot"][:, 0]]
@@ -53,15 +61,15 @@ def character_from_gvhmr(path: str | Path, rel_path: str, obj_id: str = "obj_per
             raise ValueError("skeleton file has no root_rot_cam; re-export it with gpu/observe/run_gvhmr.py")
         pos, rot, js = [], [], []
         for i in range(n):
-            r, c, _ = camera_pose(camera, first_shot_frame + i)
+            r, c, _ = camera_pose(camera, first_shot_frame + (mapped[i] if mapped[i] is not None else i))
             pos.append(c + r @ d["joints_cam"][i, 0])
             js.append(d["joints_cam"][i] @ r.T + c)
             m = r @ np.array(quat_to_matrix(tuple(float(x) for x in d["root_rot_cam"][i])))
             rot.append(tuple(matrix_to_quat(m.tolist())))
         pos, j = np.array(pos), np.array(js)
-    keys = [TransformKey(time=start_time + i / fps,
+    keys = [TransformKey(time=start_time + mapped[i] / fps,
                          pose=Pose(translation=tuple(float(x) for x in pos[i]), rotation=rot[i]))
-            for i in range(n)]
+            for i in range(n) if mapped[i] is not None]
     lo, hi = j.reshape(-1, 3).min(0), j.reshape(-1, 3).max(0)
     return SceneObject(
         id=obj_id, name=name or obj_id, kind="character",

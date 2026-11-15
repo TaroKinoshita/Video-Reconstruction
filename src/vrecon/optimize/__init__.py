@@ -22,6 +22,7 @@ from vrecon.metrics.poses import camera_pose, object_pose, project_points
 from vrecon.run import Change, Proposal
 from vrecon.scene.convert import matrix_to_quat, quat_to_matrix
 from vrecon.schema import Observation, Pose, Project, Provenance, TransformKey
+from vrecon.tuning import TRACK_WEIGHT  # noqa: E402,F401  (tuned values, one place)
 
 _CORNERS = np.array([[x, y, z] for x in (-0.5, 0.5) for y in (-0.5, 0.5) for z in (-0.5, 0.5)])
 
@@ -320,7 +321,7 @@ def _scan_time(loss, params: list[Param], steps: np.ndarray, evals_per_shift: in
     return best, best_loss, total
 
 
-TRACK_WEIGHT = 50.0  # puts track loss (fraction of the diagonal, ~0.001) on the silhouette loss scale (~0.1)
+# TRACK_WEIGHT: value in vrecon/tuning.py
 
 
 def combined_loss(project: Project, obs: MaskObservation | None, pairs: dict[str, str], tracks=None,

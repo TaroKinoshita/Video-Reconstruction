@@ -28,7 +28,25 @@ def _material(name: str, rng: random.Random, kind: str) -> bpy.types.Material:
     ramp = nt.nodes.new("ShaderNodeValToRGB")
     ramp.color_ramp.elements[0].color = (*dark, 1.0)
     ramp.color_ramp.elements[1].color = (*base, 1.0)
-    if kind == "checker":
+    if kind == "plain":
+        bsdf.inputs["Base Color"].default_value = (*base, 1.0)
+        bsdf.inputs["Roughness"].default_value = rng.uniform(0.4, 0.9)
+        return mat
+    if kind == "wood":  # long stretched noise bands, little detail across them
+        tex = nt.nodes.new("ShaderNodeTexWave")
+        tex.inputs["Scale"].default_value = rng.uniform(1.5, 3.0)
+        tex.inputs["Distortion"].default_value = rng.uniform(4.0, 8.0)
+        nt.links.new(coord.outputs["Object"], tex.inputs["Vector"])
+        nt.links.new(tex.outputs["Fac"], ramp.inputs["Fac"])
+    elif kind == "tiles":  # square tiles with thin grout
+        tex = nt.nodes.new("ShaderNodeTexBrick")
+        tex.inputs["Scale"].default_value = rng.uniform(2, 4)
+        tex.inputs["Brick Width"].default_value = 0.5
+        tex.inputs["Row Height"].default_value = 0.5
+        tex.offset = 0.0
+        nt.links.new(coord.outputs["Object"], tex.inputs["Vector"])
+        nt.links.new(tex.outputs["Fac"], ramp.inputs["Fac"])
+    elif kind == "checker":
         tex = nt.nodes.new("ShaderNodeTexChecker")
         tex.inputs["Scale"].default_value = rng.uniform(3, 8)
         nt.links.new(coord.outputs["Object"], tex.inputs["Vector"])
@@ -49,13 +67,18 @@ def _material(name: str, rng: random.Random, kind: str) -> bpy.types.Material:
     return mat
 
 
-def apply_look(seed: int = 0) -> None:
-    """Materials per object (by vrecon_id, deterministic), a key light, a fill light and a sky colour."""
+def apply_look(seed: int = 0, surfaces: dict[str, str] | None = None) -> None:
+    """Materials per object (by vrecon_id, deterministic), a key light, a fill light and a sky colour.
+    surfaces: optional {"floor": kind, "wall": kind, "mover": kind} with kind in plain / wood / tiles / checker /
+    brick / noise (default: checker floor, brick wall, noise-or-checker movers, as for the first six clips)."""
     rng = random.Random(seed)
     scene = bpy.context.scene
+    surfaces = surfaces or {}
     for obj in sorted((o for o in bpy.data.objects if o.type == "MESH" and o.get(ID_PROP)), key=lambda o: o[ID_PROP]):
         vid = obj[ID_PROP]
         kind = "checker" if "floor" in vid else "brick" if "wall" in vid else rng.choice(["noise", "checker", "noise"])
+        part = "floor" if "floor" in vid else "wall" if "wall" in vid else "mover"
+        kind = surfaces.get(part, kind)
         obj.data.materials.clear()
         obj.data.materials.append(_material(f"look_{vid}", rng, kind))
 

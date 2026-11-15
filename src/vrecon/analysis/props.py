@@ -20,41 +20,14 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from vrecon.video import frame_times  # noqa: F401  (re-export)
+
 G = 9.81
 
 
 # ---------------------------------------------------------------- common base
 
-def frame_times(video: np.ndarray, fps: float, ratio: float = 0.35, min_share: float = 0.7) -> np.ndarray:
-    """Seconds per frame when frames repeat in a regular cadence (frame-rate padding, e.g. 24 -> 30 fps: every
-    5th frame a copy of the one before). A frame is a repeat candidate when its difference from the previous one
-    is under `ratio` times the median difference around it; repeats count only when at least `min_share` of the
-    candidates fall on one phase of one period (4-6 frames): a nearly still shot has small differences everywhere
-    but no cadence. Repeats get their predecessor's time; the other frames are spread evenly over the clip."""
-    g = video.astype(np.int16)
-    t_n = len(g)
-    d = np.r_[np.inf, [float(np.abs(g[i] - g[i - 1]).mean()) for i in range(1, t_n)]]
-    cand = []
-    for i in range(1, t_n):
-        lo, hi = max(1, i - 6), min(t_n, i + 7)
-        med = float(np.median(d[lo:hi]))
-        if d[i] < ratio * med:
-            cand.append(i)
-    rep = np.zeros(t_n, bool)
-    if len(cand) >= 3:
-        best = None
-        for per in (4, 5, 6):
-            phases = np.bincount(np.array(cand) % per, minlength=per)
-            ph = int(np.argmax(phases))
-            share = phases[ph] / len(cand)
-            expected = len(range(ph, t_n, per))
-            if share >= min_share and phases[ph] >= 0.5 * expected and (best is None or share > best[2]):
-                best = (per, ph, share)
-        if best:
-            rep[[i for i in cand if i % best[0] == best[1]]] = True
-    k = np.cumsum(~rep) - 1
-    dur = t_n / fps
-    return k * (dur / max(int((~rep).sum()), 1))
+# frame_times moved to vrecon.video (one time base, docs/REVIEW_INSTRUCTIONS.md WP-2); re-exported here
 
 
 def mask_sharpness(gray: np.ndarray, mask: np.ndarray) -> float:
