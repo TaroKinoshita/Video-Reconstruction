@@ -36,16 +36,24 @@ def export_controls(
     out_dir: str | Path,
     shot_id: str | None = None,
     kinds: tuple[str, ...] = ("depth", "canny"),
-    depth_mode: Literal["clip", "frame"] = "clip",
+    depth_mode: Literal["clip", "frame", "disparity"] = "clip",
     preview: bool = True,
     strict_h3: bool = False,
     root: str | Path | None = None,
+    hypothesis: str | tuple[str, ...] = "full",
 ) -> dict:
     """Write control videos and a manifest for one shot. Returns the manifest dict.
 
     kinds: depth, canny, gray (geometry passes) and clay, id, look (colour passes, scene/color_passes.py; with
-    id, legend.json maps each identity colour to its object). root: folder asset paths are relative to."""
+    id, legend.json maps each identity colour to its object). root: folder asset paths are relative to.
+    hypothesis: "full" | "soft" | "drop" or several (control/status.py). Every kind is also written per extra mode
+    as control_<kind>__<mode>.mp4 ("full" keeps the plain name); passes/status.npz holds the status pass and the
+    manifest the share of pixels per status per frame."""
     import numpy as np
+
+    from vrecon.control.status import apply_mode, shares, status_pass
+
+    modes = (hypothesis,) if isinstance(hypothesis, str) else tuple(hypothesis)
 
     out = Path(out_dir).resolve()
     report = build_scene(project, shot_id, root=root)
@@ -58,24 +66,39 @@ def export_controls(
         raise ValueError("scene does not fit H3 constraints:\n  - " + "\n  - ".join(problems))
 
     passes = render_passes(out / "passes", shaded=bool({"canny", "gray"} & set(kinds)))
+    index = np.load(out / "passes" / "index.npz")["index"]
+    status = status_pass(index, passes.id_map, project, report.shot_id)
+    np.savez_compressed(out / "passes" / "status.npz", status=status)
     files: dict[str, dict] = {}
+
+    def write(kind: str, frames, params: dict, extra: dict | None = None) -> None:
+        for mode in modes:
+            name = f"control_{kind}.mp4" if mode == "full" else f"control_{kind}__{mode}.mp4"
+            path = encode_mp4(apply_mode(kind, frames, status, mode), out / name, fps=FPS)
+            key = kind if mode == "full" else f"{kind}__{mode}"
+            files[key] = {"path": path.name, "sha256": _sha256(path), "params": params, "hypothesis": mode,
+                          **(extra or {})}
+
     if "depth" in kinds:
         depth = np.load(out / "passes" / "depth.npz")["depth"]
         frames, info = depth_control(depth, mode=depth_mode)
-        path = encode_mp4(frames, out / "control_depth.mp4", fps=FPS)
-        files["depth"] = {"path": path.name, "sha256": _sha256(path), "params": info}
+        write("depth", frames, info)
     if "canny" in kinds:
         shaded = sorted((out / "passes" / "shaded").glob("frame_*.png"))
         frames, info = canny_control(load_frames(shaded))
-        path = encode_mp4(frames, out / "control_canny.mp4", fps=FPS)
-        files["canny"] = {"path": path.name, "sha256": _sha256(path), "params": info}
+        write("canny", frames, info)
 
     if "gray" in kinds:  # the shaded proxy render itself, as a grayscale control (rendered-proxy conditioning)
         shaded = sorted((out / "passes" / "shaded").glob("frame_*.png"))
         rgb = load_frames(shaded)
         gray = (0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]).round().astype(np.uint8)
-        path = encode_mp4(np.repeat(gray[..., None], 3, axis=-1), out / "control_gray.mp4", fps=FPS)
-        files["gray"] = {"path": path.name, "sha256": _sha256(path), "params": {"source": "workbench shaded pass"}}
+        write("gray", np.repeat(gray[..., None], 3, axis=-1), {"source": "workbench shaded pass"})
+
+    if "pose" in kinds:  # OpenPose-style skeletons of the characters (control/pose.py; no rendering)
+        from vrecon.control.pose import pose_control
+
+        frames, info = pose_control(project, report.shot_id, n_frames, (w, h), root=root)
+        write("pose", frames, info)
 
     colour_kinds = [k for k in ("clay", "id", "look") if k in kinds]
     if colour_kinds:
@@ -85,11 +108,10 @@ def export_controls(
         shot_frames = list(range(n_frames))
         for kind in colour_kinds:
             paths = render_color_pass(kind, out / "passes" / kind, shot_frames, colors)
-            path = encode_mp4(load_frames(paths), out / f"control_{kind}.mp4", fps=FPS)
-            files[kind] = {"path": path.name, "sha256": _sha256(path), "params": {"source": f"workbench {kind} pass"}}
+            write(kind, load_frames(paths), {"source": f"workbench {kind} pass"},
+                  {"legend": "legend.json"} if kind == "id" else None)
         if "id" in colour_kinds:
             (out / "legend.json").write_text(json.dumps(colors, indent=2) + "\n", encoding="utf-8")
-            files["id"]["legend"] = "legend.json"
 
     if "coverage" in kinds:  # which faces the source video saw (scene/coverage.py), from this same camera
         from .coverage import render_coverage
@@ -127,7 +149,12 @@ def export_controls(
             "depth": "passes/depth.npz",
             "index": "passes/index.npz",
             "id_map": {str(k): v for k, v in passes.id_map.items()},
+            "status": "passes/status.npz",
         },
+        "hypothesis_modes": list(modes),
+        "status_codes": {"0": "empty", "1": "observed (observed/estimated/human_confirmed)", "2": "standard",
+                         "3": "hypothesis"},
+        "status_share": shares(status),
         "previews": previews,
         "warnings": report.warnings,
     }

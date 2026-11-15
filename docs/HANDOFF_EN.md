@@ -20,7 +20,11 @@ in the Japanese documents listed in section 10; this file points into them.
   `828cc2a`): from now on a change to scoring rules or `tuning.py` must be written into its `changes`.
   Findings recorded in `docs/REVIEW_INSTRUCTIONS.md` 12: L1 ("B + tools .881") used ground-truth masks; the
   "body still one frame in five" claim does not hold; tennis container rate is 60/1 (fixed).
-- **Next: M2** (WP-3 hypothesis spans and export variants, WP-4 RQ2 scorer, pre-rental checks of runbook 10.2-10.6).
+- **M2 done except two user decisions (2026-11-15).** WP-3, WP-4 and the runbook checks before renting are
+  in `gpu/h3_control/PRE_RENTAL.md`. V2V-ready tennis controls: `runs/venue/tennis/v2v_ready` (124 frames from
+  scene 5.26 s, depth/canny/gray/pose x full/soft/drop, plus disparity depth). Left for the user: review the
+  prompts in `evaluation/tennis/jobs.json`, agree the cost cap and stop rule (runbook 10.6). Then M3 (rental).
+- **Was next: M2** (WP-3 hypothesis spans and export variants, WP-4 RQ2 scorer, pre-rental checks of runbook 10.2-10.6).
   Starting points: `scripts/fit_props.py:133,170` still write `status="estimated"` for racket and ball;
   `scene/controls.export_controls` has no status pass; `src/vrecon/compare/` is empty; VideoX-Fun pinned at
   `e8c314f` (`gpu/h3_control/README.md`); phase-1a scenes and `edits.json` in `evaluation/phase1a/`.

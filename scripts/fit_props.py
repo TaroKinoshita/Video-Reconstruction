@@ -9,7 +9,8 @@ strikers. --after: per sphere name, the hypothesis for where it goes after a str
     {"tennis ball": {"target": [2.0, 5.8, 0.03], "speed": 45, "stop_abs_y": 18, "why": "a serve into the service box"}}
 (the rules of the activity, not observed: an LLM or a person writes it, the file is recorded). --one NAME: the kept
 tracklets of that sphere are one object (one in play). Writes OUT_DIR/project.json (scene + obj_<name> objects,
-status estimated, per-frame notes), props.json and props_check.png.
+status over time as spans: observed / estimated / hypothesis, one evidence entry per span), <object>_frames.json
+(per-frame notes), props.json and props_check.png.
 
 Tennis (2026-11-14):
     python scripts/fit_props.py runs/venue/tennis/fal2c/project.json runs/human/tennis/tennis.mp4
@@ -31,6 +32,7 @@ import numpy as np
 
 from vrecon.analysis import prop_fit as F
 from vrecon.analysis import props as P
+from vrecon.analysis import prop_spans as S
 from vrecon.analysis.prop_table import load_table, lookup
 from vrecon.control.core import read_video_rgb
 from vrecon.metrics.poses import camera_pose
@@ -63,10 +65,12 @@ def mesh_asset(entry: dict, s: float, oid: str, out: Path) -> FileRef:
     return FileRef(id=f"file_{oid[4:]}_mesh", path=name, media_type="application/x-vrecon-mesh+npz")
 
 
-def notes_to_evidence(notes: list) -> list:
-    return [Evidence(source_frames=list(range(n["frames"][0], n["frames"][1] + 1)) if n["frames"][1] >= n["frames"][0] else [],
-                     note=f"{n['model']}" + (f", rms {n['rms_px']} px" if "rms_px" in n and n["model"] not in ("held",) else ""))
-            for n in notes]
+def write_frames(out: Path, oid: str, notes, labels) -> None:
+    """Per-frame diagnostics next to the project (F-06: not as evidence entries)."""
+    data = {"object": oid, "notes": notes,
+            "status": [lab[0] if lab else None for lab in labels]}
+    (out / f"{oid}_frames.json").write_text(json.dumps(data, default=lambda o: o.tolist() if hasattr(o, "tolist")
+                                                       else str(o)) + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -126,12 +130,15 @@ def main() -> int:
             keys = [TransformKey(time=f / fps, pose=Pose(translation=tuple(float(x) for x in c),
                                                           rotation=tuple(matrix_to_quat(R.tolist()))))
                     for f, (c, R) in enumerate(poses)]
-            ev = [Evidence(note=f"mask {src}; held by {info['contact']} (+{entry['reach']} m); pose from the silhouette "
-                                f"(analysis/props.held_poses); size from the table ({entry['source']})")]
-            ev += [Evidence(source_frames=[f], note=n) for f, n in enumerate(notes) if n != "sharp"][:400]
+            labels = S.stick_labels(list(notes))
+            spans, span_ev = S.to_schema(labels, fps)
+            ev = [Evidence(kind="observation", note=f"mask {src}; held by {info['contact']} (+{entry['reach']} m); "
+                           f"pose from the silhouette (analysis/props.held_poses); size from the table "
+                           f"({entry['source']}); per-frame notes in {oid}_frames.json")] + span_ev
+            write_frames(out, oid, [str(n) for n in notes], labels)
             new_objs.append(SceneObject(id=oid, name=entry["name"], kind="rigid", size=tuple(x * s for x in entry["size"]),
-                                        asset=mesh_asset(entry, s, oid, out), keys=keys, status="estimated",
-                                        evidence=ev))
+                                        asset=mesh_asset(entry, s, oid, out), keys=keys,
+                                        status=S.overall_status(labels), spans=spans, evidence=ev))
             overlays.append(("stick", entry, poses, s))
         else:
             d = entry["size"][0] * s
@@ -163,12 +170,16 @@ def main() -> int:
                 r[f"object_{gi}"] = {"placed_from_masks": seen_frames, "notes": notes}
                 keys = [TransformKey(time=f / fps, pose=Pose(translation=tuple(float(x) for x in pos[f])))
                         for f in range(t_n) if np.all(np.isfinite(pos[f]))]
-                ev = [Evidence(note=f"mask {src}; held / free states (analysis/prop_fit); size from the table "
-                                    f"({entry['source']}); spin not observed")] + notes_to_evidence(notes)
                 sid = oid if len(groups) == 1 else f"{oid}_{gi:02d}"
+                labels = S.sphere_labels(notes, t_n, [bool(np.all(np.isfinite(pos[f]))) for f in range(t_n)])
+                spans, span_ev = S.to_schema(labels, fps)
+                ev = [Evidence(kind="observation", note=f"mask {src}; held / free states (analysis/prop_fit); size "
+                               f"from the table ({entry['source']}); spin not observed; segment notes in "
+                               f"{sid}_frames.json")] + span_ev
+                write_frames(out, sid, notes, labels)
                 new_objs.append(SceneObject(id=sid, name=entry["name"], kind="rigid", size=(d, d, d),
-                                            asset=mesh_asset(entry, s, sid, out), keys=keys, status="estimated",
-                                            evidence=ev))
+                                            asset=mesh_asset(entry, s, sid, out), keys=keys,
+                                            status=S.overall_status(labels), spans=spans, evidence=ev))
                 overlays.append(("sphere", entry, pos, s))
         rep["props"][entry["name"]] = r
 

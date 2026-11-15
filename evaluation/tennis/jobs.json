@@ -1,0 +1,26 @@
+{
+  "about": "Tennis V2V jobs for gpu/h3_control/run_jobs.py (runbook docs/REVIEW_INSTRUCTIONS.md 10, stages E and F). Controls: runs/venue/tennis/v2v_ready (scripts/export_scene_controls.py ... --frames 124 --start-time 5.26: the second serve, toss to the strike), copied to evaluation/tennis/controls/<move>/ before the rental (git-ignored; D8 allows sending this clip to the rented GPU, results are not published). controls/source_video_depth.mp4 does not exist yet: it is made on the GPU machine with VideoX-Fun's depth annotator from the source video window (F-31).",
+  "status": "prompts approved by the user 2026-11-15",
+  "defaults": {
+    "sample_size": [704, 800],
+    "num_inference_steps": 40,
+    "guidance_scale": 1.0,
+    "control_context_scale": 1.0,
+    "seeds": [43, 44, 45],
+    "negative_prompt": "blurry, distorted body, extra limbs, extra rackets, extra balls, flicker, text, watermark, scoreboard text, low quality"
+  },
+  "prompt_base": "A professional tennis player serves on an outdoor hard court in bright afternoon sunlight. He tosses the ball high with his left hand and swings the racket overhead to hit it. Blue court with white lines, a net across the middle, green stands with seated spectators around the court. Broadcast camera, realistic, sharp, natural colors.",
+  "jobs": [
+    {"id": "source__depth", "scene": "source", "control": "controls/controls_source/control_depth.mp4", "control_kind": "depth", "prompt": "@prompt_base", "group": "E"},
+    {"id": "source__depth_disparity", "scene": "source", "control": "controls/disparity/controls_source/control_depth.mp4", "control_kind": "depth", "prompt": "@prompt_base", "group": "E"},
+    {"id": "source__video_depth", "scene": "source", "control": "controls/source_video_depth.mp4", "control_kind": "depth", "prompt": "@prompt_base", "group": "E", "note": "plain-video baseline (F-31): annotator depth of the source window, made on the GPU machine"},
+    {"id": "source__pose", "scene": "source", "control": "controls/controls_source/control_pose.mp4", "control_kind": "pose", "prompt": "@prompt_base", "group": "extra"},
+    {"id": "source__canny", "scene": "source", "control": "controls/controls_source/control_canny.mp4", "control_kind": "canny", "prompt": "@prompt_base", "group": "extra"},
+    {"id": "dolly__depth_full", "scene": "dolly-100+crane4", "control": "controls/controls_dolly-100+crane4/control_depth.mp4", "control_kind": "depth", "hypothesis": "full", "prompt": "@prompt_base", "group": "F", "seeds": [43]},
+    {"id": "dolly__depth_soft", "scene": "dolly-100+crane4", "control": "controls/controls_dolly-100+crane4/control_depth__soft.mp4", "control_kind": "depth", "hypothesis": "soft", "prompt": "@prompt_base", "group": "F", "seeds": [43]},
+    {"id": "dolly__depth_drop", "scene": "dolly-100+crane4", "control": "controls/controls_dolly-100+crane4/control_depth__drop.mp4", "control_kind": "depth", "hypothesis": "drop", "prompt": "@prompt_base", "group": "F", "seeds": [43]},
+    {"id": "orbit90__depth_full", "scene": "orbit90+dolly-60", "control": "controls/controls_orbit90+dolly-60/control_depth.mp4", "control_kind": "depth", "hypothesis": "full", "prompt": "@prompt_base", "group": "F", "seeds": [43]},
+    {"id": "orbit90__depth_soft", "scene": "orbit90+dolly-60", "control": "controls/controls_orbit90+dolly-60/control_depth__soft.mp4", "control_kind": "depth", "hypothesis": "soft", "prompt": "@prompt_base", "group": "F", "seeds": [43]},
+    {"id": "orbit90__depth_drop", "scene": "orbit90+dolly-60", "control": "controls/controls_orbit90+dolly-60/control_depth__drop.mp4", "control_kind": "depth", "hypothesis": "drop", "prompt": "@prompt_base", "group": "F", "seeds": [43]}
+  ]
+}

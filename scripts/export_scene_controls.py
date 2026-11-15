@@ -38,7 +38,10 @@ def main() -> int:
     ap.add_argument("--frames", type=int, default=243)
     ap.add_argument("--kinds", default="depth,canny,clay,id,look")
     ap.add_argument("--drop", default="obj_background_rest")
+    ap.add_argument("--hypothesis", default="full", help="full,soft,drop (control/status.py)")
+    ap.add_argument("--depth-mode", default="clip", choices=["clip", "frame", "disparity"])
     ap.add_argument("--rise-m", type=float, default=0.45)
+    ap.add_argument("--start-time", type=float, default=0.0, help="scene seconds of the first output frame")
     a = ap.parse_args()
 
     from vrecon.analysis.proxies import stepped_mesh
@@ -84,14 +87,16 @@ def main() -> int:
     from camera_moves import move_camera, pivot_of
 
     for move in a.moves.split(","):
-        cam_m = move_camera(src, move, pivot_of(p), s, n, H3_FPS, fps_src, intrinsics=intr)
+        cam_m = move_camera(src, move, pivot_of(p), s, n, H3_FPS, fps_src, intrinsics=intr, start_time=a.start_time)
         d = p.model_dump(mode="json")  # changed together, then validated once (fields are checked on assignment)
         d["shots"] = [{**d["shots"][0], "start": 0, "end": n}]
         d["source"].update({"fps": {"num": H3_FPS, "den": 1}, "frame_count": n, "width": w, "height": h})
         d["reconstruction"]["cameras"] = [cam_m.model_dump(mode="json")]
+        d["reconstruction"]["shot_mapping"] = [{"shot_id": d["shots"][0]["id"], "scene_time_start": a.start_time}]
         d["reconstruction"]["objects"] = [o for o in d["reconstruction"]["objects"] if o["id"] not in drop]
         q = Project.model_validate(d)
-        man = export_controls(q, out / f"controls_{move}", kinds=tuple(a.kinds.split(",")), root=root)
+        man = export_controls(q, out / f"controls_{move}", kinds=tuple(a.kinds.split(",")), root=root,
+                              hypothesis=tuple(a.hypothesis.split(",")), depth_mode=a.depth_mode)
         rep[move] = {"h3_problems": check_h3_constraints(w, h, n, H3_FPS), "controls": sorted(man["controls"]),
                      "warnings": man["warnings"]}
         print(move, json.dumps(rep[move]), flush=True)

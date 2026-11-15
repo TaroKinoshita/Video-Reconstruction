@@ -31,3 +31,4 @@ evaluation/synthetic2d/*/gt_passes/
 evaluation/completion/*/gt_passes/
 evaluation/venue/*/gt_passes/
 evaluation/venue/*/observed.npz
+evaluation/tennis/controls/

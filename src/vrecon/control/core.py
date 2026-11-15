@@ -42,7 +42,7 @@ def check_h3_constraints(width: int, height: int, frames: int, fps: float) -> li
 
 def depth_control(
     depth: np.ndarray,
-    mode: Literal["clip", "frame"] = "clip",
+    mode: Literal["clip", "frame", "disparity"] = "clip",
     lo_pct: float = 2.0,
     hi_pct: float = 85.0,
 ) -> tuple[np.ndarray, dict]:
@@ -68,6 +68,13 @@ def depth_control(
         lo, hi = np.percentile(d, lo_pct), np.percentile(d, hi_pct)
         out = norm(d, lo, hi)
         info = {"mode": mode, "lo": float(lo), "hi": float(hi), "lo_pct": lo_pct, "hi_pct": hi_pct}
+    elif mode == "disparity":
+        # inverse depth over the clip (what monocular estimators such as Depth Anything output): near things get
+        # most of the range. Tennis: the player spans ~18 grey levels instead of ~4 (docs/HANDOFF_EN.md, F-30).
+        inv = np.where(covered, 1.0 / np.maximum(d, 1e-6), 0.0)
+        lo, hi = np.percentile(inv[covered], 2.0), np.percentile(inv[covered], 99.5)
+        out = (((inv - lo) / max(hi - lo, 1e-12)).clip(0, 1) * 255.0).round().astype(np.uint8)
+        info = {"mode": mode, "lo_inv": float(lo), "hi_inv": float(hi), "lo_pct": 2.0, "hi_pct": 99.5}
     elif mode == "frame":
         out = np.empty(d.shape, np.uint8)
         for i in range(d.shape[0]):

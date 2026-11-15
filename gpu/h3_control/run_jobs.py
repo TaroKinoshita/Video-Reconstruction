@@ -61,6 +61,9 @@ def plan_runs(jobs_file: Path, group: str | None, only: list[str] | None, seeds:
         if only and job["id"] not in only:
             continue
         settings = {**defaults, **{k: v for k, v in job.items() if k in defaults}}
+        prompt = job.get("prompt", "")
+        if prompt.startswith("@"):  # a shared prompt written once in the jobs file ("@prompt_base")
+            job = {**job, "prompt": spec[prompt[1:]]}
         for seed in seeds or settings["seeds"]:
             runs.append({
                 "run_id": f"{job['id']}__s{seed}",
@@ -260,7 +263,8 @@ def main() -> int:
     for d in sorted(p for p in args.out.iterdir() if (p / "meta.json").is_file()):
         m = json.loads((d / "meta.json").read_text(encoding="utf-8"))
         summary.append({k: m[k] for k in ("run_id", "seed", "num_frames", "seconds", "peak_gpu_memory_gb")}
-                       | {"scene": m["job"]["scene"], "control_kind": m["job"]["control_kind"]})
+                       | {"scene": m["job"]["scene"], "control_kind": m["job"]["control_kind"],
+                          "hypothesis": m["job"].get("hypothesis", "full")})
     (args.out / "results_manifest.json").write_text(json.dumps({"env": env, "runs": summary}, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {args.out / 'results_manifest.json'}")
     return 0

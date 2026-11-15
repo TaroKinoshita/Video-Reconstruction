@@ -32,7 +32,9 @@ Foundation pieces only; every older number and key keeps its meaning. Tests: 160
 | WP-2 | done 2026-11-15: cadence removal at import, `frame_time`, GVHMR remap, tennis check | `place_person.py` remap (WP-5) |
 | WP-3 step 1 | schema 0.4.0: `Status` = observed / estimated / standard / hypothesis / human_confirmed, migration `assumed` -> `hypothesis`, `SceneObject.spans` + `status_at()`, `Evidence.kind`, `Scale.units_per_metre` + `basis` | |
 | WP-3 step 2 | `venue/build.py` keeps the layout's status and sets the evidence kind; `run/complete.py` writes `hypothesis` with kind `rule` | `fit_props.py` spans (the ball and racket are still `estimated` as a whole); nothing fills `units_per_metre` yet |
-| WP-3 steps 3-5 | nothing | status pass, hypothesis-aware export, converter for the tennis scene |
+| WP-3 steps 2-5 | done 2026-11-15 (M2): `analysis/prop_spans.py` + `fit_props.py` spans and `<object>_frames.json`; `control/status.py` status pass and full/soft/drop; `export_controls(hypothesis=...)`; `scripts/convert_tennis_status.py` -> `runs/venue/tennis/status_v040` (scale filled). Acceptance partly met: ball spans in order with props.json frames; source view observed .41 / standard .42 / hypothesis .16, orbit180 hypothesis .44 (largest, not a majority) | |
+| WP-4 | done 2026-11-15: `compare/generated.py`, `vrecon score-generated`; dry run A all 1.0, B separates the three edits (`scripts/dry_run_rq2.py`, `runs/rq2_dry/report.json`); `gpu/h3_control/score_on_gpu.md` | camera from video needs 4RC on the GPU machine |
+| Runbook 10.1-10.5, 10.7 | done: `gpu/h3_control/PRE_RENTAL.md` (accepted control kinds, no reference image, no per-pixel weight), pose control, `evaluation/tennis/jobs.json`, depth check (player 4 grey levels; disparity mode 18), tennis controls in `runs/venue/tennis/v2v_ready` | 10.6 cost cap and stop rule, prompt review: user |
 | WP-8 | `history.jsonl` opened as utf-8; `allow_pickle` removed in `fit_props.py`, `props_recut.py` | the rest |
 
 Check on stored condition-B scenes (GPT, run 1): syn_01 IoU .940 on both IoU measures (nothing lost), timing

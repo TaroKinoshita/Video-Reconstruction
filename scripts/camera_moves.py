@@ -52,16 +52,17 @@ def apply_move(r: np.ndarray, c: np.ndarray, move: str, t: float, pivot: np.ndar
 
 
 def move_camera(src, move: str, pivot: np.ndarray, units_per_m: float, n_frames: int, fps_out: float,
-                fps_src: float, step: int = 6, intrinsics=None):
+                fps_src: float, step: int = 6, intrinsics=None, start_time: float = 0.0):
     """A Camera (keys every `step` output frames and the last) for an output clip of n_frames at fps_out, following
-    the source camera's own motion (sampled at the same time) plus the move."""
+    the source camera's own motion (sampled at the same time) plus the move. start_time: scene seconds of output
+    frame 0 (a window later in the clip)."""
     from vrecon.metrics.poses import camera_pose
     from vrecon.scene.convert import matrix_to_quat
     from vrecon.schema import CameraKey, Pose
 
     keys = []
     for fr in sorted(set(range(0, n_frames, step)) | {n_frames - 1}):
-        r, c, _ = camera_pose(src, fr / fps_out * fps_src)
+        r, c, _ = camera_pose(src, (start_time + fr / fps_out) * fps_src)
         r, c = apply_move(np.asarray(r, float), np.asarray(c, float), move, fr / max(n_frames - 1, 1), pivot, units_per_m)
         keys.append(CameraKey(shot_frame=fr, pose=Pose(translation=tuple(map(float, c)), rotation=matrix_to_quat(r.tolist()))))
     upd = {"keys": keys}

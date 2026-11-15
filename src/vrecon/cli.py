@@ -77,6 +77,7 @@ def _cmd_control(args: argparse.Namespace) -> int:
     project = load_project(args.project)
     m = export_controls(
         project, args.out, args.shot, kinds=tuple(args.kinds.split(",")), depth_mode=args.depth_mode,
+        hypothesis=tuple(args.hypothesis.split(",")),
         preview=not args.no_preview, strict_h3=args.strict, root=Path(args.project).resolve().parent,
     )
     for p in m["h3_problems"]:
@@ -122,6 +123,30 @@ def _cmd_score(args: argparse.Namespace) -> int:
         Path(args.out).write_text(text + "\n", encoding="utf-8")
         print(f"wrote {args.out}")
     print(json.dumps(report["summary"], indent=2))
+    return 0
+
+
+def _cmd_score_generated(args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    from vrecon.compare.generated import load_controls, load_masks, score_generated
+    from vrecon.control.core import read_video_rgb
+
+    rep = score_generated(
+        read_video_rgb(args.video), load_controls(args.controls),
+        masks=load_masks(args.masks) if args.masks else None,
+        base_video=read_video_rgb(args.base) if args.base else None,
+        unchanged=[x for x in args.unchanged.split(",") if x] or None,
+        scene=load_project(args.scene) if args.scene else None,
+        camera=load_project(args.camera) if args.camera else None)
+    rep["inputs"] = {k: getattr(args, k) for k in ("video", "controls", "masks", "base", "unchanged", "scene", "camera")}
+    text = json.dumps(rep, indent=1, default=float)
+    if args.out:
+        Path(args.out).write_text(text + "\n", encoding="utf-8")
+        print(f"wrote {args.out}")
+    print(json.dumps({k: rep[k] for k in ("edges", "objects_by_status", "onset_abs_error_mean", "unchanged", "camera")
+                      if k in rep}, indent=1, default=float))
     return 0
 
 
@@ -201,7 +226,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--shot")
     c.add_argument("--out", required=True)
     c.add_argument("--kinds", default="depth,canny,gray")
-    c.add_argument("--depth-mode", choices=["clip", "frame"], default="clip")
+    c.add_argument("--depth-mode", choices=["clip", "frame", "disparity"], default="clip")
+    c.add_argument("--hypothesis", default="full", help="full, soft, drop or several comma-separated (control/status.py)")
     c.add_argument("--no-preview", action="store_true")
     c.add_argument("--strict", action="store_true", help="fail if the shot does not fit H3 constraints")
     c.set_defaults(func=_cmd_control)
@@ -228,6 +254,17 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--out")
     sc.add_argument("--novel", action="store_true", help="also score the clip's novel views (gt_passes/novel)")
     sc.set_defaults(func=_cmd_score)
+
+    sg = sub.add_parser("score-generated", help="score a generated video against the controls it came from (RQ2)")
+    sg.add_argument("video")
+    sg.add_argument("controls", help="export_controls folder (manifest.json, passes/)")
+    sg.add_argument("--masks", help="observer masks of the video (SAM-style npz)")
+    sg.add_argument("--base", help="generation from the unedited scene (unchanged-region measure)")
+    sg.add_argument("--unchanged", default="", help="comma-separated object ids an edit must leave alone")
+    sg.add_argument("--scene", help="project the controls came from (movers, camera reference)")
+    sg.add_argument("--camera", help="project with a camera estimated from the video")
+    sg.add_argument("--out")
+    sg.set_defaults(func=_cmd_score_generated)
 
     sb = sub.add_parser("score-blend", help="score any .blend (e.g. from an LLM) against a reference clip folder")
     sb.add_argument("reference")
