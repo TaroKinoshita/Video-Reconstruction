@@ -28,7 +28,8 @@ Foundation pieces only; every older number and key keeps its meaning. Tests: 160
 |---|---|---|
 | WP-1 step 1 | `summary.mask_iou_all_mean` (a lost object counts 0) and `matched_share`. Differs from the text below: `mask_iou_mean` was left as it is (matched objects only) so stored numbers do not shift; which one is the headline is decided at the freeze | centroid error over all objects |
 | WP-1 step 2 | `metrics.onset_frame_relative`, `report["timing_relative"]`, `summary.timing_rel_error_frames_mean`, `timing_rel_found_share`; the reference onset is measured by the same rule on `gt.json`. `measures.scorer_version = 2` | D2 (which rule is the headline) |
-| WP-1 steps 3-8 | nothing | novel views in the report, re-scoring stored runs, held-out set, statistics, freeze |
+| WP-1 steps 3-8 | done 2026-11-15 (M1): novel views (`--novel`), 100 runs re-scored (`evaluation/RESULTS.md` 5), synthetic v2 (12 clips), bootstrap comparison, `tuning.py`, thresholds frozen at `ff8c6b0` | L1 re-run with SAM masks (WP-7) |
+| WP-2 | done 2026-11-15: cadence removal at import, `frame_time`, GVHMR remap, tennis check | `place_person.py` remap (WP-5) |
 | WP-3 step 1 | schema 0.4.0: `Status` = observed / estimated / standard / hypothesis / human_confirmed, migration `assumed` -> `hypothesis`, `SceneObject.spans` + `status_at()`, `Evidence.kind`, `Scale.units_per_metre` + `basis` | |
 | WP-3 step 2 | `venue/build.py` keeps the layout's status and sets the evidence kind; `run/complete.py` writes `hypothesis` with kind `rule` | `fit_props.py` spans (the ball and racket are still `estimated` as a whole); nothing fills `units_per_metre` yet |
 | WP-3 steps 3-5 | nothing | status pass, hypothesis-aware export, converter for the tennis scene |

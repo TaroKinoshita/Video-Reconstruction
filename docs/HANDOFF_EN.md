@@ -14,6 +14,16 @@ in the Japanese documents listed in section 10; this file points into them.
 - **An outside design review was done** (Claude Fable 5.2, commit `0a4d0f3`): `docs/REVIEW_INSTRUCTIONS.md`.
   It lists findings F-01..F-31, eight decisions for the user (D1..D8), work packages WP-0..WP-9, a stop/defer list,
   RQ1 protocol v2 and a V2V session runbook. Its section 0 says what was already done (scorer v2, schema 0.4.0).
+- **M1 done (2026-11-15).** WP-0, WP-1 (scorer v3, re-score of 100 stored runs in `evaluation/RESULTS.md` 5,
+  synthetic v2 in `evaluation/synthetic_v2/`, bootstrap comparison, `src/vrecon/tuning.py`) and WP-2 (padding
+  removed at `vrecon new`, `schema.frame_time`). **`evaluation/thresholds.yaml` frozen at `ff8c6b0`** (commit
+  `828cc2a`): from now on a change to scoring rules or `tuning.py` must be written into its `changes`.
+  Findings recorded in `docs/REVIEW_INSTRUCTIONS.md` 12: L1 ("B + tools .881") used ground-truth masks; the
+  "body still one frame in five" claim does not hold; tennis container rate is 60/1 (fixed).
+- **Next: M2** (WP-3 hypothesis spans and export variants, WP-4 RQ2 scorer, pre-rental checks of runbook 10.2-10.6).
+  Starting points: `scripts/fit_props.py:133,170` still write `status="estimated"` for racket and ball;
+  `scene/controls.export_controls` has no status pass; `src/vrecon/compare/` is empty; VideoX-Fun pinned at
+  `e8c314f` (`gpu/h3_control/README.md`); phase-1a scenes and `edits.json` in `evaluation/phase1a/`.
 - **D1..D8 answered on 2026-11-15**, recorded in `docs/PLAN.md` 16.6. All as recommended except D6 (keep the
   12 stock real clips, no self-shot clips with truth) and D7 (`runs/` and `.venv` stay inside OneDrive, no
   `VRECON_RUNS`). Next: WP-0 (`evaluation/RESULTS.md`).
