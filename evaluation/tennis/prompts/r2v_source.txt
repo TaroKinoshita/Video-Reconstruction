@@ -1,0 +1,2 @@
+Use <Video 1> for the camera, the layout of the court and the stands, and the player's motion, frame by frame: <Video 1> is a grey 3D layout render, not the look. Use <Picture 1> for the look of the scene and the player.
+A professional tennis player serves on an outdoor hard court in bright afternoon sunlight. He tosses the ball high with his left hand and swings the racket overhead to hit it. Blue court with white lines, a net across the middle, stands with spectators around the court. Broadcast camera, realistic, sharp, natural colors.

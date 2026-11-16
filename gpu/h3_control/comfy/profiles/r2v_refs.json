@@ -1,0 +1,9 @@
+{
+ "_about": "r2v with several references per job (jobs_refs.json lists ref_images and extra_ref_videos; the prompt is in each job).",
+ "mode": "r2v",
+ "steps": 20,
+ "scheduler": "beta",
+ "clip": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+ "unet": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+ "ref_image_size": "max"
+}

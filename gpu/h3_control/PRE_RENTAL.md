@@ -43,8 +43,21 @@ User, 2026-11-15: expects about 1-2 dollars per rented hour. Not yet fixed: the 
 Note against the user's "24-32 GB VRAM": the README estimate is about 80 GB (transformer bf16 ~62 GB); 24-32 GB
 would need `model_cpu_offload_and_qfloat8` or `sequential_cpu_offload` plus lots of RAM, untested and much slower.
 Stage A (one job) decides this on the machine.
+User, 2026-11-15: start with the smallest, a 32 GB GPU, and verify there (stage A with
+`--memory-mode model_cpu_offload_and_qfloat8`; RAM as large as offered, disk 250 GB). Move to 80 GB if it does not
+load or one job is far too slow.
 
 ## 10.7 D8
 
 Recorded in `docs/PLAN.md` 16.6: sending to Claude, fal and the rented GPU allowed for research; results not
 published.
+
+## Stage A, measured (2026-11-16, RunPod RTX 4090 24 GB, 124 GB RAM, ComfyUI v0.44.0)
+
+ComfyUI template "MiniMax H3 Fun ControlNet Union" (`gpu/h3_control/comfy/template_ui_stageA.json`), unchanged
+except the video VAE (fp16): `minimax_h3_ref2va_pruned_int8_convrot` + `minimax_h3_fun_controlnet_union_pruned_int8_convrot`
+(model_patches, 2.14 GB) + text encoder `qwen3vl_32b_minimax_h3_nvfp4_awq` + video VAE fp16. The template's own pose
+example (SDPose extraction from `dancer_field_pose.mp4`), 1344x768, 124 frames, 20 steps `res_multistep`, turbo LoRA
+switched off, control strength 1. **Ran to the end on 24 GB**: 245 s for the first run including all loading and
+the pose extraction (32 s); sampling 80 s (4.0 s/step). No out-of-memory. Generation stays in ComfyUI (not
+VideoX-Fun): `run_jobs.py` is replaced by a ComfyUI API runner for this machine.

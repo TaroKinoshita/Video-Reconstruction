@@ -14,6 +14,7 @@
     {"id": "source__depth", "scene": "source", "control": "controls/controls_source/control_depth.mp4", "control_kind": "depth", "prompt": "@prompt_base", "group": "E"},
     {"id": "source__depth_disparity", "scene": "source", "control": "controls/disparity/controls_source/control_depth.mp4", "control_kind": "depth", "prompt": "@prompt_base", "group": "E"},
     {"id": "source__video_depth", "scene": "source", "control": "controls/source_video_depth.mp4", "control_kind": "depth", "prompt": "@prompt_base", "group": "E", "note": "plain-video baseline (F-31): annotator depth of the source window, made on the GPU machine"},
+    {"id": "source__gray", "scene": "source", "control": "controls/controls_source/control_gray.mp4", "control_kind": "gray", "prompt": "@prompt_base", "group": "E", "note": "r2v: the shaded proxy render as the reference video"},
     {"id": "source__pose", "scene": "source", "control": "controls/controls_source/control_pose.mp4", "control_kind": "pose", "prompt": "@prompt_base", "group": "extra"},
     {"id": "source__canny", "scene": "source", "control": "controls/controls_source/control_canny.mp4", "control_kind": "canny", "prompt": "@prompt_base", "group": "extra"},
     {"id": "dolly__depth_full", "scene": "dolly-100+crane4", "control": "controls/controls_dolly-100+crane4/control_depth.mp4", "control_kind": "depth", "hypothesis": "full", "prompt": "@prompt_base", "group": "F", "seeds": [43]},

@@ -1,0 +1,153 @@
+{
+ "about": "Reference comparison 2026-11-16 after the upload fix: A depth + one source frame, B clay + source crops, C clay + depth + source crops.",
+ "defaults": {
+  "sample_size": [
+   704,
+   800
+  ],
+  "num_inference_steps": 20,
+  "guidance_scale": 1.0,
+  "control_context_scale": 1.0,
+  "seeds": [
+   43
+  ],
+  "negative_prompt": ""
+ },
+ "jobs": [
+  {
+   "id": "source__A_depth_frame",
+   "scene": "source",
+   "control": "controls/controls_source/control_depth.mp4",
+   "control_kind": "depth",
+   "ref_images": [
+    "refs/frame_full.png"
+   ],
+   "prompt": "<Picture 1> is a frame of the original broadcast: keep its look — the same player (blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair), the same blue hard court with white lines, the same blue stadium seats, the dark blue wall with sponsor boards, the same bright late-afternoon sunlight.\n<Video 1> is a depth render of the shot (near is bright): follow it for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy its look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "refs"
+  },
+  {
+   "id": "source__B_clay_crops",
+   "scene": "source",
+   "control": "controls/clay/controls_source/control_clay.mp4",
+   "control_kind": "clay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "The same player as <Picture 1> to <Picture 4>: blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair. The same venue as <Picture 1> and <Picture 5>: blue hard court with white lines, blue stadium seats, dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a clay 3D render of the shot: follow it for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy its clay look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "refs"
+  },
+  {
+   "id": "source__C_clay_depth_crops",
+   "scene": "source",
+   "control": "controls/clay/controls_source/control_clay.mp4",
+   "control_kind": "clay",
+   "extra_ref_videos": [
+    "controls/controls_source/control_depth.mp4"
+   ],
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "The same player as <Picture 1> to <Picture 4>: blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair. The same venue as <Picture 1> and <Picture 5>: blue hard court with white lines, blue stadium seats, dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a clay 3D render and <Video 2> a depth render of the same shot: follow them for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy their look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "refs"
+  },
+  {
+   "id": "orbit90__A_depth_frame",
+   "scene": "orbit90",
+   "control": "controls/controls_orbit90+dolly-60/control_depth.mp4",
+   "control_kind": "depth",
+   "ref_images": [
+    "refs/frame_full.png"
+   ],
+   "prompt": "<Picture 1> is a frame of the original broadcast: keep its look — the same player (blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair), the same blue hard court with white lines, the same blue stadium seats, the dark blue wall with sponsor boards, the same bright late-afternoon sunlight.\n<Video 1> is a depth render of the shot (near is bright): follow it for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy its look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "refs"
+  },
+  {
+   "id": "orbit90__B_clay_crops",
+   "scene": "orbit90",
+   "control": "controls/clay/controls_orbit90+dolly-60/control_clay.mp4",
+   "control_kind": "clay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "The same player as <Picture 1> to <Picture 4>: blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair. The same venue as <Picture 1> and <Picture 5>: blue hard court with white lines, blue stadium seats, dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a clay 3D render of the shot: follow it for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy its clay look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "refs"
+  },
+  {
+   "id": "orbit90__C_clay_depth_crops",
+   "scene": "orbit90",
+   "control": "controls/clay/controls_orbit90+dolly-60/control_clay.mp4",
+   "control_kind": "clay",
+   "extra_ref_videos": [
+    "controls/controls_orbit90+dolly-60/control_depth.mp4"
+   ],
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "The same player as <Picture 1> to <Picture 4>: blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair. The same venue as <Picture 1> and <Picture 5>: blue hard court with white lines, blue stadium seats, dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a clay 3D render and <Video 2> a depth render of the same shot: follow them for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy their look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "refs"
+  },
+  {
+   "id": "dolly__B_clay_crops",
+   "scene": "dolly",
+   "control": "controls/clay/controls_dolly-100+crane4/control_clay.mp4",
+   "control_kind": "clay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "The same player as <Picture 1> to <Picture 4>: blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair. The same venue as <Picture 1> and <Picture 5>: blue hard court with white lines, blue stadium seats, dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a clay 3D render of the shot: follow it for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy its clay look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "stage2"
+  },
+  {
+   "id": "orbit90__B_clay_crops_soft",
+   "scene": "orbit90",
+   "control": "controls/clay/controls_orbit90+dolly-60/control_clay__soft.mp4",
+   "control_kind": "clay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "The same player as <Picture 1> to <Picture 4>: blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair. The same venue as <Picture 1> and <Picture 5>: blue hard court with white lines, blue stadium seats, dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a clay 3D render of the shot: follow it for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy its clay look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "stage2",
+   "hypothesis": "soft"
+  },
+  {
+   "id": "orbit90__B_clay_crops_drop",
+   "scene": "orbit90",
+   "control": "controls/clay/controls_orbit90+dolly-60/control_clay__drop.mp4",
+   "control_kind": "clay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "The same player as <Picture 1> to <Picture 4>: blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair. The same venue as <Picture 1> and <Picture 5>: blue hard court with white lines, blue stadium seats, dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a clay 3D render of the shot: follow it for the camera, the positions of the court, net and stands, and the player's serve motion, frame by frame. Do not copy its clay look.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "group": "stage2",
+   "hypothesis": "drop"
+  }
+ ]
+}

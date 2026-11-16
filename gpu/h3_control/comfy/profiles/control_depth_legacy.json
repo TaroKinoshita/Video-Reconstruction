@@ -1,0 +1,8 @@
+{
+  "_about": "First setting (Fun ControlNet Union on depth): coarse pictures with proxy depth; kept for comparison only.",
+  "mode": "control",
+  "steps": 20,
+  "scheduler": "simple",
+  "clip": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+  "strength": 1.0
+}

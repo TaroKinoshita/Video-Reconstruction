@@ -1,0 +1,10 @@
+{
+ "_about": "Final setting for scenes without a source video (phase 1a): r2v, <Video 1> = the 3D scene's render; the look comes from the job's prompt.",
+ "mode": "r2v",
+ "steps": 20,
+ "scheduler": "beta",
+ "clip": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+ "unet": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+ "ref_image_size": "match",
+ "prompt_prefix": "<Video 1> is a 3D layout render of the shot (depth: near is bright): follow it for the camera, the positions and sizes of every object, and their motion and timing, frame by frame. Do not copy its look."
+}

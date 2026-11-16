@@ -1,0 +1,11 @@
+{
+  "_about": "Final setting 2026-11-16: ComfyUI r2v template (MiniMaxH3ReferenceToVideo, no ControlNet). <Video 1> = the 3D scene's render (camera, layout, motion); <Picture 1> = a full-size frame of the source video (look). Copy this file and change one thing when a problem shows up; meta.json records the profile.",
+  "mode": "r2v",
+  "steps": 20,
+  "scheduler": "beta",
+  "clip": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+  "unet": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+  "ref_image": "runs/tennis/ref_first_frame_full.png",
+  "ref_image_size": "max",
+  "prompt_file": "evaluation/tennis/prompts/r2v_source_look.txt"
+}
