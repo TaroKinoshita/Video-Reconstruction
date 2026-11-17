@@ -168,6 +168,13 @@
       "date": "2026-11-15",
       "what": "frozen at ff8c6b0 (content commit); held-out clips may now be run",
       "why": "WP-1 step 8"
+    },
+    {
+      "date": "2026-11-18",
+      "what": "added an optional camera-path hypothesis (optimize 'cam_path', policy 'set_path', tuning CAM_PATH_STEP / CAM_PATH_SCALE_STEP). Default OFF in auto_repair, so the frozen method is unchanged; tuning.py hash changed only by the two new constants",
+      "why": "WP-7 step 1: 4RC keeps ~1/4 of syn_04's truck. On v1 clips (regression set) with vs without: source IoU and novel views within .005 on all six, timing identical; syn_04 camera path error .251 -> .107. No measurable gain, so not switched on",
+      "evidence": "runs/campath_test/{with,without}/scores.json, evaluation/RESULTS.md 6"
     }
-  ]
+  ],
+  "tuning_sha256_after_change": "38e0329075c296dbbbe84b92b983a3a9c9ad080c02133033343bfa50eba1058b"
 }

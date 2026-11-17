@@ -257,6 +257,39 @@ def apply_params(project: Project, params: list[Param], x: np.ndarray) -> tuple[
                 n = max(len(o.keys) - 1, 1)
                 o.keys = [turn(k, float(v) * i / n) for i, k in enumerate(o.keys)]
             touched[(o.id, "keys")] = o.keys
+        elif prm.kind == "cam_path":
+            # the camera's translation path, changed and handed over to the moving objects (review F-04, syn_04: a
+            # 4D model can keep only part of a truck and give the rest to the objects). axis 0-2: a drift along
+            # world x/y/z, linear in time and zero at mid-shot; axis 3: the path scaled about its mean. Every
+            # animated non-set object gets the same shift at its key times, so what it looks like from the camera
+            # barely changes; only the set pieces (floor, walls) show the difference, and the proposal is judged
+            # on them (run/policy.py).
+            c = cams[prm.target_id]
+            n_frames = max(p.shots[0].end - p.shots[0].start - 1, 1)
+            centres = np.array([k.pose.translation for k in c.keys], float)
+            mean_c = centres.mean(0)
+            frames_k = np.array([k.shot_frame for k in c.keys], float)
+
+            def delta(frame: float, v=float(v), axis=prm.axis) -> np.ndarray:
+                if axis < 3:
+                    d = np.zeros(3)
+                    d[axis] = v * (frame / n_frames - 0.5)
+                    return d
+                at = np.array([np.interp(frame, frames_k, centres[:, i]) for i in range(3)])
+                return v * (at - mean_c)
+
+            c.keys = [k.model_copy(update={"pose": Pose(translation=tuple(map(float, np.array(k.pose.translation)
+                                                                             + delta(k.shot_frame))),
+                                                        rotation=k.pose.rotation)}) for k in c.keys]
+            touched[(c.id, "keys")] = c.keys
+            fps = p.source.fps.num / p.source.fps.den
+            for o in objs.values():
+                if o.kind == "set" or not o.keys:
+                    continue
+                o.keys = [k.model_copy(update={"pose": Pose(translation=tuple(map(float, np.array(k.pose.translation)
+                                                                                 + delta(k.time * fps))),
+                                                            rotation=k.pose.rotation)}) for k in o.keys]
+                touched[(o.id, "keys")] = o.keys
         elif prm.kind == "focal":
             c = cams[prm.target_id]
             m = max(1.0 + float(v), 0.05)

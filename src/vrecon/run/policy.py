@@ -12,7 +12,7 @@ import numpy as np
 from vrecon.optimize import Param, apply_params, combined_loss, optimize
 
 from .manager import AcceptRule, RunManager
-from vrecon.tuning import CAMERA_GUARD, FOCAL_PROBE, FOCAL_MIN_RISE, MOVE_STEP, SIZE_STEP, YAW_STEP  # noqa: E402,F401  (tuned values, one place)
+from vrecon.tuning import CAMERA_GUARD, CAM_PATH_SCALE_STEP, CAM_PATH_STEP, FOCAL_PROBE, FOCAL_MIN_RISE, MOVE_STEP, SIZE_STEP, YAW_STEP  # noqa: E402,F401  (tuned values, one place)
 
 # camera proposals are judged on camera evidence, and may not make the whole fit worse: otherwise a focal
 # change that pulls objects off their observations is adopted (syn_04, condition C trial 2026-11-09)
@@ -53,7 +53,17 @@ def _distance(project, o) -> float:
 def hypotheses(project) -> list[tuple[str, list[Param], str]]:
     hs = [("camera focal length is off (judged on the set: outlines + tracks)", [Param("focal", "cam_001", step=0.1)],
            "set")]
-    hs[0][1][0].target_id = project.reconstruction.cameras[0].id
+    cam = project.reconstruction.cameras[0]
+    hs[0][1][0].target_id = cam.id
+    # the camera's translation path (optimize "cam_path"): a drift along each world axis and the path's scale,
+    # handed over to the moving objects; judged on the set like the focal length (review F-04, WP-7 step 1)
+    if len(cam.keys) > 1:
+        movers = [o for o in project.reconstruction.objects if o.kind != "set"]
+        ref = float(np.mean([_distance(project, o) for o in movers])) if movers else 1.0
+        hs.insert(1, ("camera translation path is off; the objects took part of the camera's motion (judged on the "
+                      "set: outlines + tracks)",
+                      [Param("cam_path", cam.id, a, CAM_PATH_STEP * ref) for a in range(3)]
+                      + [Param("cam_path", cam.id, 3, CAM_PATH_SCALE_STEP)], "set_path"))
     for o in project.reconstruction.objects:
         if o.kind == "set":
             continue
@@ -77,7 +87,7 @@ def hypotheses(project) -> list[tuple[str, list[Param], str]]:
 
 
 def auto_repair(mgr: RunManager, obs, pairs: dict[str, str], tracks=None, passes: int = 2, evals: int = 60,
-                focal: bool = True, rays: bool = False) -> list[dict]:
+                focal: bool = True, rays: bool = False, camera_path: bool = False) -> list[dict]:
     """Run the fixed hypothesis order through the run manager. Returns one record per attempt.
     focal=False skips the focal-length hypothesis (e.g. when the start comes from a 4D model whose focal
     error the repair tends to trade against other errors). rays=True first proposes, for each moving object,
@@ -100,8 +110,14 @@ def auto_repair(mgr: RunManager, obs, pairs: dict[str, str], tracks=None, passes
         for i, (hyp, params, judged_on) in enumerate(hypotheses(mgr.adopted)):
             if judged_on == "set" and not focal:
                 continue
+            if judged_on == "set_path" and not camera_path:
+                continue
             pid = f"auto{n}_{i:02d}_{mgr.attempts + 1:03d}"
-            if judged_on == "set":
+            if judged_on == "set_path":
+                prop, info = optimize(mgr.adopted, obs, set_pairs, params, hyp, pid, max_evals=evals, tracks=tracks,
+                                      track_ids=set_ids or None, use_silhouette=bool(set_pairs))
+                out = mgr.try_proposal(prop, rule=CAMERA_RULE)
+            elif judged_on == "set":
                 prop, info = optimize(mgr.adopted, obs, set_pairs, params, hyp, pid, max_evals=evals, tracks=tracks,
                                       track_ids=set_ids or None, use_silhouette=bool(set_pairs))
                 found = next(iter(info["values"].values()))

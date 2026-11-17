@@ -40,11 +40,27 @@ def toml_str(s: str) -> str:
     return json.dumps(str(s).replace("\\", "/"), ensure_ascii=False)
 
 
+def isolated_workspace(run: Path) -> Path:
+    """The agent's workspace OUTSIDE the repository (review F-29): %LOCALAPPDATA%/vrecon/b_ws/gpt-<run>-<time>, or
+    $VRECON_B_WS_ROOT. Codex's sandbox (workspace-write, -C <workspace>) then never has the repository, gt.json or
+    gt_passes under its writable or working tree. finish.py copies it back into RUN/workspace for scoring."""
+    import os
+    import time
+
+    root = Path(os.environ.get("VRECON_B_WS_ROOT") or Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local/share"))
+                / "vrecon" / "b_ws").resolve()
+    if REPO in root.parents or root == REPO:
+        raise SystemExit(f"workspace root {root} is inside the repository")
+    return root / f"gpt-{run.name}-{int(time.time())}"
+
+
 def prepare_b(clip: Path, run: Path) -> None:
-    ws = run / "workspace"
+    ws = isolated_workspace(run)
     (ws / "input").mkdir(parents=True)
     (ws / "output").mkdir()
+    run.mkdir(parents=True, exist_ok=True)
     (run / "logs").mkdir()
+    (run / "workspace_path.txt").write_text(str(ws), encoding="utf-8")
     shutil.copy(clip / "video.mp4", ws / "input" / "reference.mp4")
     prompt = (REPO / "baselines" / "b_llm_mcp" / "prompt_L1.txt").read_text(encoding="utf-8")
     prompt = prompt.replace("<VIDEO_PATH>", (ws / "input" / "reference.mp4").as_posix())

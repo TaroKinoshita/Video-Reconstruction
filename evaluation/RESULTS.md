@@ -137,3 +137,9 @@ objects' motion. The conversion to the scene keeps 4RC's path exactly, and the r
 Consequence (review F-04): a low-dimensional camera-path parameter (scale of the translation along its main
 direction; lateral / forward / vertical offsets linear in time) judged on set-piece evidence plus track parallax
 could recover it. Adding it changes the method after the freeze (thresholds.yaml `changes`); decision pending.
+
+Follow-up (same day): a camera-path hypothesis (drift along x/y/z linear in time and the path's scale, handed over
+to the moving objects, judged on the set like the focal length) was added and run on all six v1 clips with the
+fixed order. It is adopted on every clip, cuts syn_04's camera-path error from .251 to .107, but source IoU, novel
+views (10/30 deg) and timing change by at most .005 on every clip (`runs/campath_test/`). Kept in the code, off by
+default (`auto_repair(camera_path=False)`); recorded in `evaluation/thresholds.yaml` changes.

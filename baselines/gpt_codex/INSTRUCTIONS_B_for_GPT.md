@@ -19,7 +19,7 @@
 - MCP：`runs/gpt/b/syn_XX/codex_mcp.toml` の `blender`（blend-ai）だけ。vreconのMCPはつながない。
   blend-aiは、ユーザーが起動したBlender（ポート9876）に接続する。開始前にポートが開いているか確認し、
   開いていなければ実行せずに報告する。
-- 作業フォルダ（`-C`）：`runs/gpt/b/syn_XX/workspace`。サンドボックスは workspace-write（この中だけ書き込み可）。
+- 作業フォルダ（`-C`）：`RUN_DIR/workspace_path.txt` に書かれたフォルダ（リポジトリの外）。サンドボックスは workspace-write（この中だけ書き込み可）。
 - シェル：使ってよい（Claudeの条件Bも Bash/Read/Write を許可した）。映像のフレーム抽出（ffmpeg）や画像の閲覧も可。
   Web検索、別エージェント、アプリ連携は無効。
 - 正解データ（`evaluation/synthetic/*/gt.json`, `gt_passes/`, `meta.json`）や、他の試行の出力、`runs/` の他のフォルダを

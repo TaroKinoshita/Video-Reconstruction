@@ -19,6 +19,9 @@ FOCAL_MIN_RISE = 0.001  # draft; chosen on: v1 dev
 MOVE_STEP = 0.035  # first position step, share of camera-to-object distance; chosen on: v1 dev (= 0.25 m at ~7 m)
 SIZE_STEP = 0.02  # same for size; chosen on: v1 dev (= 0.15 m at ~7 m)
 YAW_STEP = 0.3  # first orientation step, radians; chosen on: v1 dev
+CAM_PATH_STEP = 0.1  # first camera-drift step, share of camera-to-object distance; added 2026-11-18 after the
+# freeze (thresholds.yaml changes), not tuned: round value
+CAM_PATH_SCALE_STEP = 0.5  # first step of the camera path's scale (1 + v); not tuned
 
 # --- loss (optimize/__init__.py) --------------------------------------------------------------------------------
 TRACK_WEIGHT = 50.0  # track loss (~0.001 of the diagonal) onto the silhouette scale (~0.1); chosen on: v1 dev
@@ -38,7 +41,7 @@ MOVE_FRACTION = 0.5  # box centres spread more than this share of size -> the ob
 FLAT = 0.02  # thinnest/longest side below this: a plane; chosen on: GPT condition-B scenes of v1 dev
 
 __all__ = [
-    "CAMERA_GUARD", "FLAT", "FOCAL_MIN_RISE", "FOCAL_PROBE", "HOLD_TOLERANCE", "MIN_DEPTH_RATIO",
+    "CAMERA_GUARD", "CAM_PATH_SCALE_STEP", "CAM_PATH_STEP", "FLAT", "FOCAL_MIN_RISE", "FOCAL_PROBE", "HOLD_TOLERANCE", "MIN_DEPTH_RATIO",
     "MIN_FLOOR_POINTS", "MOVE_FRACTION", "MOVE_STEP", "ROUND_RATIO", "SIZE_STEP", "STILL_PROGRESS", "TOP_DOWN",
     "TRACK_WEIGHT", "YAW_STEP",
 ]

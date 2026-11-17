@@ -33,6 +33,11 @@ def main() -> int:
     args = ap.parse_args()
     run = Path(args.run).resolve()
     clip = Path((run / "clip.txt").read_text(encoding="utf-8").strip())
+    ws_file = run / "workspace_path.txt"  # isolated workspace outside the repository (prepare.isolated_workspace)
+    if ws_file.is_file() and not (run / "workspace").exists():
+        import shutil
+
+        shutil.copytree(Path(ws_file.read_text(encoding="utf-8").strip()), run / "workspace")
     start = _iso((run / "prompt.txt").stat().st_mtime)
     end = _iso(datetime.now().timestamp())
     if args.kind == "b":
