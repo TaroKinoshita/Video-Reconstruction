@@ -623,3 +623,9 @@ LLM が選ぶ仕上げは +30分。費用（ドルと分）は揃えず、結果
 - 4RC（ICML 2026、arXiv 2602.10094）：<https://github.com/Luo-Yihang/4RC>
 - SciPy：<https://github.com/scipy/scipy>
 - bpy（PyPI）：<https://pypi.org/project/bpy/>
+
+### 16.7 v1.0 の範囲（2026-11-18）【確定】
+
+ユーザーの決定：RQ1（2×3 の比較、16.6 の表）を v1.0 に入れる。テニスの事例研究（V2V、RQ2）と合わせて v1.0 とする。
+RQ1 は WP-7 の手順で進める（syn_04 の原因調査 → 条件B の隔離 → v2 合成映像の SAM マスク → 調整用6本 → 本番用6本 → 編集しやすさ → 報告）。
+LLM の費用の上限と条件B の LLM は、6マスを回す前にユーザーが決める。
