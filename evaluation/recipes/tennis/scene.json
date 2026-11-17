@@ -1,0 +1,36 @@
+{
+  "about": "Tennis, observation -> finished scene (docs/HANDOFF_EN.md section 6, review F-02/F-03). This half is a written recipe: the stages are still scripts, run in this order with these values; the scene -> V2V half is executable (v2v.json, vrecon pipeline-v2v). Turning these stages into functions under src/vrecon/pipeline is the rest of WP-5. Every per-clip value carries its basis.",
+  "inputs": {
+    "video": {"path": "runs/human/tennis/tennis.mp4", "basis": "observation: the clip shipped with GVHMR (D8: research use, not published)"},
+    "masks": {"path": "runs/human/tennis/masks.npz", "tool": "SAM 3.1 f1647e8 (gpu/observe/run_sam3.py)"},
+    "floor_masks": {"path": "runs/human/tennis/floor_masks.npz", "tool": "SAM 3.1 on ComfyUI (gpu/h3_control/comfy_sam.py --prompt 'floor, ground, tennis court')"},
+    "start_scene_4d": {"path": "runs/human/tennis/4rc.npz", "tool": "4RC a08ca0a"},
+    "skeleton": {"path": "runs/human/tennis/gvhmr_skeleton.npz", "tool": "GVHMR ee960bb (WSL) + gpu/observe/gvhmr_body_mesh.py"},
+    "props_masks": {"path": "runs/human/tennis/props_masks.npz", "tool": "SAM 3.1 per window (scripts/props_recut.py)"},
+    "ball_masks": {"path": "runs/human/tennis/recut/ball_masks.npz", "tool": "scripts/props_recut.py merge"}
+  },
+  "values": {
+    "focal_px": {"value": 2104, "basis": "measured: court line calibration (scripts/calibrate_court.py), fixed afterwards"},
+    "court_template": {"value": "ITF singles/doubles court 10.97 x 23.77 m, net 12.8 x 1.07 m", "basis": "standard: ITF rules"},
+    "units_per_metre": {"value": 1.0, "basis": "measured: court lines (units.json)"},
+    "person_main": {"value": "obj_person_01", "basis": "observation: GVHMR on the server"},
+    "proxy_kinds": {"value": {"obj_net": "board"}, "basis": "human (scripts/proxies_scene.py --kinds)"},
+    "stands_rise_m": {"value": 0.45, "basis": "default: typical stand row rise"},
+    "crowd_density": {"value": 0.08, "basis": "llm: venue layout answer, kept from fal2c"},
+    "venue_layout": {"path": "runs/venue/tennis/fal2c/layout.json", "basis": "llm: claude -p over the observation summary (scripts/llm_venue.py)"},
+    "after_strike": {"path": "runs/venue/tennis/tennis_after.json", "value": {"target_m": [2.0, 5.8, 0.03], "speed_mps": 45}, "basis": "human: a serve into the service box (rules of tennis, typical speed)"},
+    "prop_link_px": {"value": 180, "basis": "default: tracklet link distance (scripts/fit_props.py --link)"},
+    "hand_px": {"value": 35, "basis": "default (scripts/fit_props.py --hand-px)"}
+  },
+  "stages": [
+    {"stage": "calibrate", "command": "scripts/calibrate_court.py", "output": "court frame, focal, units.json"},
+    {"stage": "to_court", "command": "analysis/to_court.py (via scripts)", "output": "4RC points on the calibrated rays"},
+    {"stage": "people", "command": "scripts/place_person.py; scripts/proxies_scene.py", "output": "GVHMR person on scene rays, other people as figures, clothing colours"},
+    {"stage": "venue", "command": "scripts/observe_venue.py -> scripts/llm_venue.py -> scripts/build_venue.py", "output": "runs/venue/tennis/fal2c"},
+    {"stage": "complete", "command": "scripts/complete_scene.py", "output": "unseen space filled, source view protected"},
+    {"stage": "timing", "command": "vrecon run align_timing / hold_still", "output": "keys on observed onsets"},
+    {"stage": "props", "command": "scripts/fit_props.py ... --after tennis_after.json --link 180", "output": "runs/venue/tennis/fal2c_props (racket, ball with status spans)"},
+    {"stage": "status", "command": "scripts/convert_tennis_status.py", "output": "runs/venue/tennis/status_v040 (schema 0.4.0 statuses, scale filled)"},
+    {"stage": "v2v", "command": "vrecon pipeline-v2v evaluation/recipes/tennis/v2v.json", "output": "shapes, floor check, clay references, crops, prompts, generation"}
+  ]
+}

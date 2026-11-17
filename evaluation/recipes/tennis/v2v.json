@@ -1,0 +1,23 @@
+{
+  "about": "Tennis, scene -> V2V (vrecon pipeline-v2v). Inputs under runs/ (not in git); outputs under work. Every per-clip value has a basis.",
+  "work": "runs/pipeline/tennis_v2v",
+  "scene": "runs/venue/tennis/status_v040",
+  "video": "runs/human/tennis/tennis.mp4",
+  "masks": "runs/human/tennis/masks.npz",
+  "floor_masks": "runs/human/tennis/floor_masks.npz",
+  "look": "evaluation/tennis/prompts/look_tennis_auto.txt",
+  "action": "evaluation/tennis/prompts/action_tennis.txt",
+  "profile": "gpu/h3_control/comfy/profiles/r2v_refs.json",
+  "move_names": {"source": "source", "dolly-100+crane4": "dolly", "orbit90+dolly-60": "orbit90"},
+  "values": {
+    "start_time": {"value": 5.26, "basis": "human: the second serve, toss to strike (scene seconds)"},
+    "frames": {"value": 124, "basis": "standard: H3 17n+5, ~5 s"},
+    "moves": {"value": ["source", "dolly-100+crane4", "orbit90+dolly-60"], "basis": "human: small and large camera edits"},
+    "reference_kind": {"value": "clay", "basis": "measured: comparison 2026-11-16/18 (gpu/h3_control/RESULTS_2026-11-16.md)"},
+    "main_object": {"value": "obj_person_01", "basis": "observation: GVHMR person"},
+    "main_role": {"value": "the tennis player serving", "basis": "human"},
+    "seeds": {"value": [43], "basis": "default: one seed for comparisons"},
+    "mask_map": {"value": {"obj_chair": "obj_chair"}, "basis": "observation: SAM label = object id"},
+    "crop_map": {"value": {"obj_chair": "obj_chair", "obj_net": "obj_net", "obj_stands": "obj_stand_far_stand", "obs_0": "obj_person_01", "obs_1": "obj_person_02"}, "basis": "observation: SAM labels of the scene's objects"}
+  }
+}

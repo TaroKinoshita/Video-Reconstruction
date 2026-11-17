@@ -82,3 +82,16 @@ outputs: .blend, single-file HTML report (comparisons, uncertain items, repair h
 ## Development vs. use
 
 Cloud session: write code, test, push. Local PC: Blender GUI, GPU, local Claude Code. Exchange via git (small files and manifests only); large media stays out of git.
+
+## Added 2026-11-15..18 (M1-M3)
+
+| Area | Modules |
+|---|---|
+| Scoring | `evaluate.py` (scorer v3: unmatched = 0, relative onset, novel views), `compare/generated.py` (RQ2: generated video vs the scene's passes), `scripts/compare_conditions.py` (paired bootstrap) |
+| Time base | `video.py` (`detect_cadence`, `remove_padding`, `frame_rate`), `schema.frame_time` / `time_frame` / `source_frames_of` |
+| Hypotheses in V2V | `schema` 0.4.0 statuses and spans, `analysis/prop_spans.py`, `control/status.py` (status pass, full/soft/drop) |
+| V2V inputs | `control/pose.py`, `control/core.shaded_identity` (kind `idclay`), `control/inventory.py`, `scripts/make_prompts.py`, `scripts/make_ref_crops.py` |
+| Scene repair for V2V | `analysis/shape_library.py` (category templates), `analysis/floor_contact.py` (floor mask under the object) |
+| Generation (rented GPU) | `gpu/h3_control/comfy_jobs.py` (ComfyUI API, profiles), `gpu/h3_control/comfy_sam.py` (SAM 3.1 on the pod) |
+| Recipes | `pipeline/v2v.py` (`vrecon pipeline-v2v`), `evaluation/recipes/<clip>/` |
+| Tuning | `tuning.py` (every tuned constant, hash frozen in `evaluation/thresholds.yaml`) |

@@ -237,7 +237,8 @@ def rollback(run_dir: str, revision: int) -> dict:
     return {"revision": p.revision, "metrics": mgr.metrics}
 
 
-__all__ = ["auto", "auto_pairs", "diagnose", "history", "init_run", "rollback", "run_optimizer", "state", "submit"]
+__all__ = ["align_timing", "auto", "auto_pairs", "diagnose", "history", "hold_still", "init_run", "rollback",
+           "run_optimizer", "state", "submit"]
 
 
 def warp_times(times, scene: tuple, observed: tuple, fps: float) -> list[float]:

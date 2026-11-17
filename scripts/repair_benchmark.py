@@ -63,7 +63,9 @@ def run_clip(clip: Path, out_root: Path, passes: int, evals: int, observed: Path
     gt = load_project(clip / "gt.json")
     wrong, injected = perturb(gt, seed=int(clip.name.split("_")[-1]))
     masks_file = observed / clip.name / "masks.npz" if observed else None
-    obs = load_masks(masks_file) if masks_file and masks_file.is_file() else gt_stand_in_masks(clip)
+    if masks_file is not None and not masks_file.is_file():  # F-21: no silent fallback to ground truth
+        raise FileNotFoundError(f"--observed given but {masks_file} is missing (would fall back to ground-truth masks)")
+    obs = load_masks(masks_file) if masks_file else gt_stand_in_masks(clip)
     run_dir = out_root / clip.name
     if run_dir.exists():
         import shutil

@@ -266,6 +266,15 @@ def main(argv: list[str] | None = None) -> int:
     sg.add_argument("--out")
     sg.set_defaults(func=_cmd_score_generated)
 
+    pv = sub.add_parser("pipeline-v2v", help="run a clip's scene -> V2V recipe (evaluation/recipes/<clip>/v2v.json)")
+    pv.add_argument("recipe")
+    pv.add_argument("--from", dest="start")
+    pv.add_argument("--to", dest="stop")
+    pv.add_argument("--server", help="ComfyUI server for the generate stage")
+    pv.add_argument("--dry-run", action="store_true")
+    pv.set_defaults(func=lambda args: __import__("vrecon.pipeline.v2v", fromlist=["run"]).run(
+        Path(args.recipe), args.start, args.stop, args.server, args.dry_run))
+
     sb = sub.add_parser("score-blend", help="score any .blend (e.g. from an LLM) against a reference clip folder")
     sb.add_argument("reference")
     sb.add_argument("project", metavar="blend")

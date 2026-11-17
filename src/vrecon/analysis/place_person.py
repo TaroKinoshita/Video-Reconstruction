@@ -28,13 +28,15 @@ from vrecon.schema import Camera, Evidence, FileRef, Pose, SceneObject, Transfor
 FEET = ("left_ankle", "right_ankle", "left_foot", "right_foot")
 
 
-def _rays(d: dict, camera: Camera, first_shot_frame: int):
-    """Per frame: (R cam->world, centre, joint ray points in scene-camera coords at GVHMR depth [J,3])."""
+def _rays(d: dict, camera: Camera, first_shot_frame: int, mapped: list | None = None):
+    """Per frame: (R cam->world, centre, joint ray points in scene-camera coords at GVHMR depth [J,3]).
+    mapped: the project's source frame of each skeleton frame (vrecon.schema.project.source_frames_of)."""
     from vrecon.metrics.poses import camera_pose
 
     out = []
     for i in range(int(d["frames"])):
-        r, c, k_s = camera_pose(camera, first_shot_frame + i)
+        sf = mapped[i] if mapped is not None and mapped[i] is not None else i
+        r, c, k_s = camera_pose(camera, first_shot_frame + sf)
         pc = d["joints_cam"][i]
         k_g = d["K"][i]
         uv = (pc[:, :2] / pc[:, 2:]) * [k_g[0, 0], k_g[1, 1]] + [k_g[0, 2], k_g[1, 2]]
@@ -48,7 +50,10 @@ def _rays(d: dict, camera: Camera, first_shot_frame: int):
 
 def place_in_scene(path: str | Path, rel_path: str, camera: Camera, obj_id: str = "obj_person_01",
                    start_time: float = 0.0, first_shot_frame: int = 0, quantile: float = 0.25,
-                   name: str = "", smooth_frames: float = 1.5) -> tuple[SceneObject, dict]:
+                   name: str = "", smooth_frames: float = 1.5, source=None) -> tuple[SceneObject, dict]:
+    """source: the project's SourceVideo. When GVHMR ran on the original padded video (SourceVideo.cadence), its
+    repeated frames are dropped and the others keyed at the project's frame times (docs/REVIEW_INSTRUCTIONS.md WP-2,
+    as from_gvhmr.character_from_gvhmr)."""
     from vrecon.analysis.from_gvhmr import load_skeleton
     from vrecon.scene.convert import matrix_to_quat, quat_to_matrix
 
@@ -57,7 +62,11 @@ def place_in_scene(path: str | Path, rel_path: str, camera: Camera, obj_id: str 
     feet = [names.index(f) for f in FEET if f in names]
     # usual height of the lowest foot joint while standing, in GVHMR's world (metres)
     foot_h = float(np.quantile(d["joints_world"][:, feet, 2].min(1), 0.1))
-    rays = _rays(d, camera, first_shot_frame)
+    from vrecon.schema.project import source_frames_of
+
+    n_sk = int(d["frames"])
+    mapped = source_frames_of(source, n_sk) if source is not None else list(range(n_sk))
+    rays = _rays(d, camera, first_shot_frame, mapped)
     s_frame = []
     for r, c, q in rays:
         b = (q[feet] @ r.T)[:, 2].min()  # world z per unit of s, lowest foot
@@ -68,12 +77,16 @@ def place_in_scene(path: str | Path, rel_path: str, camera: Camera, obj_id: str 
         raise ValueError("no frame puts the feet on the floor (camera below the floor or feet above the camera?)")
     s = float(np.quantile(s_frame[ok], quantile))
     fps = float(d["fps"])
+    if source is not None and source.cadence is not None and n_sk == source.cadence.original_frame_count:
+        fps = source.fps.value  # kept frames are evenly spaced at the project's rate
     keys, joints = [], []
     for i, (r, c, q) in enumerate(rays):
+        if mapped[i] is None:  # a padded frame removed at import
+            continue
         pw = c + (q * s) @ r.T
         joints.append(pw)
         m = r @ np.array(quat_to_matrix(tuple(float(x) for x in d["root_rot_cam"][i])))
-        keys.append(TransformKey(time=start_time + i / fps, pose=Pose(translation=tuple(float(x) for x in pw[0]),
+        keys.append(TransformKey(time=start_time + mapped[i] / fps, pose=Pose(translation=tuple(float(x) for x in pw[0]),
                                                                        rotation=tuple(matrix_to_quat(m.tolist()))),
                                  scale=(s, s, s)))
     joints = np.array(joints)

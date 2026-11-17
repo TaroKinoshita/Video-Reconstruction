@@ -3,6 +3,7 @@
 Research / non-commercial project: reconstruct reference video as an editable Blender scene, then V2V generation.
 
 ## Read first
+- `docs/STATUS.md`: current state in one page (focus, how to run tennis V2V, open items). Read it first.
 - `docs/HANDOFF_EN.md` (English): state as of 2026-11-15, history, next step (review decisions D1-D8). Read it first.
 - `docs/REVIEW_INSTRUCTIONS.md` (English): design review, decisions, work packages, rules for the executing agent.
 - `docs/HANDOFF.md` (Japanese): current status, open issues, next steps. Start here.
