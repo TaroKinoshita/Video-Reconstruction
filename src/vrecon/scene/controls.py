@@ -101,16 +101,24 @@ def export_controls(
         write("pose", frames, info)
 
     colour_kinds = [k for k in ("clay", "id", "look") if k in kinds]
-    if colour_kinds:
+    need = colour_kinds + [k for k in ("clay", "id") if "idclay" in kinds and k not in colour_kinds]
+    if need:
+        from vrecon.control.core import shaded_identity
+
         from .color_passes import identity_colors, render_color_pass
 
         colors = identity_colors(project)
         shot_frames = list(range(n_frames))
-        for kind in colour_kinds:
-            paths = render_color_pass(kind, out / "passes" / kind, shot_frames, colors)
-            write(kind, load_frames(paths), {"source": f"workbench {kind} pass"},
-                  {"legend": "legend.json"} if kind == "id" else None)
-        if "id" in colour_kinds:
+        rendered = {}
+        for kind in need:
+            rendered[kind] = load_frames(render_color_pass(kind, out / "passes" / kind, shot_frames, colors))
+            if kind in colour_kinds:
+                write(kind, rendered[kind], {"source": f"workbench {kind} pass"},
+                      {"legend": "legend.json"} if kind == "id" else None)
+        if "idclay" in kinds:  # the clay's light and shade x each object's identity colour (control/core.py)
+            write("idclay", shaded_identity(rendered["clay"], rendered["id"]),
+                  {"source": "clay pass luminance x id pass colour"}, {"legend": "legend.json"})
+        if "id" in need:
             (out / "legend.json").write_text(json.dumps(colors, indent=2) + "\n", encoding="utf-8")
 
     if "coverage" in kinds:  # which faces the source video saw (scene/coverage.py), from this same camera

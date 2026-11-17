@@ -85,6 +85,16 @@ def depth_control(
     return np.repeat(out[..., None], 3, axis=-1), info
 
 
+def shaded_identity(clay_rgb: np.ndarray, id_rgb: np.ndarray, floor: float = 0.25) -> np.ndarray:
+    """Colour-coded clay: each pixel takes its object's flat identity colour (id pass) and the clay pass's light and
+    shade, so a generator sees both the 3D form and where one object ends and the next begins. uint8 RGB [T,H,W,3].
+    floor keeps unlit sides from going black (their colour must stay readable)."""
+    lum = clay_rgb.astype(np.float32).mean(-1, keepdims=True) / 255.0
+    lum = lum / max(float(np.percentile(lum, 95)), 1e-3)
+    shade = floor + (1.0 - floor) * lum.clip(0, 1.2)
+    return (id_rgb.astype(np.float32) * shade).clip(0, 255).round().astype(np.uint8)
+
+
 def canny_control(frames_rgb: np.ndarray, low: int = 100, high: int = 200) -> tuple[np.ndarray, dict]:
     """uint8 RGB [T, H, W, 3] -> canny edges as uint8 RGB, white on black."""
     import cv2

@@ -190,6 +190,13 @@ the "redo syn_03..06" item is closed, see `evaluation/RESULTS.md`): `evaluation/
 not frozen; no real test clips with truth; syn_04 camera translation; `docs/DIRECTION_OPTIONS.md` superseded in
 practice by the review's protocol v2 but not formally closed.
 
+Open issue (user, 2026-11-18): **labels for unusual objects.** `analysis/shape_library.py` gives box-only objects a
+category template from their label words. Abstract shapes and objects without a common design will be hard to
+label. Questions to answer later: how far SAM 3.1 (text-prompted) can tell what such an object is, how often it
+gives no label or a wrong one, and what to do then. Candidates: a label-free fallback (a shape extruded from the
+object's own masks, already planned for the "unknown" case), an LLM or VLM look at the crop proposing a category
+with a basis, or leaving the box and saying so in the prompt. Not started.
+
 ## 9. Useful commands
 
 ```bash

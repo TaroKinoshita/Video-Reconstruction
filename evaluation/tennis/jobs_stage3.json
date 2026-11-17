@@ -1,0 +1,936 @@
+{
+ "about": "r2v jobs written by scripts/make_prompts.py",
+ "defaults": {
+  "sample_size": [
+   704,
+   800
+  ],
+  "num_inference_steps": 20,
+  "guidance_scale": 1.0,
+  "control_context_scale": 1.0,
+  "seeds": [
+   43
+  ],
+  "negative_prompt": ""
+ },
+ "jobs": [
+  {
+   "id": "dolly__clay_inv",
+   "scene": "dolly",
+   "control": "controls/clay/controls_dolly-100+crane4/control_clay.mp4",
+   "control_kind": "clay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "<Picture 1> is a frame of the original broadcast; <Picture 2> to <Picture 4> show the same player; <Picture 5> shows the stands. Keep their look exactly: the same player (blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair), the same blue hard court with white lines, blue stadium seats, the dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a grey clay 3D render of the shot: follow it for the camera, the position, size and outline of every object and person, and every motion, frame by frame. Do not copy its grey look.\nExactly 4 people are in the shot outside the stands: the tennis player serving; a person standing on the left; a person standing on the left; a person standing on the right. Do not add any other person on the court or beside it. Other objects: a chair on the left (objects, not people). Spectators only sit in the stands.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "inventory": [
+    {
+     "id": "obj_court",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.42696722931176684,
+     "name": "court"
+    },
+    {
+     "id": "obj_floor",
+     "class": "set:floor",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.19392833004948679,
+     "name": "floor"
+    },
+    {
+     "id": "obj_stand_far_stand",
+     "class": "set:stand",
+     "place": "on the right",
+     "frames_share": 1.0,
+     "area": 0.1633531032349707,
+     "name": "stand_far_stand"
+    },
+    {
+     "id": "obj_stand_corner_far_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 0.8709677419354839,
+     "area": 0.04524438723169191,
+     "name": "stand_corner_far_stand_left_stand"
+    },
+    {
+     "id": "obj_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.042261186079545446,
+     "name": "stand_left_stand"
+    },
+    {
+     "id": "obj_wall_left_wall",
+     "class": "set:wall",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.035000042957294725,
+     "name": "wall_left_wall"
+    },
+    {
+     "id": "obj_person_01",
+     "class": "person",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.02829061469024927,
+     "name": "obj_person_01"
+    },
+    {
+     "id": "obj_court_lines",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.012966831240835775,
+     "name": "court_lines"
+    },
+    {
+     "id": "obj_person_02",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.01059027618676686,
+     "name": "person obs_1"
+    },
+    {
+     "id": "obj_crowd_left_stand",
+     "class": "crowd",
+     "place": "on the left",
+     "frames_share": 0.9032258064516129,
+     "area": 0.00977932224025974,
+     "name": "crowd_left_stand"
+    },
+    {
+     "id": "obj_crowd_far_stand",
+     "class": "crowd",
+     "place": "in the middle",
+     "frames_share": 0.8790322580645161,
+     "area": 0.009598314350500417,
+     "name": "crowd_far_stand"
+    },
+    {
+     "id": "obj_net",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.008639886134530796,
+     "name": "net"
+    },
+    {
+     "id": "obj_chair",
+     "class": "chair",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.006927866110703813,
+     "name": "obj_chair"
+    },
+    {
+     "id": "obj_net_tape",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.006603466940065981,
+     "name": "net_tape"
+    },
+    {
+     "id": "obj_person_box_04",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.003384820037573314,
+     "name": "obs_4 (sitting)"
+    },
+    {
+     "id": "obj_tennis_racket",
+     "class": "racket",
+     "place": "in the middle",
+     "frames_share": 0.9193548387096774,
+     "area": 0.002534608004385965,
+     "name": "tennis racket"
+    },
+    {
+     "id": "obj_person_box_05",
+     "class": "person",
+     "place": "on the right",
+     "frames_share": 0.7741935483870968,
+     "area": 0.002334002870501894,
+     "name": "obs_5"
+    }
+   ],
+   "group": "stage3"
+  },
+  {
+   "id": "dolly__idclay_inv",
+   "scene": "dolly",
+   "control": "controls/colour/controls_dolly-100+crane4/control_idclay.mp4",
+   "control_kind": "idclay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "<Picture 1> is a frame of the original broadcast; <Picture 2> to <Picture 4> show the same player; <Picture 5> shows the stands. Keep their look exactly: the same player (blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair), the same blue hard court with white lines, blue stadium seats, the dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a colour-coded clay 3D render of the shot: every colour is one separate object or person, shaded to show its 3D form. Follow it for the camera, the position, size and outline of every object and person, and every motion, frame by frame. Do not copy its colours.\nExactly 4 people are in the shot outside the stands: the tennis player serving; a person standing on the left; a person standing on the left; a person standing on the right. Do not add any other person on the court or beside it. Other objects: a chair on the left (objects, not people). Spectators only sit in the stands.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "inventory": [
+    {
+     "id": "obj_court",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.42696722931176684,
+     "name": "court"
+    },
+    {
+     "id": "obj_floor",
+     "class": "set:floor",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.19392833004948679,
+     "name": "floor"
+    },
+    {
+     "id": "obj_stand_far_stand",
+     "class": "set:stand",
+     "place": "on the right",
+     "frames_share": 1.0,
+     "area": 0.1633531032349707,
+     "name": "stand_far_stand"
+    },
+    {
+     "id": "obj_stand_corner_far_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 0.8709677419354839,
+     "area": 0.04524438723169191,
+     "name": "stand_corner_far_stand_left_stand"
+    },
+    {
+     "id": "obj_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.042261186079545446,
+     "name": "stand_left_stand"
+    },
+    {
+     "id": "obj_wall_left_wall",
+     "class": "set:wall",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.035000042957294725,
+     "name": "wall_left_wall"
+    },
+    {
+     "id": "obj_person_01",
+     "class": "person",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.02829061469024927,
+     "name": "obj_person_01"
+    },
+    {
+     "id": "obj_court_lines",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.012966831240835775,
+     "name": "court_lines"
+    },
+    {
+     "id": "obj_person_02",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.01059027618676686,
+     "name": "person obs_1"
+    },
+    {
+     "id": "obj_crowd_left_stand",
+     "class": "crowd",
+     "place": "on the left",
+     "frames_share": 0.9032258064516129,
+     "area": 0.00977932224025974,
+     "name": "crowd_left_stand"
+    },
+    {
+     "id": "obj_crowd_far_stand",
+     "class": "crowd",
+     "place": "in the middle",
+     "frames_share": 0.8790322580645161,
+     "area": 0.009598314350500417,
+     "name": "crowd_far_stand"
+    },
+    {
+     "id": "obj_net",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.008639886134530796,
+     "name": "net"
+    },
+    {
+     "id": "obj_chair",
+     "class": "chair",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.006927866110703813,
+     "name": "obj_chair"
+    },
+    {
+     "id": "obj_net_tape",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.006603466940065981,
+     "name": "net_tape"
+    },
+    {
+     "id": "obj_person_box_04",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.003384820037573314,
+     "name": "obs_4 (sitting)"
+    },
+    {
+     "id": "obj_tennis_racket",
+     "class": "racket",
+     "place": "in the middle",
+     "frames_share": 0.9193548387096774,
+     "area": 0.002534608004385965,
+     "name": "tennis racket"
+    },
+    {
+     "id": "obj_person_box_05",
+     "class": "person",
+     "place": "on the right",
+     "frames_share": 0.7741935483870968,
+     "area": 0.002334002870501894,
+     "name": "obs_5"
+    }
+   ],
+   "group": "stage3"
+  },
+  {
+   "id": "dolly__look_inv",
+   "scene": "dolly",
+   "control": "controls/colour/controls_dolly-100+crane4/control_look.mp4",
+   "control_kind": "look",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "<Picture 1> is a frame of the original broadcast; <Picture 2> to <Picture 4> show the same player; <Picture 5> shows the stands. Keep their look exactly: the same player (blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair), the same blue hard court with white lines, blue stadium seats, the dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a rough coloured 3D render of the shot: follow it for the camera, the position, size and outline of every object and person, and every motion, frame by frame. Take the real look from the pictures, not from its plastic surfaces.\nExactly 4 people are in the shot outside the stands: the tennis player serving; a person standing on the left; a person standing on the left; a person standing on the right. Do not add any other person on the court or beside it. Other objects: a chair on the left (objects, not people). Spectators only sit in the stands.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "inventory": [
+    {
+     "id": "obj_court",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.42696722931176684,
+     "name": "court"
+    },
+    {
+     "id": "obj_floor",
+     "class": "set:floor",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.19392833004948679,
+     "name": "floor"
+    },
+    {
+     "id": "obj_stand_far_stand",
+     "class": "set:stand",
+     "place": "on the right",
+     "frames_share": 1.0,
+     "area": 0.1633531032349707,
+     "name": "stand_far_stand"
+    },
+    {
+     "id": "obj_stand_corner_far_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 0.8709677419354839,
+     "area": 0.04524438723169191,
+     "name": "stand_corner_far_stand_left_stand"
+    },
+    {
+     "id": "obj_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.042261186079545446,
+     "name": "stand_left_stand"
+    },
+    {
+     "id": "obj_wall_left_wall",
+     "class": "set:wall",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.035000042957294725,
+     "name": "wall_left_wall"
+    },
+    {
+     "id": "obj_person_01",
+     "class": "person",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.02829061469024927,
+     "name": "obj_person_01"
+    },
+    {
+     "id": "obj_court_lines",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.012966831240835775,
+     "name": "court_lines"
+    },
+    {
+     "id": "obj_person_02",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.01059027618676686,
+     "name": "person obs_1"
+    },
+    {
+     "id": "obj_crowd_left_stand",
+     "class": "crowd",
+     "place": "on the left",
+     "frames_share": 0.9032258064516129,
+     "area": 0.00977932224025974,
+     "name": "crowd_left_stand"
+    },
+    {
+     "id": "obj_crowd_far_stand",
+     "class": "crowd",
+     "place": "in the middle",
+     "frames_share": 0.8790322580645161,
+     "area": 0.009598314350500417,
+     "name": "crowd_far_stand"
+    },
+    {
+     "id": "obj_net",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.008639886134530796,
+     "name": "net"
+    },
+    {
+     "id": "obj_chair",
+     "class": "chair",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.006927866110703813,
+     "name": "obj_chair"
+    },
+    {
+     "id": "obj_net_tape",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.006603466940065981,
+     "name": "net_tape"
+    },
+    {
+     "id": "obj_person_box_04",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.003384820037573314,
+     "name": "obs_4 (sitting)"
+    },
+    {
+     "id": "obj_tennis_racket",
+     "class": "racket",
+     "place": "in the middle",
+     "frames_share": 0.9193548387096774,
+     "area": 0.002534608004385965,
+     "name": "tennis racket"
+    },
+    {
+     "id": "obj_person_box_05",
+     "class": "person",
+     "place": "on the right",
+     "frames_share": 0.7741935483870968,
+     "area": 0.002334002870501894,
+     "name": "obs_5"
+    }
+   ],
+   "group": "stage3"
+  },
+  {
+   "id": "dollyshapes__clay_inv",
+   "scene": "dollyshapes",
+   "control": "controls/shapes/controls_dolly-100+crane4/control_clay.mp4",
+   "control_kind": "clay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "<Picture 1> is a frame of the original broadcast; <Picture 2> to <Picture 4> show the same player; <Picture 5> shows the stands. Keep their look exactly: the same player (blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair), the same blue hard court with white lines, blue stadium seats, the dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a grey clay 3D render of the shot: follow it for the camera, the position, size and outline of every object and person, and every motion, frame by frame. Do not copy its grey look.\nExactly 4 people are in the shot outside the stands: the tennis player serving; a person standing on the left; a person standing on the left; a person standing on the right. Do not add any other person on the court or beside it. Other objects: a chair on the left (objects, not people). Spectators only sit in the stands.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "inventory": [
+    {
+     "id": "obj_court",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.42696722931176684,
+     "name": "court"
+    },
+    {
+     "id": "obj_floor",
+     "class": "set:floor",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.19651205381689887,
+     "name": "floor"
+    },
+    {
+     "id": "obj_stand_far_stand",
+     "class": "set:stand",
+     "place": "on the right",
+     "frames_share": 1.0,
+     "area": 0.1633531032349707,
+     "name": "stand_far_stand"
+    },
+    {
+     "id": "obj_stand_corner_far_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 0.8709677419354839,
+     "area": 0.04524438723169191,
+     "name": "stand_corner_far_stand_left_stand"
+    },
+    {
+     "id": "obj_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.042261186079545446,
+     "name": "stand_left_stand"
+    },
+    {
+     "id": "obj_wall_left_wall",
+     "class": "set:wall",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.035002133545637824,
+     "name": "wall_left_wall"
+    },
+    {
+     "id": "obj_person_01",
+     "class": "person",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.02829061469024927,
+     "name": "obj_person_01"
+    },
+    {
+     "id": "obj_court_lines",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.012966831240835775,
+     "name": "court_lines"
+    },
+    {
+     "id": "obj_person_02",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.01059027618676686,
+     "name": "person obs_1"
+    },
+    {
+     "id": "obj_crowd_left_stand",
+     "class": "crowd",
+     "place": "on the left",
+     "frames_share": 0.9032258064516129,
+     "area": 0.00977932224025974,
+     "name": "crowd_left_stand"
+    },
+    {
+     "id": "obj_crowd_far_stand",
+     "class": "crowd",
+     "place": "in the middle",
+     "frames_share": 0.8790322580645161,
+     "area": 0.009598314350500417,
+     "name": "crowd_far_stand"
+    },
+    {
+     "id": "obj_net",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.00864001500641496,
+     "name": "net"
+    },
+    {
+     "id": "obj_net_tape",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.006603338068181817,
+     "name": "net_tape"
+    },
+    {
+     "id": "obj_chair",
+     "class": "chair",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.0043420517549486795,
+     "name": "obj_chair"
+    },
+    {
+     "id": "obj_person_box_04",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.003384820037573314,
+     "name": "obs_4 (sitting)"
+    },
+    {
+     "id": "obj_tennis_racket",
+     "class": "racket",
+     "place": "in the middle",
+     "frames_share": 0.9193548387096774,
+     "area": 0.002534608004385965,
+     "name": "tennis racket"
+    },
+    {
+     "id": "obj_person_box_05",
+     "class": "person",
+     "place": "on the right",
+     "frames_share": 0.7741935483870968,
+     "area": 0.002334002870501894,
+     "name": "obs_5"
+    }
+   ],
+   "group": "stage3b"
+  },
+  {
+   "id": "dollyshapes__idclay_inv",
+   "scene": "dollyshapes",
+   "control": "controls/shapes/controls_dolly-100+crane4/control_idclay.mp4",
+   "control_kind": "idclay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "<Picture 1> is a frame of the original broadcast; <Picture 2> to <Picture 4> show the same player; <Picture 5> shows the stands. Keep their look exactly: the same player (blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair), the same blue hard court with white lines, blue stadium seats, the dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a colour-coded clay 3D render of the shot: every colour is one separate object or person, shaded to show its 3D form. Follow it for the camera, the position, size and outline of every object and person, and every motion, frame by frame. Do not copy its colours.\nExactly 4 people are in the shot outside the stands: the tennis player serving; a person standing on the left; a person standing on the left; a person standing on the right. Do not add any other person on the court or beside it. Other objects: a chair on the left (objects, not people). Spectators only sit in the stands.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "inventory": [
+    {
+     "id": "obj_court",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.42696722931176684,
+     "name": "court"
+    },
+    {
+     "id": "obj_floor",
+     "class": "set:floor",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.19651205381689887,
+     "name": "floor"
+    },
+    {
+     "id": "obj_stand_far_stand",
+     "class": "set:stand",
+     "place": "on the right",
+     "frames_share": 1.0,
+     "area": 0.1633531032349707,
+     "name": "stand_far_stand"
+    },
+    {
+     "id": "obj_stand_corner_far_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 0.8709677419354839,
+     "area": 0.04524438723169191,
+     "name": "stand_corner_far_stand_left_stand"
+    },
+    {
+     "id": "obj_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.042261186079545446,
+     "name": "stand_left_stand"
+    },
+    {
+     "id": "obj_wall_left_wall",
+     "class": "set:wall",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.035002133545637824,
+     "name": "wall_left_wall"
+    },
+    {
+     "id": "obj_person_01",
+     "class": "person",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.02829061469024927,
+     "name": "obj_person_01"
+    },
+    {
+     "id": "obj_court_lines",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.012966831240835775,
+     "name": "court_lines"
+    },
+    {
+     "id": "obj_person_02",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.01059027618676686,
+     "name": "person obs_1"
+    },
+    {
+     "id": "obj_crowd_left_stand",
+     "class": "crowd",
+     "place": "on the left",
+     "frames_share": 0.9032258064516129,
+     "area": 0.00977932224025974,
+     "name": "crowd_left_stand"
+    },
+    {
+     "id": "obj_crowd_far_stand",
+     "class": "crowd",
+     "place": "in the middle",
+     "frames_share": 0.8790322580645161,
+     "area": 0.009598314350500417,
+     "name": "crowd_far_stand"
+    },
+    {
+     "id": "obj_net",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.00864001500641496,
+     "name": "net"
+    },
+    {
+     "id": "obj_net_tape",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.006603338068181817,
+     "name": "net_tape"
+    },
+    {
+     "id": "obj_chair",
+     "class": "chair",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.0043420517549486795,
+     "name": "obj_chair"
+    },
+    {
+     "id": "obj_person_box_04",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.003384820037573314,
+     "name": "obs_4 (sitting)"
+    },
+    {
+     "id": "obj_tennis_racket",
+     "class": "racket",
+     "place": "in the middle",
+     "frames_share": 0.9193548387096774,
+     "area": 0.002534608004385965,
+     "name": "tennis racket"
+    },
+    {
+     "id": "obj_person_box_05",
+     "class": "person",
+     "place": "on the right",
+     "frames_share": 0.7741935483870968,
+     "area": 0.002334002870501894,
+     "name": "obs_5"
+    }
+   ],
+   "group": "stage3b"
+  },
+  {
+   "id": "dollyfloor__clay_inv",
+   "scene": "dollyfloor",
+   "control": "controls/floorfix/controls_dolly-100+crane4/control_clay.mp4",
+   "control_kind": "clay",
+   "ref_images": [
+    "refs/frame_full.png",
+    "refs/player_full.png",
+    "refs/player_upper.png",
+    "refs/player_serve.png",
+    "refs/venue_stands.png"
+   ],
+   "prompt": "<Picture 1> is a frame of the original broadcast; <Picture 2> to <Picture 4> show the same player; <Picture 5> shows the stands. Keep their look exactly: the same player (blue short-sleeved shirt, black shorts, white wristband, white shoes, dark hair), the same blue hard court with white lines, blue stadium seats, the dark blue wall with sponsor boards, bright late-afternoon sunlight.\n<Video 1> is a grey clay 3D render of the shot: follow it for the camera, the position, size and outline of every object and person, and every motion, frame by frame. Do not copy its grey look.\nExactly 3 people are in the shot outside the stands: the tennis player serving; a person standing on the left; a person standing on the right. Do not add any other person on the court or beside it. Other objects: a chair on the left (objects, not people). Spectators only sit in the stands.\nThe player tosses the ball high with his left hand and serves with the racket overhead. Realistic broadcast footage, sharp, natural colours.",
+   "inventory": [
+    {
+     "id": "obj_court",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.42696722931176684,
+     "name": "court"
+    },
+    {
+     "id": "obj_floor",
+     "class": "set:floor",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.19824820152126096,
+     "name": "floor"
+    },
+    {
+     "id": "obj_stand_far_stand",
+     "class": "set:stand",
+     "place": "on the right",
+     "frames_share": 1.0,
+     "area": 0.1633530889158725,
+     "name": "stand_far_stand"
+    },
+    {
+     "id": "obj_stand_corner_far_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 0.8709677419354839,
+     "area": 0.04524453519570706,
+     "name": "stand_corner_far_stand_left_stand"
+    },
+    {
+     "id": "obj_stand_left_stand",
+     "class": "set:stand",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.04226412149468475,
+     "name": "stand_left_stand"
+    },
+    {
+     "id": "obj_wall_left_wall",
+     "class": "set:wall",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.035192305489369496,
+     "name": "wall_left_wall"
+    },
+    {
+     "id": "obj_person_01",
+     "class": "person",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.02829061469024927,
+     "name": "obj_person_01"
+    },
+    {
+     "id": "obj_court_lines",
+     "class": "set:court",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.012966831240835775,
+     "name": "court_lines"
+    },
+    {
+     "id": "obj_person_02",
+     "class": "person",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.01059027618676686,
+     "name": "person obs_1"
+    },
+    {
+     "id": "obj_crowd_left_stand",
+     "class": "crowd",
+     "place": "on the left",
+     "frames_share": 0.9032258064516129,
+     "area": 0.00977932224025974,
+     "name": "crowd_left_stand"
+    },
+    {
+     "id": "obj_crowd_far_stand",
+     "class": "crowd",
+     "place": "in the middle",
+     "frames_share": 0.8790322580645161,
+     "area": 0.009598314350500417,
+     "name": "crowd_far_stand"
+    },
+    {
+     "id": "obj_net",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.00864000068731672,
+     "name": "net"
+    },
+    {
+     "id": "obj_net_tape",
+     "class": "set:net",
+     "place": "in the middle",
+     "frames_share": 1.0,
+     "area": 0.006603352387280058,
+     "name": "net_tape"
+    },
+    {
+     "id": "obj_chair",
+     "class": "chair",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.0043420517549486795,
+     "name": "obj_chair"
+    },
+    {
+     "id": "obj_tennis_racket",
+     "class": "racket",
+     "place": "in the middle",
+     "frames_share": 0.9193548387096774,
+     "area": 0.002534608004385965,
+     "name": "tennis racket"
+    },
+    {
+     "id": "obj_person_box_05",
+     "class": "person",
+     "place": "on the right",
+     "frames_share": 0.7741935483870968,
+     "area": 0.002334002870501894,
+     "name": "obs_5"
+    },
+    {
+     "id": "obj_person_box_04",
+     "class": "crowd",
+     "place": "on the left",
+     "frames_share": 1.0,
+     "area": 0.0014554504215542525,
+     "name": "obs_4 (sitting)"
+    }
+   ],
+   "group": "stage4"
+  }
+ ]
+}

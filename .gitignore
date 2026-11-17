@@ -33,3 +33,7 @@ evaluation/venue/*/gt_passes/
 evaluation/venue/*/observed.npz
 evaluation/tennis/controls/
 evaluation/tennis/refs/
+evaluation/tennis/controls/colour/
+evaluation/tennis/controls/shapes/
+evaluation/tennis/controls/floorfix/
+evaluation/tennis/refs_auto/
