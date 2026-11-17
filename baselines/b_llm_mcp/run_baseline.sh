@@ -42,9 +42,29 @@ REPO="$(abspath "$HERE/../..")"
 VENV_PY="$REPO/.venv/bin/python"; [[ -x "$REPO/.venv/Scripts/python.exe" ]] && VENV_PY="$REPO/.venv/Scripts/python.exe"
 
 if [[ -e "$RUN" && -n "$(ls -A "$RUN" 2>/dev/null)" ]]; then echo "$RUN is not empty"; exit 2; fi
-mkdir -p "$RUN/workspace/input" "$RUN/workspace/output" "$RUN/logs"
+mkdir -p "$RUN/logs"
 RUN="$(abspath "$RUN")"
-WS="$RUN/workspace"
+# Isolation from the ground truth (review F-29): the agent's workspace lives OUTSIDE the repository (default
+# %LOCALAPPDATA%/vrecon/b_ws/<run name>-<time>, or $VRECON_B_WS_ROOT), the clip goes in under a neutral name, and
+# the agent's settings deny every file tool on the repository and on ground-truth file names. The log check in
+# finish_run.py stays as the second line. The finished workspace is copied into RUN/workspace for scoring.
+WS_ROOT="${VRECON_B_WS_ROOT:-${LOCALAPPDATA:-$HOME/.local/share}/vrecon/b_ws}"
+mkdir -p "$WS_ROOT"
+WS_ROOT="$(abspath "$WS_ROOT")"
+case "$WS_ROOT" in "$REPO"*) echo "workspace root $WS_ROOT is inside the repository"; exit 2 ;; esac
+WS="$WS_ROOT/$(basename "$RUN")-$(date +%s)"
+mkdir -p "$WS/input" "$WS/output"
+"$VENV_PY" - "$RUN/agent_settings.json" "$REPO" "$WS" "$RUN/isolation.json" <<'PY'
+import json, sys
+out, repo, ws, iso = sys.argv[1:]
+repo = repo.replace("\\", "/")
+tools = ["Read", "Edit", "Write", "Glob", "Grep"]
+deny = [f"{t}({repo}/**)" for t in tools] + [f"{t}(**/{n})" for t in ("Read", "Grep") for n in ("gt.json", "gt_passes/**", "meta.json")]
+deny += [f"Bash({c} {repo}:*)" for c in ("cd", "ls", "cat", "find", "type", "dir", "head", "grep")]
+json.dump({"permissions": {"deny": deny}}, open(out, "w", encoding="utf-8"), indent=1)
+json.dump({"workspace": ws, "repo_denied": repo, "settings": "agent_settings.json", "deny_rules": len(deny)},
+          open(iso, "w", encoding="utf-8"), indent=1)
+PY
 
 # Only the video goes into the agent's workspace. Ground truth never does (PLAN.md 11.8).
 cp "$CLIP/video.mp4" "$WS/input/reference.mp4"
@@ -117,12 +137,13 @@ START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 set +e
 (cd "$WS" && timeout "${MINUTES}m" claude -p "$(cat "$RUN/prompt.txt")" \
   --model "$MODEL" --max-turns "$TURNS" \
-  --mcp-config "$RUN/mcp.json" --strict-mcp-config \
+  --mcp-config "$RUN/mcp.json" --strict-mcp-config --settings "$RUN/agent_settings.json" \
   --allowedTools "mcp__blender__*" "${EXTRA_TOOLS[@]}" "Bash" "Read" "Write" "Edit" "Glob" "Grep" \
   --output-format stream-json --verbose) > "$RUN/logs/agent.jsonl" 2> "$RUN/logs/agent.stderr"
 EXIT=$?
 set -e
 END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cp -r "$WS" "$RUN/workspace"  # into the run folder for scoring and the record
 
 # --- Record, check, score -------------------------------------------------------------------------
 "$VENV_PY" "$HERE/finish_run.py" --run "$RUN" --clip "$CLIP" --model "$MODEL" \

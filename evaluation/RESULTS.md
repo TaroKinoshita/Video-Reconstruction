@@ -115,3 +115,25 @@ What changes:
 
 Still to re-read from their own files (not RQ1 numbers): venue (`runs/venue/ven_01/*/scores.json`), props
 (`runs/props/*.json`).
+
+## 6. WP-7 step 1: where the camera translation is lost (2026-11-18)
+
+`scripts/diagnose_camera_path.py`: camera centres over the clip against ground truth after the best similarity
+alignment, error as a share of the ground-truth path length; travel = aligned path length / ground-truth path.
+Stored 4RC outputs (`%LOCALAPPDATA%/.../vrecon/work/<clip>/4rc.npz`), start scene = rev 0 and adopted = last
+revision of `runs/bench_rays/<clip>_base`.
+
+| clip | camera | GT path (m) | 4RC raw: error / travel | start scene | after repair |
+|---|---|---|---|---|---|
+| syn_03 | dolly | 2.5 | .068 / .83 | same | same |
+| syn_04 | truck | 4.0 | **.251 / 1.36** | same | same |
+| syn_05 | orbit | 7.9 | .025 / .95 | same | same |
+| syn_06 | handheld | 0.8 | .050 / .25 | same | same |
+
+syn_04, aligned, frame by frame: ground truth x from -2.0 to +2.0 m at constant height; 4RC x from -0.5 to +0.5 with
+the height wandering 1.0-2.3 m. **4RC itself reproduces about a quarter of the truck**; the rest goes into the
+objects' motion. The conversion to the scene keeps 4RC's path exactly, and the repair never moves the camera path
+(no parameter for it). Static and pan clips have no translation to lose.
+Consequence (review F-04): a low-dimensional camera-path parameter (scale of the translation along its main
+direction; lateral / forward / vertical offsets linear in time) judged on set-piece evidence plus track parallax
+could recover it. Adding it changes the method after the freeze (thresholds.yaml `changes`); decision pending.
