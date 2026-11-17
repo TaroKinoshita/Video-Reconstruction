@@ -98,7 +98,7 @@
           "S1"
         ]
       ],
-      "note": "measure defined in WP-7 step 4 (evaluation/phase1a/edits.json); not implemented at freeze"
+      "note": "measure implemented 2026-11-18: vrecon/edits.py + scene/edit_blend.py + scripts/edit_test.py (three edits applied to the .blend's own data; success = read-back equals the expected edit, nothing else moved)"
     }
   },
   "decision_rule": {
