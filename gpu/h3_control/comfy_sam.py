@@ -24,7 +24,8 @@ from comfy_jobs import Server, output_files  # noqa: E402
 SAM_CKPT = "sam3.1_multiplex_fp16.safetensors"
 
 
-def graph(video_name: str, prompt: str, threshold: float, max_objects: int, fps: float, prefix: str) -> dict:
+def graph(video_name: str, prompt: str, threshold: float, max_objects: int, fps: float, prefix: str,
+          object_indices: str = "") -> dict:
     return {
         "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": SAM_CKPT}},
         "2": {"class_type": "LoadVideo", "inputs": {"file": video_name}},
@@ -33,12 +34,38 @@ def graph(video_name: str, prompt: str, threshold: float, max_objects: int, fps:
         "5": {"class_type": "SAM3_VideoTrack", "inputs": {"images": ["3", 0], "model": ["1", 0],
                                                           "detection_threshold": threshold, "max_objects": max_objects,
                                                           "detect_interval": 1, "conditioning": ["4", 0]}},
-        "6": {"class_type": "SAM3_TrackToMask", "inputs": {"track_data": ["5", 0], "object_indices": ""}},
+        "6": {"class_type": "SAM3_TrackToMask", "inputs": {"track_data": ["5", 0], "object_indices": object_indices}},
         "7": {"class_type": "MaskToImage", "inputs": {"mask": ["6", 0]}},
         "8": {"class_type": "CreateVideo", "inputs": {"images": ["7", 0], "fps": float(fps)}},
         "20": {"class_type": "SaveVideo", "inputs": {"video": ["8", 0], "filename_prefix": prefix, "format": "auto",
                                                      "codec": "auto"}},
     }
+
+
+def masks_for(srv: Server, video_name: str, prompt: str, threshold: float, max_objects: int, fps: float, prefix: str,
+              n_frames: int, size: tuple[int, int], tmp: Path, per_object: bool = False) -> list[np.ndarray]:
+    """Bool masks [T,H,W]: one merged mask, or one per tracked object (tracking is cached by ComfyUI between the
+    per-object graphs; an index past the last object ends the list)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+    from vrecon.control.core import read_video_rgb
+
+    out = []
+    for idx in ([str(i) for i in range(max_objects)] if per_object else [""]):
+        try:
+            pid = srv.queue(graph(video_name, prompt, threshold, max_objects, fps, f"{prefix}_{idx or 'all'}", idx))
+        except RuntimeError:
+            break
+        entry = srv.wait(pid)
+        files = output_files(entry)
+        if not files:
+            break
+        f = tmp / f"{prefix.replace('/', '_')}_{idx or 'all'}.mp4"
+        srv.download(files[0], f)
+        m = read_video_rgb(f)[..., 0] > 127
+        if per_object and m.mean() == 0:
+            break
+        out.append(m[:n_frames])
+    return out
 
 
 def main() -> int:
