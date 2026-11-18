@@ -275,6 +275,15 @@ def main(argv: list[str] | None = None) -> int:
     pv.set_defaults(func=lambda args: __import__("vrecon.pipeline.v2v", fromlist=["run"]).run(
         Path(args.recipe), args.start, args.stop, args.server, args.dry_run))
 
+    ps = sub.add_parser("pipeline-scene", help="run a clip's observation -> scene recipe (evaluation/recipes/<clip>/scene.json)")
+    ps.add_argument("recipe")
+    ps.add_argument("--from", dest="start")
+    ps.add_argument("--to", dest="stop")
+    ps.add_argument("--dry-run", action="store_true")
+    ps.add_argument("--check", action="store_true", help="compare each stage's outputs with the stored results")
+    ps.set_defaults(func=lambda args: __import__("vrecon.pipeline.scene", fromlist=["run"]).run(
+        Path(args.recipe), args.start, args.stop, args.dry_run, args.check))
+
     sb = sub.add_parser("score-blend", help="score any .blend (e.g. from an LLM) against a reference clip folder")
     sb.add_argument("reference")
     sb.add_argument("project", metavar="blend")
