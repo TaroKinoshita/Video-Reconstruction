@@ -14,7 +14,8 @@
     "camera_focal_rel_mean": true,
     "timing_rel_error_frames_mean": true,
     "timing_rel_found_share": false,
-    "timing_abs_error_frames_mean": true
+    "timing_abs_error_frames_mean": true,
+    "edit_success_share": false
   },
   "headline_set": {
     "_note": "D3: reported together, none alone. mask_iou_mean (matched only) and timing_abs_error_frames_mean are secondary columns kept for comparison with older numbers.",
@@ -186,6 +187,11 @@
       "what": "repair loop draws each object from its shape (optimize/shape.py): its mesh when it has one (blend_import saves meshes for refine_blend), else the proxy box as before; set pieces always on the exact box/plane path; meshes reduced to MAX_FACES=600 triangles (new constant, speed bound, not tuned); an object with a mesh gets one proportional size parameter instead of three. Proxy-box scenes (S cells) are unchanged",
       "why": "L1 on syn2_02: the box-only objective moved Claude's real meshes the wrong way (IoU .90 -> .63); generic fix, not tuned on any clip",
       "evidence": "tests/test_shape.py; runs/rq1/L1/syn2_02 (.902/.922/.874 -> .901/.888/.902)"
+    },
+    {
+      "date": "2026-11-18",
+      "what": "lower_is_better gains edit_success_share (false), the H5 measure, so compare_conditions can test it",
+      "why": "the measure was defined in WP-7 step 4 but not implemented at the freeze; its direction is by definition"
     }
   ],
   "tuning_sha256_after_change": "1bf798b291c72dd1372bfb622e0bd60760b37f59dae7f35ffd56ae38c9ea19ce"
