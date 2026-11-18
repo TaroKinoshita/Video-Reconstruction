@@ -42,7 +42,9 @@ from vrecon.schema import Evidence, FileRef, Pose, SceneObject, TransformKey, lo
 
 
 def load_mask(spec: str, t_n: int):
-    path, _, labels = spec.partition(":")
+    # the labels follow the LAST colon, and only when what precedes it is a file (a Windows path has "C:")
+    head, sep, tail = spec.rpartition(":")
+    path, labels = (head, tail) if sep and Path(head).suffix == ".npz" else (spec, "")
     z = np.load(path)
     m = z["masks"]
     id_map = json.loads(str(z["id_map"]))

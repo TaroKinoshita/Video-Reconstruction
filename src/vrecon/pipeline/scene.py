@@ -101,7 +101,8 @@ def compare(got: Path, want: Path) -> str:
 def _strip_paths(x):
     """File paths differ between a rebuild and the stored run by design: compare the file names only."""
     if isinstance(x, dict):
-        return {k: (Path(v).name if k == "path" and isinstance(v, str) else _strip_paths(v)) for k, v in x.items()}
+        return {k: (Path(v).name if isinstance(v, str) and ("/" in v or "\\" in v) and Path(v).suffix else _strip_paths(v))
+                for k, v in x.items()}
     if isinstance(x, list):
         return [_strip_paths(v) for v in x]
     return x

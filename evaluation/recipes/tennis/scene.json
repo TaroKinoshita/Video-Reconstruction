@@ -36,6 +36,10 @@
   "venue_layout": {
    "path": "runs/venue/tennis/fal2c/layout.json",
    "tool": "recorded LLM answer (scripts/llm_venue.py with fal outside pictures); not re-run"
+  },
+  "after": {
+   "path": "runs/venue/tennis/tennis_after.json",
+   "tool": "human hypothesis (rules of tennis), recorded"
   }
  },
  "values": {
@@ -235,6 +239,33 @@
    "stored": {
     "{work}/venue/project.json": "runs/venue/tennis/fal2c/project.json"
    }
+  },
+  {
+   "stage": "props",
+   "argv": [
+    "{python}",
+    "scripts/fit_props.py",
+    "{work}/venue/project.json",
+    "{in:video}",
+    "{work}/props",
+    "--prop",
+    "tennis racket={in:props_masks}:obs_0",
+    "--prop",
+    "tennis ball={in:ball_masks}",
+    "--one",
+    "tennis ball",
+    "--after",
+    "{in:after}",
+    "--link",
+    "{val:prop_link_px}"
+   ],
+   "outputs": [
+    "{work}/props/project.json"
+   ],
+   "stored": {
+    "{work}/props/project.json": "runs/venue/tennis/fal2c_props/project.json",
+    "{work}/props/props.json": "runs/venue/tennis/fal2c_props/props.json"
+   }
   }
  ],
  "rebuild_check_2026_11_18": {
@@ -243,6 +274,7 @@
   "proxies": "same (court-frame scene)",
   "observe": "within ~0.01 m, except obs_5's line stored with the opposite direction (same line, from/to swapped)",
   "venue": "same objects and geometry; the rebuild already carries the 0.4.0 statuses and evidence kinds that scripts/convert_tennis_status.py added to the stored scene later",
-  "not yet in the run list": "complete, timing, props, status (scripts listed under 'stages'); their exact stored arguments are not all recorded"
+  "not yet in the run list": "complete, timing, status and the final export (scripts listed under 'stages'); the stored chain's exact arguments for them are not all recorded",
+  "props": "same objects; racket and ball geometry within 0.02; differences only the 0.4.0 statuses (as venue) and file paths written absolute"
  }
 }
