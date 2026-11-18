@@ -83,7 +83,8 @@
           "L2"
         ]
       ],
-      "supported_when": "not separated on most clips"
+      "supported_when": "not separated on most clips",
+      "status": "dropped 2026-11-18 (not run; see changes)"
     },
     "H5": {
       "claim": "a schema-backed scene accepts the three scripted edits without repair more often",
@@ -174,6 +175,11 @@
       "what": "added an optional camera-path hypothesis (optimize 'cam_path', policy 'set_path', tuning CAM_PATH_STEP / CAM_PATH_SCALE_STEP). Default OFF in auto_repair, so the frozen method is unchanged; tuning.py hash changed only by the two new constants",
       "why": "WP-7 step 1: 4RC keeps ~1/4 of syn_04's truck. On v1 clips (regression set) with vs without: source IoU and novel views within .005 on all six, timing identical; syn_04 camera path error .251 -> .107. No measurable gain, so not switched on",
       "evidence": "runs/campath_test/{with,without}/scores.json, evaluation/RESULTS.md 6"
+    },
+    {
+      "date": "2026-11-18",
+      "what": "RQ1 scope reduced by the user: cells S2 and L2 (claim H4) are not run; H1, H2, H3, H5 use S0, S1, L0, L1 only. Condition-B LLM: Claude (claude-opus-5-5, baselines/b_llm_mcp). Runs per cell unchanged (L0 5, S1 deterministic). LLM cost cap set after one measured L0 run",
+      "why": "LLM cost: about 156 LLM sessions with S2/L2 vs 60 without; H4 was already not separated on the v1 clips (evaluation/RESULTS.md)"
     }
   ],
   "tuning_sha256_after_change": "38e0329075c296dbbbe84b92b983a3a9c9ad080c02133033343bfa50eba1058b"
