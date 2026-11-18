@@ -143,3 +143,23 @@ to the moving objects, judged on the set like the focal length) was added and ru
 fixed order. It is adopted on every clip, cuts syn_04's camera-path error from .251 to .107, but source IoU, novel
 views (10/30 deg) and timing change by at most .005 on every clip (`runs/campath_test/`). Kept in the code, off by
 default (`auto_repair(camera_path=False)`); recorded in `evaluation/thresholds.yaml` changes.
+
+## 7. RQ1 v2: 2x3 study, development clips (draft, 2026-11-18; held-out pending)
+
+Cells (thresholds.yaml, H4 dropped by the user): S0 = 4RC start, S1 = S0 + fixed-order repair, L0 = Claude
+(claude-opus-5-5, blender-mcp, 60 min) builds the scene, L1 = L0 + the same repair. SAM 3.1 masks for every cell
+(`runs/sam_v2`), no ground truth in any cell. Runs: S0/S1 deterministic (one run, entered 3x); L0/L1 3 runs, 5 on
+the clips whose dev SD exceeded .03 (syn2_04, 05, 07, 09). Paired bootstrap per clip (`scripts/compare_conditions.py`,
+tables in `runs/rq1/draft/`). Repair loop changed before these runs: objects drawn from their own mesh, mesh objects
+keep proportions (thresholds.yaml changes, 2026-11-18); before that change L1 lowered a Claude scene from .90 to .63.
+
+| Claim | Comparison | Dev result (6 clips) |
+|---|---|---|
+| H1 tools improve any start | S0 -> S1 | source IoU better on 6/6 (median +.069); novel views mixed (10 deg 3 better / 3 worse) |
+|  | L0 -> L1 | source IoU better on 1, not separated on 5 (median +.003); novel views not separated |
+| H2 tools reduce spread | L0 vs L1 SD | SD lower after repair on 5/6 clips (e.g. syn2_09 .098 -> .055, syn2_04 .041 -> .016); no run below S0 in either cell |
+| H3 4RC start more 3D-consistent | L1 vs S1 | source IoU: Claude's scenes higher on 6/6 (median .152); novel IoU 10/30 deg and focal error: split (2 better / 2 worse each) |
+| H5 edits without repair | S1 vs L0, L1 | pending (`scripts/run_rq1_edits.py` runs after held-out) |
+
+Cost so far: L0 dev runs about $2-4.5 each, 6-60 min; Claude usage limits stopped the runs for ~2.5 h once
+(retried automatically). Held-out numbers decide the claims (decision_rule); this table is development only.
