@@ -10,8 +10,6 @@ say() { echo "$(date '+%m-%d %H:%M') $*" | tee -a "$LOG"; }
 DEV="syn2_02 syn2_04 syn2_05 syn2_07 syn2_09 syn2_12"
 HELD="syn2_01 syn2_03 syn2_06 syn2_08 syn2_10 syn2_11"
 
-say "waiting for running L0 jobs"
-while ps -ef | grep -v grep | grep -q -e "run_baseline.sh" -e "run_rq1_l1.py"; do sleep 60; done
 
 say "dev L0 runs 1-3"; bash scripts/run_rq1_l0.sh "$DEV" "1 2 3" 2 >> "$LOG" 2>&1
 $PY scripts/run_rq1_l1.py --clips $DEV >> "$LOG" 2>&1
@@ -27,7 +25,9 @@ done = json.loads(Path("runs/rq1/S1/scores.json").read_text(encoding="utf-8"))
 todo = [c for c in "$HELD".split() if c not in done]
 if todo: subprocess.run([sys.executable, "scripts/run_rq1_s1.py", "--clips", *todo], check=True)
 PYX
-N=$($PY scripts/rq1_extra_runs.py held_out); say "held-out L0 runs per clip: $N"
+N=$($PY scripts/rq1_extra_runs.py held_out)
+[[ -f runs/rq1/held_runs ]] && N=$(cat runs/rq1/held_runs)  # user cap (recorded in thresholds.yaml changes)
+say "held-out L0 runs per clip: $N"
 bash scripts/run_rq1_l0.sh "$HELD" "$(seq -s ' ' 1 $N)" 2 >> "$LOG" 2>&1
 $PY scripts/run_rq1_l1.py --clips $HELD >> "$LOG" 2>&1
 

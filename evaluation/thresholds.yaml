@@ -192,6 +192,12 @@
       "date": "2026-11-18",
       "what": "lower_is_better gains edit_success_share (false), the H5 measure, so compare_conditions can test it",
       "why": "the measure was defined in WP-7 step 4 but not implemented at the freeze; its direction is by definition"
+    },
+    {
+      "date": "2026-11-19",
+      "what": "held-out L0 runs capped at 3 per clip (rule asked for 5: dev SD above .03); held-out L1 likewise",
+      "why": "user: Claude usage limits stalled the held-out runs for hours ('長すぎる'). 3 runs per side still give the paired bootstrap; the intervals are wider than with 5",
+      "evidence": "runs/rq1/progress.log"
     }
   ],
   "tuning_sha256_after_change": "1bf798b291c72dd1372bfb622e0bd60760b37f59dae7f35ffd56ae38c9ea19ce"
