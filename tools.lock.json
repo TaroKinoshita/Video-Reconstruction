@@ -1,0 +1,18 @@
+{
+  "_note": "External tools and weights used by v1.0 results (WP-8). Python packages: uv.lock / requirements.lock.txt.",
+  "blender_gui": "5.2.0 LTS (condition B, blender-mcp)",
+  "bpy": "5.2.3",
+  "mcp_for_blender": "2.2.6",
+  "claude_cli": "2.1.289",
+  "condition_b_model": "claude-opus-5-5",
+  "4rc": {"commit": "a08ca0a", "env": "%LOCALAPPDATA%/vrecon/envs/4rc", "weights": "Luo-Yihang/4RC"},
+  "sam3_local": {"commit": "f1647e8"},
+  "comfyui_pod": {"version": "v0.44.0", "image": "runpod-slim", "region": "euro-3",
+                   "models": ["ref2va_pruned_int8_convrot (MiniMax-H3)", "qwen3vl_32b_minimax_h3_int8_convrot", "sam3.1_multiplex_fp16"]},
+  "gvhmr": {"commit": "ee960bb"},
+  "tapnet": {"commit": "ceedd60"},
+  "megasam": {"commit": "a27b4e6"},
+  "ffmpeg": "N-113224-gde9bc4f205-20240106",
+  "uv": "0.12.3",
+  "python": "3.13 (.venv)"
+}
