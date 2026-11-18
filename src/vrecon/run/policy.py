@@ -74,7 +74,11 @@ def hypotheses(project) -> list[tuple[str, list[Param], str]]:
         move, grow = MOVE_STEP * ref, SIZE_STEP * ref
         hs.append((f"{o.id} misplaced on the floor",
                    [Param("translation", o.id, 0, move), Param("translation", o.id, 1, move)], "all"))
-        hs.append((f"{o.id} has the wrong size", [Param("size", o.id, a, grow) for a in range(3)], "all"))
+        # an object with its own mesh keeps its proportions (the mesh is evidence of its shape; one view's
+        # outline does not constrain depth): only its overall scale is searched. A proxy box, whose shape is
+        # unknown, gets one size per axis.
+        sizes = [Param("size", o.id, 3, grow)] if o.asset is not None else [Param("size", o.id, a, grow) for a in range(3)]
+        hs.append((f"{o.id} has the wrong size", sizes, "all"))
         # orientation: a box seen mostly from the front gets its facing from few points, and a moving one
         # may turn more (or less) than its per-frame boxes say
         turn = [Param("yaw", o.id, step=YAW_STEP)] + ([Param("spin", o.id, step=YAW_STEP)] if o.keys else [])

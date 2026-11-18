@@ -57,9 +57,12 @@ def refine_blend(blend: str | Path, masks: str | Path, run_dir: str | Path, size
 
     run = Path(run_dir).resolve()
     with tempfile.TemporaryDirectory() as tmp:
-        project, warnings = import_blend(blend, Path(tmp), project_id="proj_b_refine", size=size)
+        project, warnings = import_blend(blend, Path(tmp), project_id="proj_b_refine", size=size,
+                                         mesh_dir=run / "meshes")
     renamed = mark_set(project)
-    run.mkdir(parents=True, exist_ok=False)
+    run.mkdir(parents=True, exist_ok=True)
+    if any(p for p in run.iterdir() if p.name != "meshes"):
+        raise FileExistsError(f"{run} is not empty")
     start = run / "start_from_blend.json"
     save_project(project, start)
     save_project(project, run / "start_from_blend.orig.json")  # the run overwrites `start` with each adopted state

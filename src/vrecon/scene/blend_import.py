@@ -3,6 +3,8 @@
 The scene was not built by vrecon, so:
   - every visible mesh gets a vrecon_id derived from its name (obj_<name>)
   - the active camera and every mesh are sampled at every frame (no assumptions about keyframes)
+  - with `mesh_dir`, each mesh's local geometry (evaluated, triangulated) is saved as <mesh_dir>/<id>.npz and set
+    as the object's asset, so the repair loop's silhouettes use the real shape (optimize/shape.py)
   - an object's `size` is its local bounding box; its pose is the world transform (parenting and
     constraints included, via matrix_world), so the metrics see exactly what renders
   - Blender camera axes are converted to OpenCV (CONVENTIONS.md 2)
@@ -82,7 +84,24 @@ def _assign_ids() -> dict[str, bpy.types.Object]:
     return used
 
 
-def import_current(project_id: str = "proj_imported", video_path: str = "video.mp4") -> Project:
+def _save_mesh(obj, path: Path) -> FileRef:
+    """Evaluated mesh (modifiers applied) in object-local coordinates, triangulated, as the builder's .npz."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    ev = obj.evaluated_get(dg)
+    me = ev.to_mesh()
+    try:
+        me.calc_loop_triangles()
+        verts = np.array([v.co[:] for v in me.vertices], float).reshape(-1, 3)
+        faces = np.array([t.vertices[:] for t in me.loop_triangles], np.int64).reshape(-1, 3)
+    finally:
+        ev.to_mesh_clear()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, verts=verts, faces=faces)
+    return FileRef(id=f"file_mesh_{path.stem}", path=str(path.resolve()))
+
+
+def import_current(project_id: str = "proj_imported", video_path: str = "video.mp4",
+                   mesh_dir: str | Path | None = None) -> Project:
     """Sample the open Blender scene into a vrecon Project (one shot = the scene frame range)."""
     scene = bpy.context.scene
     if scene.camera is None:
@@ -115,7 +134,8 @@ def import_current(project_id: str = "proj_imported", video_path: str = "video.m
         size = tuple(np.maximum(corners.max(0) - corners.min(0), 1e-6).tolist())
         keys = obj_keys[vid]
         static = all(k.pose == keys[0].pose and k.scale == keys[0].scale for k in keys)
-        objects.append(SceneObject(id=vid, name=obj.name, kind="proxy", size=size,
+        asset = _save_mesh(obj, Path(mesh_dir) / f"{vid}.npz") if mesh_dir is not None and len(obj.data.vertices) else None
+        objects.append(SceneObject(id=vid, name=obj.name, kind="proxy", size=size, asset=asset,
                                    rest=keys[0] if static else TransformKey(time=0, pose=Pose()),
                                    keys=[] if static else keys))
     w, h = scene.render.resolution_x, scene.render.resolution_y
@@ -132,7 +152,7 @@ def import_current(project_id: str = "proj_imported", video_path: str = "video.m
 
 
 def import_blend(path: str | Path, passes_dir: str | Path, project_id: str = "proj_imported",
-                 size: tuple[int, int] | None = None):
+                 size: tuple[int, int] | None = None, mesh_dir: str | Path | None = None):
     """Open a .blend, import it as a Project, and render its masks/depth into passes_dir.
 
     size: force the render resolution (e.g. the reference's) when the .blend uses another one with the
@@ -149,6 +169,6 @@ def import_blend(path: str | Path, passes_dir: str | Path, project_id: str = "pr
         warnings.append(f"render size {w0}x{h0} changed to {size[0]}x{size[1]} for scoring")
         scene.render.resolution_x, scene.render.resolution_y = size
     scene.render.resolution_percentage = 100
-    project = import_current(project_id)
+    project = import_current(project_id, mesh_dir=mesh_dir)
     render_passes(passes_dir, shaded=False)
     return project, warnings

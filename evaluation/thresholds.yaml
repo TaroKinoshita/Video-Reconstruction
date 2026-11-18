@@ -180,7 +180,13 @@
       "date": "2026-11-18",
       "what": "RQ1 scope reduced by the user: cells S2 and L2 (claim H4) are not run; H1, H2, H3, H5 use S0, S1, L0, L1 only. Condition-B LLM: Claude (claude-opus-5-5, baselines/b_llm_mcp). Runs per cell unchanged (L0 5, S1 deterministic). LLM cost cap set after one measured L0 run",
       "why": "LLM cost: about 156 LLM sessions with S2/L2 vs 60 without; H4 was already not separated on the v1 clips (evaluation/RESULTS.md)"
+    },
+    {
+      "date": "2026-11-18",
+      "what": "repair loop draws each object from its shape (optimize/shape.py): its mesh when it has one (blend_import saves meshes for refine_blend), else the proxy box as before; set pieces always on the exact box/plane path; meshes reduced to MAX_FACES=600 triangles (new constant, speed bound, not tuned); an object with a mesh gets one proportional size parameter instead of three. Proxy-box scenes (S cells) are unchanged",
+      "why": "L1 on syn2_02: the box-only objective moved Claude's real meshes the wrong way (IoU .90 -> .63); generic fix, not tuned on any clip",
+      "evidence": "tests/test_shape.py; runs/rq1/L1/syn2_02 (.902/.922/.874 -> .901/.888/.902)"
     }
   ],
-  "tuning_sha256_after_change": "38e0329075c296dbbbe84b92b983a3a9c9ad080c02133033343bfa50eba1058b"
+  "tuning_sha256_after_change": "1bf798b291c72dd1372bfb622e0bd60760b37f59dae7f35ffd56ae38c9ea19ce"
 }

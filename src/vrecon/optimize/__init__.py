@@ -1,8 +1,9 @@
 """Numeric search for the repair loop (PLAN.md 6.1-6.2): the LLM picks what to suspect, this finds values.
 
-Objective: silhouette mismatch between observed object masks and the reconstruction's proxy boxes,
-rasterised directly (box corners projected, convex hull filled, far-to-near), without Blender, so a
-search can afford hundreds of evaluations.
+Objective: silhouette mismatch between observed object masks and the reconstruction's objects, rasterised
+directly (faces projected and filled with a per-pixel depth test), without Blender, so a search can afford
+hundreds of evaluations. Each object is drawn from its shape (optimize/shape.py): its mesh when it has one,
+else its proxy box.
 
 Observed masks come from an observation provider. Until a segmentation tool is integrated, the only
 provider is a ground-truth stand-in for synthetic clips; its provenance says so (PLAN.md 11.8: scores
@@ -22,6 +23,7 @@ from vrecon.metrics.poses import camera_pose, object_pose, project_points
 from vrecon.run import Change, Proposal
 from vrecon.scene.convert import matrix_to_quat, quat_to_matrix
 from vrecon.schema import Observation, Pose, Project, Provenance, TransformKey
+from vrecon.optimize.shape import BOX_FACES, BOX_U, bottom, object_shape
 from vrecon.tuning import TRACK_WEIGHT  # noqa: E402,F401  (tuned values, one place)
 
 _CORNERS = np.array([[x, y, z] for x in (-0.5, 0.5) for y in (-0.5, 0.5) for z in (-0.5, 0.5)])
@@ -64,8 +66,6 @@ def load_masks(path: str | Path, obs_id: str = "obs_masks_file") -> MaskObservat
 # --- silhouette objective ----------------------------------------------------------------------------
 
 
-# box faces as corner indices into _CORNERS (x, y, z in {-0.5, 0.5}, index = 4*ix + 2*iy + iz)
-_FACES = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
 _NEAR = 0.05
 
 
@@ -81,6 +81,28 @@ def _clip_near(poly: np.ndarray) -> np.ndarray:
             t = (_NEAR - a[2]) / (b[2] - a[2])
             out.append(a + t * (b - a))
     return np.array(out)
+
+
+def _draw_mesh(cam_pts: np.ndarray, faces, k: np.ndarray, zbuf: np.ndarray, img: np.ndarray, label: int) -> None:
+    """A mesh object in one fill: all its triangles in front of the near plane, at one depth (its nearest
+    vertex) against the other objects. Exact outline, approximate occlusion between objects; triangles
+    crossing the near plane are left out (meshes are objects in front of the camera, not set pieces)."""
+    tri = np.asarray(faces, np.int64)
+    if tri.ndim != 2 or tri.shape[1] != 3:
+        tri = np.array([(f[0], f[i], f[i + 1]) for f in faces for i in range(1, len(f) - 1)], np.int64)
+    tri = tri[(cam_pts[tri, 2] >= _NEAR).all(1)]
+    if not len(tri):
+        return
+    z = cam_pts[:, 2:3]
+    uv = cam_pts[:, :2] / np.maximum(z, _NEAR) * np.array([k[0, 0], k[1, 1]]) + np.array([k[0, 2], k[1, 2]])
+    h, w = img.shape
+    m = np.zeros((h, w), np.uint8)
+    for poly in np.round(uv[tri]).astype(np.int32):  # one call per triangle: a single fillPoly over all of them
+        cv2.fillConvexPoly(m, poly, 1)              # would cancel where front and back faces overlap
+    d = float(cam_pts[np.unique(tri), 2].min())
+    ok = (m > 0) & (d < zbuf)
+    zbuf[ok] = d
+    img[ok] = label
 
 
 def render_silhouettes(project: Project, shot_id: str, frames: list[int], ids: list[str],
@@ -108,11 +130,17 @@ def render_silhouettes(project: Project, shot_id: str, frames: list[int], ids: l
         for n, oid in enumerate(ids, start=1):
             o = objs[oid]
             r, t, s = object_pose(project, o, shot_id, f)
-            world = (_CORNERS * (np.array(o.size or (1, 1, 1)) * s)) @ r.T + t
+            # set pieces (floor, walls: large, flat, may reach behind the camera) keep the box path, whose
+            # per-pixel plane depth is exact; one depth per object is only right for compact objects
+            unit, faces = (BOX_U, BOX_FACES) if o.kind == "set" else object_shape(o)
+            world = (unit * (np.array(o.size or (1, 1, 1)) * s)) @ r.T + t
             cam_pts = (world - c_c) @ r_c  # camera coordinates (OpenCV)
             if (cam_pts[:, 2] < _NEAR).all():
                 continue
-            for face in _FACES:
+            if unit is not BOX_U:
+                _draw_mesh(cam_pts, faces, k, zbuf, img, n)
+                continue
+            for face in faces:
                 poly = _clip_near(cam_pts[list(face)])
                 if len(poly) < 3:
                     continue
@@ -180,7 +208,7 @@ def silhouette_metrics(project: Project, obs: MaskObservation, pairs: dict[str, 
 @dataclass
 class Param:
     """kind: 'translation' (offset added to an object's rest and all keys, along axis 0-2),
-    'size' (object size along axis), 'focal' (multiplier on all of a camera's focal lengths),
+    'size' (object size along axis 0-2, or all sides in proportion with axis 3), 'focal' (multiplier on all of a camera's focal lengths),
     'time' (shift of all of an animated object's key times, in frames), 'yaw' (turn about the world up axis,
     radians, rest and keys), 'spin' (a turn spread linearly over the keys). A 'time' parameter searched with
     others is scanned over TIME_SCAN_FRAMES, refitting the others at each shift."""
@@ -212,14 +240,18 @@ def apply_params(project: Project, params: list[Param], x: np.ndarray) -> tuple[
         elif prm.kind == "size":
             o = objs[prm.target_id]
             sz = list(o.size or (1, 1, 1))
-            old = sz[prm.axis]
-            sz[prm.axis] = max(old + float(v), 0.01)
+            old = sz[2]
+            if prm.axis == 3:  # uniform: the longest side changes by v, proportions kept
+                f = max(1 + float(v) / max(sz), 0.01 / min(sz))
+                sz = [a * f for a in sz]
+            else:
+                sz[prm.axis] = max(sz[prm.axis] + float(v), 0.01)
             o.size = tuple(sz)
             touched[(o.id, "size")] = o.size
-            if prm.axis == 2 and o.kind != "set":
-                # keep the bottom face where it was (a box standing on the floor stays on it):
-                # move the centre half the height change along the box's own up axis
-                half = (sz[2] - old) / 2
+            if prm.axis in (2, 3) and o.kind != "set":
+                # keep the shape's lowest level where it was (an object standing on the floor stays on it):
+                # move the origin along its own up axis by the change of that level (half the change for a box)
+                half = -(sz[2] - old) * bottom(o)
 
                 def lift(k: TransformKey, half=half) -> TransformKey:
                     up = np.array(quat_to_matrix(k.pose.rotation))[:, 2]

@@ -38,10 +38,11 @@ MIN_FLOOR_POINTS = 500  # draft: fewer floor-mask points -> floor plane not trus
 MOVE_FRACTION = 0.5  # box centres spread more than this share of size -> the object moves; chosen on: v1 dev
 
 # --- importing an outside scene (run/refine.py) -----------------------------------------------------------------
+MAX_FACES = 600  # triangles per mesh in the silhouette objective (optimize/shape.py); not tuned (speed bound)
 FLAT = 0.02  # thinnest/longest side below this: a plane; chosen on: GPT condition-B scenes of v1 dev
 
 __all__ = [
-    "CAMERA_GUARD", "CAM_PATH_SCALE_STEP", "CAM_PATH_STEP", "FLAT", "FOCAL_MIN_RISE", "FOCAL_PROBE", "HOLD_TOLERANCE", "MIN_DEPTH_RATIO",
+    "CAMERA_GUARD", "CAM_PATH_SCALE_STEP", "CAM_PATH_STEP", "FLAT", "MAX_FACES", "FOCAL_MIN_RISE", "FOCAL_PROBE", "HOLD_TOLERANCE", "MIN_DEPTH_RATIO",
     "MIN_FLOOR_POINTS", "MOVE_FRACTION", "MOVE_STEP", "ROUND_RATIO", "SIZE_STEP", "STILL_PROGRESS", "TOP_DOWN",
     "TRACK_WEIGHT", "YAW_STEP",
 ]
