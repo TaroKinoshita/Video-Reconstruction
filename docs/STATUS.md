@@ -5,7 +5,10 @@ Read this first. History: `docs/HANDOFF_EN.md` (and the Japanese `docs/HANDOFF.m
 
 ## Where things are
 
-- **Focus: the tennis clip, scene -> V2V** (user, 2026-11-16). Phase 1a and the synthetic RQ1 study are paused.
+- **v1.0 = tennis case study (V2V, RQ2) + RQ1 2x3 study** (user, 2026-11-18). RQ1 runs unattended:
+  `bash scripts/rq1_resume.sh` (starts `scripts/rq1_all.sh` unless running/finished; log `runs/rq1/progress.log`).
+  Cells S0/S1 (4RC start, fixed-order repair) and L0/L1 (Claude-built scene, + repair); H4 (S2/L2) dropped.
+  Results land in `runs/rq1/compare/*.md`; report goes to `evaluation/RESULTS.md`.
 - **V2V works.** ComfyUI on a RunPod pod (RTX 4090 24 GB or 5090 32 GB; network volume in euro-3 with MiniMax-H3
   int8 weights, SAM 3.1). Method: the ComfyUI **r2v** template (`MiniMaxH3ReferenceToVideo`, no ControlNet):
   `<Video 1>` = a clay render of the 3D scene (camera, layout, motion), pictures = frames and crops of the source
@@ -42,9 +45,15 @@ Read this first. History: `docs/HANDOFF_EN.md` (and the Japanese `docs/HANDOFF.m
 
 - Labels for unusual objects (how far SAM gets; label-free fallback). Unknown categories keep their box.
 - A white shape at the frame edge was drawn as a sneaker once; prompts now say edge-cut parts continue outside.
-- The full observation -> scene recipe (WP-5 beyond the V2V stages) is not done; the V2V stages are.
-- Decide whether RQ1 (synthetic 2x3 study, WP-7) is part of v1.0.
-- WP-8 hardening (dependency lock, small defects), `docs/LICENSES.md`.
+- Tennis observation -> scene: `vrecon pipeline-scene evaluation/recipes/tennis/scene.json --check` rebuilds
+  calibrate, person, proxies, observe, venue, props and matches the stored results (recipe "rebuild_check");
+  complete, timing, status and final export are still scripts listed in the recipe.
+- MiniMax-H3 licence excludes the EU, UK, Korea and USA; the pods ran in euro-3 (EU). Use a non-excluded region
+  next time and settle this before showing results (`docs/LICENSES.md`).
+- H5 measures "edit applied without repair"; scoring the edited scene against an equally edited ground truth is
+  not done in v1.0.
+- Repair loop: objects are drawn from their own mesh when they have one (`optimize/shape.py`); a mesh object keeps
+  its proportions.
 
 ## Rules (unchanged, see CLAUDE.md)
 
