@@ -103,6 +103,17 @@ def test_init_run_with_observed_masks(tmp_path):
     assert cfg["mask_source"] == "observed" and cfg["video"] is None and cfg["focal"] is True
     obs = service._observation(cfg)
     assert obs.id_map == {1: "obs_0"} and obs.masks.shape == (4, 8, 8)
+    # paths are stored relative to the run folder, so the folder can be moved together with its inputs
+    stored = json.loads((tmp_path / "run" / "config.json").read_text(encoding="utf-8"))
+    assert stored["masks"] == "../masks.npz" and stored["project"] == "../project.json"
+    import shutil
+
+    moved = tmp_path / "moved"
+    moved.mkdir()
+    for name in ("run", "masks.npz", "project.json"):
+        shutil.move(str(tmp_path / name), str(moved / name))
+    cfg2 = service.load_config(moved / "run")
+    assert cfg2["masks"] == str((moved / "masks.npz").resolve())
 
 
 def test_fixed_targets_reject_changes(tmp_path):

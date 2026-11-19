@@ -8,6 +8,10 @@ in the Japanese documents listed in section 10; this file points into them.
 
 ## 0. Where things stand (read this first)
 
+- **v1.0 done (2026-11-19).** Current state in `docs/STATUS.md`; results in `evaluation/RESULTS.md` 7-10 (RQ1 2x3
+  study verdicts, H5 with post-edit scores, tennis observation -> scene as one command). The bullets below are the
+  history up to M2 and are kept as written.
+
 - **The tennis Blender scene is finished for V2V.** Final scene and control videos:
   `runs/venue/tennis/fal2c_props/final/` (`scene.blend`, `project.json`, `controls_<move>/control_{depth,canny,clay,id,look}.mp4`
   for five camera moves; all pass H3's constraints: 24 fps, sides multiples of 32, 17n+5 frames). `runs/` is not in git.

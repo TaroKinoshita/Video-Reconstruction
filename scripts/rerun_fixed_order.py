@@ -33,7 +33,7 @@ def main() -> int:
     rows = {}
     for clip in a.clips:
         base = ROOT / "runs" / "bench_rays" / f"{clip}_base"
-        cfg = json.loads((base / "config.json").read_text(encoding="utf-8"))
+        cfg = service.load_config(base)
         run = a.out / clip
         if run.exists():
             import shutil
@@ -47,7 +47,7 @@ def main() -> int:
         recs = policy.auto_repair(mgr, obs, pc["pairs"], mgr.tracks, 2, 60, focal=cfg.get("focal", True),
                                   camera_path=not a.no_camera_path)
         snaps = sorted((run / "snapshots").glob("rev_*.json"))
-        adopted = snaps[-1] if snaps else Path(json.loads((run / "config.json").read_text(encoding="utf-8"))["project"])
+        adopted = snaps[-1] if snaps else Path(service.load_config(run)["project"])
         rep = score(ROOT / "evaluation" / "synthetic" / clip, load_project(adopted), novel=True)
         s = rep["summary"]
         cam_recs = [r for r in recs if r["hypothesis"].startswith("camera translation")]

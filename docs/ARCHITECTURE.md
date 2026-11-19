@@ -95,3 +95,18 @@ Cloud session: write code, test, push. Local PC: Blender GUI, GPU, local Claude 
 | Generation (rented GPU) | `gpu/h3_control/comfy_jobs.py` (ComfyUI API, profiles), `gpu/h3_control/comfy_sam.py` (SAM 3.1 on the pod) |
 | Recipes | `pipeline/v2v.py` (`vrecon pipeline-v2v`), `evaluation/recipes/<clip>/` |
 | Tuning | `tuning.py` (every tuned constant, hash frozen in `evaluation/thresholds.yaml`) |
+
+## v1.0 (2026-11-19)
+
+- Recipes: `vrecon pipeline-scene` (`pipeline/scene.py`, observation -> finished scene; stages are argv lists with
+  `{work}`, `{in:..}`, `{val:..}`; `--check` compares with stored results) and `vrecon pipeline-v2v`
+  (`pipeline/v2v.py`, scene -> V2V). Recorded LLM answers are inputs, never re-run.
+- Repair loop draws each object from its shape (`optimize/shape.py`): its mesh when it has one (`blend_import` saves
+  meshes for `run/refine.refine_blend`), else the proxy box; set pieces keep the exact plane path; a mesh object's
+  size is searched in proportion only.
+- Editability (H5): `vrecon/edits.py` (pure: target choice, expected result, comparison) and
+  `scene/edit_blend.py` (the three edits applied to a .blend's own data); `scripts/edit_scores.py` scores edited
+  scenes against equally edited ground truth.
+- RQ1 runners: `scripts/build_rq1_starts.py`, `run_rq1_s1.py`, `run_rq1_l0.sh` (parallel lanes, usage-limit retry),
+  `run_rq1_l1.py`, `run_rq1_edits.py`, `rq1_rows.py`, `rq1_all.sh` / `rq1_resume.sh`.
+- Run folders store their file paths relative to themselves (`run/service.load_config` resolves them).

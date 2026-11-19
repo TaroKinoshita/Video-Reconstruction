@@ -8,6 +8,7 @@ Codex, ...) can continue a run.
 from __future__ import annotations
 
 import json
+import os
 
 import numpy as np
 from pathlib import Path
@@ -21,8 +22,30 @@ from .manager import AcceptRule, Proposal, RunManager
 from vrecon.tuning import HOLD_TOLERANCE  # noqa: E402,F401  (tuned values, one place)
 
 
+PATH_KEYS = ("project", "masks", "video", "tracks", "from_4d")
+
+
+def _rel(path: str | None, run_dir: Path) -> str | None:
+    """Stored relative to the run folder (with "/"), so a run folder can be moved together with its inputs."""
+    if not path:
+        return path
+    try:
+        return Path(os.path.relpath(Path(path).resolve(), run_dir.resolve())).as_posix()
+    except ValueError:  # another drive (Windows): keep it absolute
+        return str(Path(path).resolve())
+
+
 def _config(run_dir: Path) -> dict:
-    return json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    """config.json with its file paths resolved (they are stored relative to the run folder; old runs: absolute)."""
+    run_dir = Path(run_dir)
+    cfg = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    for k in PATH_KEYS:
+        if cfg.get(k):
+            cfg[k] = str((run_dir / cfg[k]).resolve())
+    return cfg
+
+
+load_config = _config
 
 
 def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min_gain: float = 0.0,
@@ -61,7 +84,8 @@ def init_run(project: str, run_dir: str, masks: str, max_attempts: int = 30, min
     start_project = load_project(start)
     cfg["pairs"] = auto_pairs(start_project, _observation(cfg))
     cfg["fixed"] = [] if edit_set else sorted(o.id for o in start_project.reconstruction.objects if o.kind == "set")
-    (rd / "config.json").write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+    stored = {**cfg, **{k: _rel(cfg.get(k), rd) for k in PATH_KEYS}}
+    (rd / "config.json").write_text(json.dumps(stored, indent=2) + "\n", encoding="utf-8")
     return {**cfg, "init_report": report} if report else cfg
 
 

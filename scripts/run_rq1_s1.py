@@ -31,7 +31,7 @@ def main() -> int:
     rows = {}
     for c in a.clips:
         src = a.start / c / "run"
-        cfg = json.loads((src / "config.json").read_text(encoding="utf-8"))
+        cfg = service.load_config(src)
         run = a.out / c
         if run.exists():
             shutil.rmtree(run)

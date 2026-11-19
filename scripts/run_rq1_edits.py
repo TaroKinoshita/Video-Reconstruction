@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _blends(r: Path):
     for clip_dir in sorted((r / "S1").glob("syn2_*")):
         snaps = sorted((clip_dir / "snapshots").glob("rev_*.json"))
-        proj = snaps[-1] if snaps else Path(json.loads((clip_dir / "config.json").read_text(encoding="utf-8"))["project"])
+        proj = snaps[-1] if snaps else Path(__import__("vrecon.run.service", fromlist=["load_config"]).load_config(clip_dir)["project"])
         yield "S1", clip_dir.name, "r1", proj
     for b in sorted((r / "L0").glob("syn2_*/r*/workspace/output/scene.blend")):
         run = b.parents[2]
