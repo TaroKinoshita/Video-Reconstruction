@@ -25,6 +25,64 @@ def _quat(r: np.ndarray):
     return Matrix(r.tolist()).to_quaternion()
 
 
+def _source_of(o) -> str | None:
+    """The object a rule-made copy came from (run/complete notes: "copy of X", "mirror of X", "repeat of X")."""
+    import re
+
+    for e in o.evidence:
+        m = re.search(r"(?:copy|mirror|repeat) of ([A-Za-z0-9_\-]+)", e.note or "")
+        if m:
+            return m.group(1).rstrip(",")
+    return None
+
+
+def _add_new_objects(project, original, meshes, renamed, scene, shot, n) -> list[str]:
+    """Objects in the project but not in the .blend: a rule-made copy duplicates its source object (same mesh and
+    materials, its own transform and size); an object with a mesh file (.npz) gets that mesh. Marked with the
+    vrecon id so a later import finds them."""
+    from .builder import ID_PROP, _mesh_asset, BuildReport
+
+    notes = []
+    have = set(renamed.get(v, v) for v in meshes)
+    inv = {renamed.get(v, v): b for v, b in meshes.items()}
+    byid = {o.id: o for o in project.reconstruction.objects}
+    for o in project.reconstruction.objects:
+        if o.id in have:
+            continue
+        src_id = _source_of(o)
+        src = inv.get(src_id) if src_id else None
+        if src is not None:
+            new = src.copy()
+            new.animation_data_clear()
+            base = byid.get(src_id) or next((x for x in original.reconstruction.objects if x.id == src_id), None)
+            grow = np.array(o.size) / np.maximum(np.array(base.size), 1e-9) if (base is not None and o.size and base.size) else np.ones(3)
+        elif o.asset is not None and str(o.asset.path).endswith(".npz"):
+            mesh = _mesh_asset(o, None, BuildReport())
+            if mesh is None:
+                continue
+            new = bpy.data.objects.new(o.name or o.id, mesh)
+            grow = np.ones(3)
+        else:
+            notes.append(f"{o.id}: new object with no source or mesh, not added")
+            continue
+        scene.collection.objects.link(new)
+        new.parent = None
+        for c in list(new.constraints):
+            new.constraints.remove(c)
+        new[ID_PROP] = o.id
+        new.rotation_mode = "QUATERNION"
+        for i in (range(n) if o.keys else [0]):
+            r, t, s_ = object_pose(project, o, shot, i)
+            new.location = Vector(t.tolist())
+            new.rotation_quaternion = _quat(r)
+            new.scale = Vector((s_ * grow).tolist())
+            if o.keys:
+                for path in ("location", "rotation_quaternion", "scale"):
+                    new.keyframe_insert(path, frame=scene.frame_start + i)
+        notes.append(f"{o.id}: added" + (f" (copy of {src_id})" if src is not None else " (mesh file)"))
+    return notes
+
+
 def export_to_blend(project: Project, original: Project, src: str | Path, dst: str | Path,
                     renamed: dict[str, str] | None = None) -> list[str]:
     """Open src, apply project (vs original = the imported start) and save as dst. Returns notes."""
@@ -64,6 +122,8 @@ def export_to_blend(project: Project, original: Project, src: str | Path, dst: s
                 for path in ("location", "rotation_quaternion", "scale"):
                     bobj.keyframe_insert(path, frame=f)
         notes.append(f"{vid}: transforms replaced" + (f", size x{np.round(grow, 3).tolist()}" if np.any(abs(grow - 1) > 1e-6) else ""))
+
+    notes += _add_new_objects(project, original, meshes, renamed, scene, shot, n)
 
     cam, cam0 = project.reconstruction.cameras[0], original.reconstruction.cameras[0]
     if cam.model_dump() != cam0.model_dump():
