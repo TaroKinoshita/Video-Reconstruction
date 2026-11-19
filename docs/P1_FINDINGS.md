@@ -2,8 +2,7 @@
 
 Drafts: `runs/p1/drafts/<clip>/r<N>/workspace/output/scene.blend` (baselines/b_llm_mcp, claude-opus-5-5, 60 min).
 Sheets: `runs/p1/clay_<clip>.png` (`scripts/clay_moves_blend.py`: source video on top, then clay from the source
-camera, a 45-degree orbit and a 60% pull-back, at the start, middle and end of the clip). Done: tennis r1, r2;
-duck r1; mograph r1 (duck r2 and mograph r2 waited on the Claude usage limit).
+camera, a 45-degree orbit and a 60% pull-back, at the start, middle and end of the clip). All six done (2026-11-20 01:39); r2 sheets: `runs/p1/clay_<clip>_r2.png`.
 
 | Clip | Source camera | Orbit 45 / pull-back | Kind (PLAN_v2 2.2 / 2.3) |
 |---|---|---|---|
@@ -15,3 +14,8 @@ First reading, before any fix: the bare drafts look right from the source camera
 camera leaves it: empty space past what the source saw, frame-edge objects, crude people. The motion-graphics clip is
 the case a bare LLM already handles. So P3/P4 start with the outside of the frame (2.3) and frame-edge objects, then
 people (replace a mannequin with an observed body where GVHMR runs), then relations over time.
+
+Second runs: duck r2 built a whole child (legs, arms, a hand holding the string; the string reaches the duck in the
+orbit), so person-object relations can come out right in one run and not in another (r1: legs only). The right side
+is again empty and frame-edge toys again float as blocks in the pull-back. mograph r2 matches r1 (holds up).
+Same failure in every draft: the space and the objects the source camera did not see.
