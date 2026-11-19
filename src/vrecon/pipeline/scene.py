@@ -10,8 +10,9 @@ is an input, so a rebuild is deterministic and free.
 
 Every stage appends a line to <work>/pipeline_log.jsonl: stage, argv, sha256 of the files named in argv and of
 its outputs, seconds, exit status. --check compares each stage's outputs with the stored results named in the
-stage's "stored" map (JSON files compared as parsed data with floats to 1e-6; other files by sha256) and writes
-<work>/check.json.
+stage's "stored" map (JSON files compared as parsed data; other files by sha256) and writes <work>/check.json.
+Each stored file may have an "allow" entry: {"tolerance": metres-or-units, "paths": [fnmatch JSON paths], "why"}.
+A missing output, or a difference not covered by its allowance, fails the run (exit 3).
 """
 
 from __future__ import annotations
@@ -85,17 +86,45 @@ def _load_json(p: Path):
     return raw
 
 
-def compare(got: Path, want: Path) -> str:
-    """'same' (numbers within 1e-6), 'max difference X' (same structure, numbers differ), or 'different'."""
+def _diffs(a, b, path: str, out: list, tol: float) -> None:
+    """Every place where two parsed JSON trees differ: (path, kind); numbers within tol are equal. List items get
+    their index in the path, so allowance patterns use [*] (fnmatch)."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        for k in sorted(set(a) | set(b)):
+            if k not in a or k not in b:
+                out.append((f"{path}.{k}", "only in one"))
+            else:
+                _diffs(a[k], b[k], f"{path}.{k}", out, tol)
+    elif isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            out.append((path, f"length {len(a)} vs {len(b)}"))
+        for i, (x, y) in enumerate(zip(a, b)):
+            _diffs(x, y, f"{path}[{i}]", out, tol)
+    elif isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool):
+        if abs(float(a) - float(b)) > tol:
+            out.append((path, f"{a} vs {b}"))
+    elif a != b:
+        out.append((path, "text differs"))
+
+
+def compare(got: Path, want: Path, tol: float = 1e-6, allowed: list[str] | None = None) -> dict:
+    """{"result": same | allowed | different | missing, "unexplained": [...], "allowed": n}.
+    tol: largest numeric difference counted as equal (recipe: per stored file, with its basis).
+    allowed: fnmatch patterns of JSON paths whose differences are known and accepted (recipe, with the reason)."""
+    import fnmatch
+
     if not got.exists():
-        return "missing"
+        return {"result": "missing", "unexplained": [str(got)], "allowed": 0}
     if got.suffix == ".json" and want.suffix == ".json":
         a, b = (_strip_paths(_load_json(p)) for p in (got, want))
-        if _same_json(a, b):
-            return "same"
-        d = _max_diff(a, b)
-        return f"max difference {d:.4g}" if d is not None else "different"
-    return "same" if _sha(got) == _sha(want) else "different"
+        out: list = []
+        _diffs(a, b, "", out, tol)
+        ok = [d for d in out if any(fnmatch.fnmatchcase(d[0], pat) for pat in (allowed or []))]
+        bad = [f"{p}: {k}" for p, k in out if (p, k) not in ok]
+        res = "same" if not out else ("allowed" if not bad else "different")
+        return {"result": res, "unexplained": bad[:20], "unexplained_count": len(bad), "allowed": len(ok)}
+    same = _sha(got) == _sha(want)
+    return {"result": "same" if same else "different", "unexplained": [] if same else ["file content"], "allowed": 0}
 
 
 def _strip_paths(x):
@@ -138,7 +167,13 @@ def run(recipe_path: Path, start: str | None = None, stop: str | None = None, dr
             for got, want in st.get("stored", {}).items():
                 g, w = Path(_expand(got, r, work)), ROOT / want
                 key = st["stage"] + ": " + Path(got).name
-                results[key] = compare(g, w)
-                print(f"  check {key}: {results[key]}", flush=True)
+                rule = st.get("allow", {}).get(got, {})
+                results[key] = compare(g, w, float(rule.get("tolerance", 1e-6)), rule.get("paths"))
+                print(f"  check {key}: {results[key]['result']}"
+                      + (f" ({results[key].get('unexplained_count')} unexplained, e.g. {results[key]['unexplained'][:2]})"
+                         if results[key]["result"] in ("different", "missing") else ""), flush=True)
             (work / "check.json").write_text(json.dumps(results, indent=1) + "\n", encoding="utf-8")
+    if check and any(v["result"] in ("different", "missing") for v in results.values()):
+        print("check FAILED: outputs missing or differing beyond the recipe's allowances")
+        return 3
     return 0

@@ -165,6 +165,13 @@
    ],
    "stored": {
     "{work}/court/calibration.json": "runs/human/tennis/court/calibration.json"
+   },
+   "allow": {
+    "{work}/court/calibration.json": {
+     "tolerance": 1e-06,
+     "paths": [],
+     "why": "must be identical"
+    }
    }
   },
   {
@@ -182,6 +189,13 @@
    ],
    "stored": {
     "{work}/scene/project.json": "runs/human/tennis/scene/project.json"
+   },
+   "allow": {
+    "{work}/scene/project.json": {
+     "tolerance": 0.01,
+     "paths": [],
+     "why": "largest difference 0.0086 in 4RC-world units (person keys); the court-frame scene built from it (proxies) is identical"
+    }
    }
   },
   {
@@ -204,6 +218,13 @@
    ],
    "stored": {
     "{work}/court_proxies/project.json": "runs/human/tennis/court_proxies/project.json"
+   },
+   "allow": {
+    "{work}/court_proxies/project.json": {
+     "tolerance": 1e-06,
+     "paths": [],
+     "why": "must be identical"
+    }
    }
   },
   {
@@ -224,6 +245,16 @@
    ],
    "stored": {
     "{work}/observations.json": "runs/venue/tennis/observations.json"
+   },
+   "allow": {
+    "{work}/observations.json": {
+     "tolerance": 0.035,
+     "paths": [
+      ".things.*.line.direction[[]*[]]",
+      ".things.*.line.front_edge_*"
+     ],
+     "why": "values rounded to 0.01 m, point sampling noise; a line's direction sign is arbitrary (from/to swap)"
+    }
    }
   },
   {
@@ -242,6 +273,17 @@
    ],
    "stored": {
     "{work}/venue/project.json": "runs/venue/tennis/fal2c/project.json"
+   },
+   "allow": {
+    "{work}/venue/project.json": {
+     "tolerance": 0.02,
+     "paths": [
+      ".reconstruction.objects[[]*[]].status",
+      ".reconstruction.objects[[]*[]].spans*",
+      ".reconstruction.objects[[]*[]].evidence*"
+     ],
+     "why": "the current code writes 0.4.0 statuses, spans and evidence from the start; the stored scene got them later from scripts/convert_tennis_status.py"
+    }
    }
   },
   {
@@ -269,6 +311,26 @@
    "stored": {
     "{work}/props/project.json": "runs/venue/tennis/fal2c_props/project.json",
     "{work}/props/props.json": "runs/venue/tennis/fal2c_props/props.json"
+   },
+   "allow": {
+    "{work}/props/project.json": {
+     "tolerance": 0.02,
+     "paths": [
+      ".reconstruction.objects[[]*[]].status",
+      ".reconstruction.objects[[]*[]].spans*",
+      ".reconstruction.objects[[]*[]].evidence*"
+     ],
+     "why": "the current code writes 0.4.0 statuses, spans and evidence from the start; the stored scene got them later from scripts/convert_tennis_status.py"
+    },
+    "{work}/props/props.json": {
+     "tolerance": 0.02,
+     "paths": [
+      ".reconstruction.objects[[]*[]].status",
+      ".reconstruction.objects[[]*[]].spans*",
+      ".reconstruction.objects[[]*[]].evidence*"
+     ],
+     "why": "the current code writes 0.4.0 statuses, spans and evidence from the start; the stored scene got them later from scripts/convert_tennis_status.py"
+    }
    }
   },
   {
@@ -289,6 +351,17 @@
    ],
    "stored": {
     "{work}/props/final/project.json": "runs/venue/tennis/fal2c_props/final/project.json"
+   },
+   "allow": {
+    "{work}/props/final/project.json": {
+     "tolerance": 0.02,
+     "paths": [
+      ".reconstruction.objects[[]*[]].status",
+      ".reconstruction.objects[[]*[]].spans*",
+      ".reconstruction.objects[[]*[]].evidence*"
+     ],
+     "why": "the current code writes 0.4.0 statuses, spans and evidence from the start; the stored scene got them later from scripts/convert_tennis_status.py"
+    }
    }
   },
   {
@@ -308,6 +381,15 @@
    ],
    "stored": {
     "{work}/status/project.json": "runs/venue/tennis/status_v040/project.json"
+   },
+   "allow": {
+    "{work}/status/project.json": {
+     "tolerance": 0.02,
+     "paths": [
+      ".reconstruction.objects[[]*[]].evidence[[]*[]].note"
+     ],
+     "why": "evidence notes name the tool and paths of this rebuild"
+    }
    }
   }
  ],

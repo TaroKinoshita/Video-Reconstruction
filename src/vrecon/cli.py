@@ -272,8 +272,9 @@ def main(argv: list[str] | None = None) -> int:
     pv.add_argument("--to", dest="stop")
     pv.add_argument("--server", help="ComfyUI server for the generate stage")
     pv.add_argument("--dry-run", action="store_true")
+    pv.add_argument("--scene", help="finished scene folder to start from (default: the recipe's)")
     pv.set_defaults(func=lambda args: __import__("vrecon.pipeline.v2v", fromlist=["run"]).run(
-        Path(args.recipe), args.start, args.stop, args.server, args.dry_run))
+        Path(args.recipe), args.start, args.stop, args.server, args.dry_run, args.scene))
 
     ps = sub.add_parser("pipeline-scene", help="run a clip's observation -> scene recipe (evaluation/recipes/<clip>/scene.json)")
     ps.add_argument("recipe")

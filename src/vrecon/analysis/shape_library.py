@@ -202,6 +202,9 @@ def apply_templates(project, out_dir: str | Path, labels: dict[str, str] | None 
     for o in p.reconstruction.objects:
         if o.kind in ("set", "character") or not o.size:
             continue
+        if p.is_locked(o.id, "asset") or p.is_locked(o.id, "size"):
+            report[o.id] = "kept (locked by a human)"
+            continue
         if o.asset is not None and not replace_assets:
             report[o.id] = "kept (has a mesh)"
             continue

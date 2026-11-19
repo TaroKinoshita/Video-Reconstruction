@@ -82,6 +82,9 @@ def main() -> int:
     for o in p2.reconstruction.objects:
         if o.id not in off_floor:
             continue
+        if p2.is_locked(o.id, "rest") or p2.is_locked(o.id, "size"):
+            report[o.id].update({"moved": False, "why": "locked by a human"})
+            continue
         zs = surface_depth({f: masks[f] == by_label[cands[o.id]] for f in frames}, dep)
         t = np.asarray(o.rest.pose.translation, float)
         bottom = t - np.array([0, 0, o.size[2] / 2])

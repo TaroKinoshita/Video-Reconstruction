@@ -55,3 +55,18 @@ def test_cli_handoff_edit_ingest(tmp_path: Path):
     # Ingesting the same handoff again is refused: the project moved on.
     again = run("ingest", str(project_path), "--handoff", str(out / "handoff.json"), check=False)
     assert again.returncode == 2 and "changed since handoff" in again.stderr
+
+
+def test_scene_check_fails_on_missing_and_unexplained(tmp_path):
+    """pipeline-scene --check: a missing output or a difference outside the allowance is a failure."""
+    import json
+
+    from vrecon.pipeline.scene import compare
+
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    a.write_text(json.dumps({"x": 1.0, "objects": [{"status": "observed"}]}), encoding="utf-8")
+    b.write_text(json.dumps({"x": 1.005, "objects": [{"status": "estimated"}]}), encoding="utf-8")
+    assert compare(tmp_path / "none.json", b)["result"] == "missing"
+    assert compare(a, b)["result"] == "different"
+    assert compare(a, b, 0.01, [".objects[[]*[]].status"])["result"] == "allowed"
+    assert compare(a, b, 0.001, [".objects[[]*[]].status"])["result"] == "different"

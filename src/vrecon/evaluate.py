@@ -157,19 +157,21 @@ def score(reference_dir: str | Path, rec: Project, shot_id: str | None = None,
 
 def score_blend(reference_dir: str | Path, blend: str | Path, novel: bool = False) -> dict:
     """Score any .blend (e.g. an LLM's scene.blend) against a reference clip folder. Novel views render the
-    imported objects as boxes of their bounding-box size (the import keeps no meshes)."""
+    imported objects with their own meshes (evaluated, in object space, at the .blend's per-frame transforms)."""
     from vrecon.scene.blend_import import import_blend
 
     ref_dir = Path(reference_dir)
     ref_index = np.load(ref_dir / "gt_passes" / "index.npz")["index"]
     t, h, w = ref_index.shape
     with tempfile.TemporaryDirectory() as tmp:
-        project, warnings = import_blend(blend, Path(tmp), project_id="proj_blend", size=(w, h))
+        # meshes are kept (mesh_dir) so the novel views draw the .blend's real shapes, not their bounding boxes
+        project, warnings = import_blend(blend, Path(tmp), project_id="proj_blend", size=(w, h),
+                                         mesh_dir=Path(tmp) / "meshes")
         passes = (np.load(Path(tmp) / "index.npz")["index"], np.load(Path(tmp) / "depth.npz")["depth"],
                   _load_map(Path(tmp) / "id_map.json"))
-    if passes[0].shape[0] != t:
-        raise ValueError(f".blend has {passes[0].shape[0]} frames, reference has {t}")
-    report = score(ref_dir, project, rec_passes=passes, novel=novel)
+        if passes[0].shape[0] != t:
+            raise ValueError(f".blend has {passes[0].shape[0]} frames, reference has {t}")
+        report = score(ref_dir, project, rec_passes=passes, novel=novel)
     report["reconstruction"] = str(blend)
     report["import_warnings"] = warnings
     return report

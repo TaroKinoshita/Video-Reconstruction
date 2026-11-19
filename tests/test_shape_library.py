@@ -40,3 +40,22 @@ def test_apply_templates_only_touches_box_objects(tmp_path):
     chair = next(o for o in q.reconstruction.objects if o.id == "obj_chair")
     assert chair.asset.path == "obj_chair_template.npz" and (tmp_path / chair.asset.path).is_file()
     assert chair.evidence[-1].kind == "rule"
+
+
+def test_locked_object_keeps_its_shape(tmp_path):
+    """A human lock on an object's asset or size stops the template stage (same rule as the repair loop)."""
+    from vrecon.analysis.shape_library import apply_templates
+    from vrecon.schema import Lock, Pose, SceneObject, TransformKey
+
+    from test_builder import make_project
+
+    ball = SceneObject(id="obj_ball", name="ball", size=(0.2, 0.2, 0.2), rest=TransformKey(time=0, pose=Pose()))
+    from vrecon.schema import Camera, CameraKey, Intrinsics
+
+    cam = Camera(id="cam_001", shot_id="shot_001", intrinsics=Intrinsics(width=64, height=64, fx=50, fy=50, cx=31.5, cy=31.5),
+                 keys=[CameraKey(shot_frame=0, pose=Pose())])
+    p = make_project([cam], [ball])
+    p.human.locks.append(Lock(id="lock_ball", target_id="obj_ball", field="asset"))
+    out, rep = apply_templates(p, tmp_path, labels={"obj_ball": "ball"})
+    assert next(o for o in out.reconstruction.objects if o.id == "obj_ball").asset is None
+    assert rep["obj_ball"].startswith("kept")

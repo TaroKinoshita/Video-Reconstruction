@@ -44,6 +44,30 @@ FPS = 24
 
 # ---------------------------------------------------------------- jobs
 
+def _file_sha(p: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def fingerprint(r: dict, a, steps: int, profile: dict) -> str:
+    """sha256 over everything a generation depends on."""
+    import hashlib
+
+    base = a.jobs.parent
+    files = [r["control_path"]] + ([Path(a.ref_image)] if a.ref_image else []) +         [(base / x).resolve() for x in r["job"].get("ref_images", []) + r["job"].get("extra_ref_videos", [])]
+    prompt = a.prompt_file.read_text(encoding="utf-8") if a.prompt_file else r["job"].get("prompt", "")
+    data = {"files": [_file_sha(f) if Path(f).is_file() else f"missing:{f}" for f in files], "prompt": prompt,
+            "profile": profile, "models": dict(MODELS), "seed": r["seed"], "steps": steps, "settings": r["settings"],
+            "mode": a.mode, "scheduler": a.scheduler, "size": a.size, "strength": a.strength,
+            "ref_image_size": a.ref_image_size, "turbo": a.turbo}
+    return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
 def plan_runs(jobs_file: Path, group: str | None, only: list[str] | None, seeds: list[int] | None) -> list[dict]:
     spec = json.loads(jobs_file.read_text(encoding="utf-8"))
     defaults = spec["defaults"]
@@ -266,7 +290,17 @@ def main() -> int:
             continue
         r["control_info"] = probe(r["control_path"])
         problems += [f"{r['run_id']}: {p}" for p in check(r["control_info"])]
-    todo = [r for r in runs if not (a.out / r["run_id"] / "video.mp4").is_file()]
+    for r in runs:
+        r["fingerprint"] = fingerprint(r, a, steps, profile)
+
+    def reusable(r) -> bool:
+        """A stored video counts only when everything that went into it is the same (control and reference files
+        by content, prompt, models, settings, seed); otherwise it is generated again."""
+        d = a.out / r["run_id"]
+        fp = d / "inputs.sha256"
+        return (d / "video.mp4").is_file() and fp.is_file() and fp.read_text(encoding="utf-8").strip() == r["fingerprint"]
+
+    todo = [r for r in runs if not reusable(r)]
     print(f"{len(runs)} runs planned, {len(runs) - len(todo)} done, {len(todo)} to run; steps {steps}"
           f"{' (turbo)' if a.turbo else ''}")
     for p in problems:
@@ -314,6 +348,8 @@ def main() -> int:
                 "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()}
         if files:
             srv.download(files[0], run_dir / "video.mp4")
+            (run_dir / "inputs.sha256").write_text(r["fingerprint"] + "
+", encoding="utf-8")
         else:
             meta["error"] = "no video in the outputs"
         (run_dir / "meta.json").write_text(json.dumps(meta, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")

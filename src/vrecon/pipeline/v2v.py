@@ -47,14 +47,16 @@ def _run(cmd: list[str]) -> int:
 
 
 def run(recipe_path: Path, start: str | None = None, stop: str | None = None, server: str | None = None,
-        dry: bool = False) -> int:
+        dry: bool = False, scene: str | None = None) -> int:
+    """scene: the finished scene folder to start from (e.g. the output of `vrecon pipeline-scene`); default: the
+    recipe's "scene". Generation reuses a stored video only when its inputs' fingerprint matches (comfy_jobs)."""
     r = json.loads(recipe_path.read_text(encoding="utf-8"))
     work = ROOT / r["work"]
     work.mkdir(parents=True, exist_ok=True)
     log = work / "pipeline_log.jsonl"
     py = sys.executable
     v = lambda k: r["values"][k]["value"]  # noqa: E731  every per-clip value carries a basis
-    scene0 = ROOT / r["scene"]
+    scene0 = Path(scene).resolve() if scene else ROOT / r["scene"]
     d_shapes, d_floor, d_ctrl, d_crops = work / "scene_shapes", work / "scene_floor", work / "controls", work / "refs"
     jobs = work / "jobs.json"
     todo = STAGES[STAGES.index(start) if start else 0: STAGES.index(stop) + 1 if stop else None]
