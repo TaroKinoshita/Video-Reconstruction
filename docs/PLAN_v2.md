@@ -125,4 +125,4 @@ LLM は「原因と変更の候補」を出す。採否は観測（LK・マス�
 | 2 画面の端の物 | 保留：P1 の粘土で効果が小さく、全体の形を作るには別の LLM 呼び出しが要る |
 | 3 人の付け替え | 済：`scripts/swap_person_blend.py`（GVHMR の体を初稿のカメラの視線と床に置く、初稿の人形は骨組みごと隠す）。テニスでマネキンが本物の体になり、元映像の姿勢で動く |
 | 4 持ち物 | 済（同じスクリプト）：初稿の骨から離れた部品のまとまり（ラケット）を、新しい手首に付け替える。最後の方でラケットの向きがずれるコマが残る |
-| 5 V2V | 準備済み：`scripts/export_clay_blend.py` で素の初稿と改良版を同じカメラの動き・区間・大きさで粘土動画に。`runs/p5/{tennis,duck}/jobs.json`（同じ参照画像・プロンプト・シード 43）。ポッドで `comfy_jobs.py --jobs runs/p5/<clip>/jobs.json --out runs/p5/<clip>/out --profile gpu/h3_control/comfy/profiles/r2v_refs.json --size <WxH> --server URL` |
+| 5 V2V | 準備済み：`scripts/export_clay_blend.py --colour --roles` で素の初稿と改良版を同じカメラの動き・区間・大きさで、影付き・物体ごとに色分けした粘土動画（`control_idclay.mp4`、人は橙・持ち物は水色・同じ物は両条件で同じ色）に。`runs/p5/{tennis,duck}/jobs.json`（同じ参照画像・プロンプト・シード 43）。ポッドで `comfy_jobs.py --jobs runs/p5/<clip>/jobs.json --out runs/p5/<clip>/out --profile gpu/h3_control/comfy/profiles/r2v_refs.json --size <WxH> --server URL` |
