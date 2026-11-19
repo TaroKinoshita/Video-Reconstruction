@@ -79,14 +79,15 @@ def _apply(edit: str, before, target: str) -> None:
         raise ValueError(edit)
 
 
-def run_edit(blend: str | Path, edit: str) -> dict:
-    """Open `blend`, apply `edit`, return {edit, target, success, problems}. Leaves the edited scene open."""
+def run_edit(blend: str | Path, edit: str, target: str | None = None) -> dict:
+    """Open `blend`, apply `edit`, return {edit, target, success, problems}. Leaves the edited scene open.
+    target: the object to edit (default: edits.choose_target, the animated object with the longest path)."""
     bpy.ops.wm.open_mainfile(filepath=str(Path(blend).resolve()))
     try:
         before = import_current()
     except Exception as e:  # noqa: BLE001  (an unreadable scene is a failure of the test, not of the script)
         return {"edit": edit, "target": None, "success": False, "problems": [f"read-back: {e}"]}
-    target = edits.choose_target(before)
+    target = target or edits.choose_target(before)
     if target is None:
         return {"edit": edit, "target": None, "success": False, "problems": ["no animated object"]}
     expected = edits.expected_after(before, edit, target)
