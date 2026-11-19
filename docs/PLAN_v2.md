@@ -126,3 +126,16 @@ LLM は「原因と変更の候補」を出す。採否は観測（LK・マス�
 | 3 人の付け替え | 済：`scripts/swap_person_blend.py`（GVHMR の体を初稿のカメラの視線と床に置く、初稿の人形は骨組みごと隠す）。テニスでマネキンが本物の体になり、元映像の姿勢で動く |
 | 4 持ち物 | 済（同じスクリプト）：初稿の骨から離れた部品のまとまり（ラケット）を、新しい手首に付け替える。最後の方でラケットの向きがずれるコマが残る |
 | 5 V2V | 準備済み：`scripts/export_clay_blend.py --colour --roles` で素の初稿と改良版を同じカメラの動き・区間・大きさで、影付き・物体ごとに色分けした粘土動画（`control_idclay.mp4`、人は橙・持ち物は水色・同じ物は両条件で同じ色）に。`runs/p5/{tennis,duck}/jobs.json`（同じ参照画像・プロンプト・シード 43）。ポッドで `comfy_jobs.py --jobs runs/p5/<clip>/jobs.json --out runs/p5/<clip>/out --profile gpu/h3_control/comfy/profiles/r2v_refs.json --size <WxH> --server URL` |
+
+### 7.6 CWM 2.0（Invoker-Render, arXiv 2611.22925）の仕組みの取り込み（2026-11-20、学習なし）
+
+| 仕組み | 実装 | 確認 |
+|---|---|---|
+| 意味ごとの色（semantic proxy） | `scripts/categorize_blend.py`（物の名前を `claude -p`（Sonnet）で9種類に分類）、`export_clay_blend.py --semantic`（種類ごとの固定色） | テニス・アヒルとも分類は妥当 |
+| 細かさの描き分け（coarse / fine） | 観測した人は本物の体（fine）、観測のない人は関節を動かさない立ち姿の人形（coarse、`--coarse`、改良版のみ） | 凡例なしだと画像モデルが人形を「木の柱」と描いた → 色の凡例をプロンプトに入れて解消 |
+| 見た目と構造を分ける、照明の固定 | 粘土のまま、照明を世界に固定（カメラが動いても陰影が動かない） | |
+| 2段の文章 | `scripts/scene_timeline.py`（シーンの動きから時刻つきの動作文）＋全体の説明＋色の凡例 | |
+| 最初のコマの見た目の参照 | `scripts/first_frame_ref.py`（fal の GPT Image で粘土の最初のコマを元映像の見た目に描く）。内容チェックで止まることがある（服のない体の粘土）→「服を着た人」と明記、最大3回やり直し | 8枚、構図は粘土どおり |
+| 書き出し前の品質点検 | `scripts/proxy_qc.py`（元のカメラで人の重なりを観測マスクと比べる、制御動画の形式・空・停止） | テニスの人の重なり：素の初稿 .44、改良版 .60 |
+
+まとめて回す：`scripts/prep_ab.sh`。生成ジョブ：`runs/p5/{tennis,duck}/jobs.json`（参照1枚目＝その条件の最初のコマ、残り＝元映像、プロンプト＝見た目＋凡例＋動作文、シード43）。

@@ -30,7 +30,74 @@ PALETTE = [(0.85, 0.25, 0.25), (0.3, 0.75, 0.3), (0.3, 0.45, 0.95), (0.9, 0.85, 
            (0.7, 0.9, 0.35)]
 
 
-def colour_objects(roles: Path | None) -> None:
+SEMANTIC = {"person": PERSON, "held": HELD, "ground": (0.45, 0.6, 0.4), "structure": (0.55, 0.55, 0.75),
+            "furniture": (0.75, 0.55, 0.35), "prop": (0.9, 0.85, 0.3), "vehicle": (0.85, 0.3, 0.3),
+            "nature": (0.3, 0.7, 0.35), "sky": (0.8, 0.88, 0.95)}
+
+
+def coarse_people(cats: dict) -> list:
+    """Unobserved people (category person, not an observed body): hide their parts, add a rigid figure (a capsule
+    body and a head, no limbs) that follows the parts' bounding box frame by frame. Returns [(figure, parts)]."""
+    import bpy
+    import bmesh
+
+    def top(o):
+        while o.parent is not None:
+            o = o.parent
+        return o
+
+    groups: dict = {}
+    for o in bpy.data.objects:
+        if o.type == "MESH" and not o.hide_render and cats.get(top(o).name.split(".")[0]) == "person"                 and not top(o).get("vrecon_rig_of") and o.get("vrecon_id") != "obj_person_observed":
+            groups.setdefault(top(o).name, []).append(o)
+    out = []
+    for name, parts in groups.items():
+        me = bpy.data.meshes.new(f"coarse_{name}")
+        bm = bmesh.new()
+        from mathutils import Matrix
+
+        def cyl(r, d, x, y, z):  # a limb or torso: radius, length, centre (unit height 1.0 = top of the head)
+            bmesh.ops.create_cone(bm, cap_ends=True, segments=12, radius1=r, radius2=r, depth=d,
+                                  matrix=Matrix.Translation((x, y, z)))
+
+        cyl(0.055, 0.47, -0.07, 0, 0.235)  # legs
+        cyl(0.055, 0.47, 0.07, 0, 0.235)
+        cyl(0.12, 0.33, 0, 0, 0.63)        # torso
+        cyl(0.04, 0.36, -0.17, 0, 0.6)     # arms hanging
+        cyl(0.04, 0.36, 0.17, 0, 0.6)
+        bmesh.ops.create_uvsphere(bm, u_segments=12, v_segments=8, radius=0.08, matrix=Matrix.Translation((0, 0, 0.9)))
+        bm.to_mesh(me)
+        bm.free()
+        fig = bpy.data.objects.new(f"coarse_{name}", me)
+        bpy.context.scene.collection.objects.link(fig)
+        fig.color = (*PERSON, 1.0)
+        fig["coarse_root"] = name
+        for p in parts:
+            p.hide_render = True
+        out.append((fig, parts))
+    return out
+
+
+def place_figure(fig, parts) -> None:
+    """A rigid standing figure (no articulation): feet on the parts' lowest point at their horizontal middle, as tall
+    as they are, facing the way the person's top parent faces (its yaw)."""
+    import math
+
+    import bpy
+    from mathutils import Vector
+
+    pts = [p.matrix_world @ Vector(c) for p in parts for c in p.bound_box]
+    lo = Vector((min(v.x for v in pts), min(v.y for v in pts), min(v.z for v in pts)))
+    hi = Vector((max(v.x for v in pts), max(v.y for v in pts), max(v.z for v in pts)))
+    h = max(hi.z - lo.z, 0.05)
+    root = bpy.data.objects.get(fig["coarse_root"])
+    yaw = root.matrix_world.to_euler().z if root is not None else 0.0
+    fig.location = ((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z)
+    fig.rotation_euler = (0.0, 0.0, yaw if math.isfinite(yaw) else 0.0)
+    fig.scale = (h, h, h)
+
+
+def colour_objects(roles: Path | None, cats: dict | None = None) -> None:
     """One colour per object, the same for the same thing in a bare draft and its improved copy: the person
     (the draft's person parts, or the observed body) one colour, held things another, every other object the colour
     of its top-level parent's name (palette in name order), so its parts read as one thing; copies keep their source's name
@@ -67,11 +134,13 @@ def colour_objects(roles: Path | None) -> None:
                     and not is_person(o) and not under_held(o) and not is_person_root(o)})
     slot = {n: i for i, n in enumerate(names)}  # in name order: copies (Name.001) share their source's colour
     for o in bpy.data.objects:
-        if o.type != "MESH":
+        if o.type != "MESH" or o.name.startswith("coarse_"):
             continue
         name = top(o).name.split(".")[0]
         low = (o.name + " " + name).lower()
-        if is_person(o):
+        if cats is not None and not is_person(o) and not under_held(o):
+            c = SEMANTIC.get(cats.get(name, "prop"), SEMANTIC["prop"])
+        elif is_person(o):
             c = PERSON
         elif under_held(o):
             c = HELD
@@ -93,9 +162,15 @@ def main() -> int:
     ap.add_argument("--frames", type=int, default=124)
     ap.add_argument("--start", type=float, default=0.0)
     ap.add_argument("--colour", action="store_true", help="shaded clay with one colour per object (idclay)")
+    ap.add_argument("--semantic", type=Path, help="scripts/categorize_blend.py output: colour by category (fixed "
+                    "colours per category, as semantic proxies) instead of per object")
+    ap.add_argument("--coarse", action="store_true", help="people with no observation (category person, no observed "
+                    "body) become a rigid root-driven figure (no limbs): the generator fills in the motion")
     ap.add_argument("--roles", type=Path, help="scripts/swap_person_blend.py report: the draft's person parts and held "
                     "things by name, so a bare draft and its improved copy get the same colours")
     a = ap.parse_args()
+    import json
+
     w, h = (int(x) for x in a.size.split("x"))
     if w % 32 or h % 32 or (a.frames - 5) % 17:
         raise SystemExit("H3 needs sides that are multiples of 32 and 17n+5 frames")
@@ -120,8 +195,13 @@ def main() -> int:
     sh = sc.display.shading
     sh.light, sh.color_type, sh.single_color = "STUDIO", "SINGLE", (0.8, 0.8, 0.8)
     sh.show_cavity, sh.show_shadows = True, True
-    if a.colour:
-        colour_objects(a.roles)
+    # light fixed in the world (not turning with the camera), so a camera move does not move the shading
+    sh.use_world_space_lighting = True
+    sc.display.light_direction = (0.35, -0.45, 0.82)
+    cats = json.loads(a.semantic.read_text(encoding="utf-8"))["categories"] if a.semantic else None
+    coarse = coarse_people(cats) if (a.coarse and cats) else []
+    if a.colour or cats:
+        colour_objects(a.roles, cats)
         sh.color_type = "OBJECT"
     sc.render.resolution_x, sc.render.resolution_y, sc.render.resolution_percentage = w, h, 100
     sc.render.image_settings.file_format = "PNG"
@@ -146,6 +226,8 @@ def main() -> int:
             r, c = apply_move(np.asarray(r, float), np.asarray(c, float), a.move, i / max(a.frames - 1, 1), pivot, 1.0)
             q = opencv_camera_rotation_to_blender(matrix_to_quat(r.tolist()))
             sc.frame_set(sc.frame_start + int(f), subframe=float(f - int(f)))
+            for fig, parts in coarse:
+                place_figure(fig, parts)
             obj.matrix_world = Matrix.Translation(Vector(c.tolist())) @ Quaternion(q).to_matrix().to_4x4()
             sc.render.filepath = str(Path(tmp) / "f.png")
             bpy.ops.render.render(write_still=True)
