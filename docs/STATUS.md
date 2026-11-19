@@ -1,4 +1,4 @@
-# Status (2026-11-18)
+# Status (2026-11-19): v1.0 done
 
 Read this first. History: `docs/HANDOFF_EN.md` (and the Japanese `docs/HANDOFF.md`). Plan and decisions:
 `docs/PLAN.md` (16.6 = review decisions D1-D8). Review and work packages: `docs/REVIEW_INSTRUCTIONS.md`.
@@ -8,7 +8,8 @@ Read this first. History: `docs/HANDOFF_EN.md` (and the Japanese `docs/HANDOFF.m
 - **v1.0 = tennis case study (V2V, RQ2) + RQ1 2x3 study** (user, 2026-11-18). RQ1 runs unattended:
   `bash scripts/rq1_resume.sh` (starts `scripts/rq1_all.sh` unless running/finished; log `runs/rq1/progress.log`).
   Cells S0/S1 (4RC start, fixed-order repair) and L0/L1 (Claude-built scene, + repair); H4 (S2/L2) dropped.
-  Results land in `runs/rq1/compare/*.md`; report goes to `evaluation/RESULTS.md`.
+  Done 2026-11-19: verdicts in `evaluation/RESULTS.md` section 8 (H1 supported for 4RC starts only; H2, H3, H5
+  not supported by the rule). Tables `runs/rq1/compare/`.
 - **V2V works.** ComfyUI on a RunPod pod (RTX 4090 24 GB or 5090 32 GB; network volume in euro-3 with MiniMax-H3
   int8 weights, SAM 3.1). Method: the ComfyUI **r2v** template (`MiniMaxH3ReferenceToVideo`, no ControlNet):
   `<Video 1>` = a clay render of the 3D scene (camera, layout, motion), pictures = frames and crops of the source
