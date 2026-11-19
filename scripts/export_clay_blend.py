@@ -166,6 +166,9 @@ def main() -> int:
                     "colours per category, as semantic proxies) instead of per object")
     ap.add_argument("--coarse", action="store_true", help="people with no observation (category person, no observed "
                     "body) become a rigid root-driven figure (no limbs): the generator fills in the motion")
+    ap.add_argument("--camera-path", type=Path, help="JSON camera path (per output frame: centre, rotation, and the "
+                    "intrinsics): read when it exists, else computed from this .blend and written, so both conditions "
+                    "of an A/B are rendered from exactly the same cameras (the improved copy keeps the draft's world)")
     ap.add_argument("--roles", type=Path, help="scripts/swap_person_blend.py report: the draft's person parts and held "
                     "things by name, so a bare draft and its improved copy get the same colours")
     a = ap.parse_args()
@@ -218,12 +221,29 @@ def main() -> int:
     obj = bpy.data.objects.new("clay_cam", data)
     sc.collection.objects.link(obj)
     sc.camera = obj
-    imgs = []
-    with tempfile.TemporaryDirectory() as tmp:
+    if a.camera_path and a.camera_path.is_file():
+        path = json.loads(a.camera_path.read_text(encoding="utf-8"))
+        if (path["move"], path["frames_n"], path["start"], path["size"]) != (a.move, a.frames, a.start, [w, h]):
+            raise SystemExit(f"{a.camera_path} was made for another move/window/size")
+        lens_d = path["lens"]
+        data.sensor_width, data.lens, data.shift_x, data.shift_y = (lens_d[k_] for k_ in ("sensor", "lens", "sx", "sy"))
+    else:
+        path = {"move": a.move, "frames_n": a.frames, "start": a.start, "size": [w, h], "pivot": pivot.tolist(),
+                "from": str(a.blend), "lens": {"sensor": data.sensor_width, "lens": data.lens, "sx": data.shift_x,
+                                               "sy": data.shift_y}, "frames": []}
         for i in range(a.frames):
             f = min((a.start + i / 24.0) * fps, n_src - 1)
             r, c, _ = camera_pose(cam, f)
             r, c = apply_move(np.asarray(r, float), np.asarray(c, float), a.move, i / max(a.frames - 1, 1), pivot, 1.0)
+            path["frames"].append({"src_frame": float(f), "centre": c.tolist(), "rotation": np.asarray(r).tolist()})
+        if a.camera_path:
+            a.camera_path.parent.mkdir(parents=True, exist_ok=True)
+            a.camera_path.write_text(json.dumps(path, indent=1) + "\n", encoding="utf-8")
+    imgs = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, fr in enumerate(path["frames"]):
+            f = fr["src_frame"]
+            r, c = np.array(fr["rotation"]), np.array(fr["centre"])
             q = opencv_camera_rotation_to_blender(matrix_to_quat(r.tolist()))
             sc.frame_set(sc.frame_start + int(f), subframe=float(f - int(f)))
             for fig, parts in coarse:

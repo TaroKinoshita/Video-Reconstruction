@@ -59,6 +59,14 @@ def main() -> int:
     h, w = first.shape[:2]
     src = cv2.imdecode(np.fromfile(str(a.source), np.uint8), cv2.IMREAD_COLOR)
     prompt = PROMPT + (("\nThe look: " + a.look.read_text(encoding="utf-8").strip()) if a.look else "")
+    import hashlib
+
+    key = hashlib.sha256(cv2.imencode(".png", first)[1].tobytes() + cv2.imencode(".png", src)[1].tobytes()
+                         + (prompt + a.model + a.quality).encode("utf-8")).hexdigest()
+    meta = a.out.with_suffix(".json")
+    if a.out.is_file() and meta.is_file() and json.loads(meta.read_text(encoding="utf-8")).get("inputs_sha256") == key:
+        print(a.out, "(reused: same control first frame, source, prompt and model)")
+        return 0
     body = {"prompt": prompt, "image_urls": [_uri(first), _uri(src)], "quality": a.quality,
             "image_size": {"width": w, "height": h}, "num_images": 1, "output_format": "png", "sync_mode": True}
     t0 = time.time()
@@ -84,7 +92,7 @@ def main() -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     cv2.imencode(".png", img)[1].tofile(str(a.out))
     a.out.with_suffix(".json").write_text(json.dumps({"prompt": prompt, "model": a.model, "quality": a.quality,
-                                                       "seconds": round(time.time() - t0, 1)}, indent=1) + "\n",
+                                                       "inputs_sha256": key, "seconds": round(time.time() - t0, 1)}, indent=1) + "\n",
                                           encoding="utf-8")
     print(a.out)
     return 0

@@ -5,8 +5,9 @@ actions): which thing moves, when, and which way as seen from the source camera,
 
 Per top-level thing of category person / held / prop / vehicle (and an observed body): its middle (bounding-box
 centre of its meshes) at every output frame (24 fps, scene time start + i/24); speed above STILL (a share of the
-camera-to-scene distance per second) is "moving"; runs of moving frames shorter than 0.25 s are dropped. Direction
-of each run in the source camera's frame: left / right / toward the camera / away / up / down (largest component).
+camera-to-scene distance per second) is "moving"; runs of moving frames shorter than 0.25 s are dropped. Each run is
+described without view-dependent words (a camera move changes left/right): goes up / comes down (world vertical
+dominant) or moves along the floor.
 Nothing per clip; names come from the scene (CamelCase and underscores split).
 """
 
@@ -88,11 +89,13 @@ def main() -> int:
             while j < len(moving) and moving[j]:
                 j += 1
             if (j - i) / 24.0 >= 0.25:
-                d = np.asarray(r0).T @ (p[j - 1] - p[i])  # in the source camera's axes: x right, y down, z forward
-                ax = int(np.argmax(np.abs(d)))
-                word = [("right", "left"), ("down", "up"), ("away from the camera", "toward the camera")][ax][0 if d[ax] > 0 else 1]
+                # view-independent words only (a camera move turns left/right around): world up / down, or along
+                # the floor
+                d = p[j - 1] - p[i]
+                vert = abs(d[2]) > np.linalg.norm(d[:2])
+                word = ("goes up" if d[2] > 0 else "comes down") if vert else "moves along the floor"
                 # "moves", not "walks": a person's box centre also shifts when an arm goes up
-                lines.append((times[i] - a.start, times[j - 1] - a.start, f"the {name} moves {word}"))
+                lines.append((times[i] - a.start, times[j - 1] - a.start, f"the {name} {word}"))
             i = j
     lines.sort()
     text = "\n".join(f"{s:.1f}-{e:.1f} s: {what}." for s, e, what in lines) or "Nothing moves."
