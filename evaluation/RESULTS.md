@@ -224,3 +224,18 @@ props, export, status into `runs/recipes/tennis_scene` and compares each stage w
 the court-frame scene identical; others within 0.01-0.02 m; differences otherwise only the statuses and evidence kinds
 the current code writes from the start (stored scenes got them later by conversion), one stand line stored with the
 opposite direction, and file paths. The LLM venue layout and the strike hypothesis are recorded inputs, not re-run.
+
+## 11. Novel views of LLM scenes re-scored from the .blend itself (2026-11-19)
+
+Review finding: L0/L1 novel views were scored on a rebuilt Project (bounding boxes, later imported meshes), not on
+the .blend. Now `evaluate.novel_from_blend` opens the original .blend, adds a scoring camera and renders only the
+frames the 10/30-degree views use (pairs fixed from the source view; about 1 s per scene instead of 5-6 s). The
+camera's scale uses each world's floor height (previously z = 0 was assumed). Checks (tests/test_novel_blend.py):
+the ground truth scores 1.0; the same scene lifted by 2 m scores 1.0. Agreement with the imported-mesh path: equal on
+syn2_02 r1 and syn2_04 r2; on syn2_09 r1 (two boxes parented to an empty) .185 vs .079, the import got it wrong.
+v1.0 tables are kept as they were; the new columns are in `runs/rq1/L1/scores_{L0,L1}_novel_v2.json`,
+`runs/rq1/all_v2.json`, tables `runs/rq1/compare_v2/`.
+
+H3 (S1 vs L1, held-out), re-scored: novel 10 deg S1 better 1 / worse 2 / not separated 3 (median -.10, Claude
+ahead); novel 30 deg better 1 / worse 0 / not separated 5. Verdict unchanged: not supported. L0 vs L1 unchanged (not
+separated on all six).

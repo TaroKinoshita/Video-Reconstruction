@@ -26,8 +26,11 @@ from vrecon.schema import Camera, Project
 from .poses import camera_pose
 
 
-def carry_relative(novel: Camera, gt_src: Camera, rec_src: Camera) -> Camera:
-    """Novel camera keys in the reconstruction's world, frame by frame relative to the source cameras."""
+def carry_relative(novel: Camera, gt_src: Camera, rec_src: Camera, gt_floor: float = 0.0,
+                   rec_floor: float = 0.0) -> Camera:
+    """Novel camera keys in the reconstruction's world, frame by frame relative to the source cameras. The scale is
+    the ratio of the cameras' heights above each world's floor (gt_floor, rec_floor: the floors' z), so moving a
+    whole scene up or down does not change where the novel camera lands."""
     from vrecon.scene.convert import matrix_to_quat
     from vrecon.schema import Pose
 
@@ -37,9 +40,10 @@ def carry_relative(novel: Camera, gt_src: Camera, rec_src: Camera) -> Camera:
         rg, cg, _ = camera_pose(gt_src, f)
         rr, cr, _ = camera_pose(rec_src, f)
         rn, cn, _ = camera_pose(novel, f)
-        if cg[2] <= 1e-6 or cr[2] <= 1e-6:
+        hg, hr = cg[2] - gt_floor, cr[2] - rec_floor
+        if hg <= 1e-6 or hr <= 1e-6:
             raise ValueError("a camera is not above the floor: cannot take the scale from camera heights")
-        s = cr[2] / cg[2]
+        s = hr / hg
         rel_r, rel_t = rg.T @ rn, rg.T @ (cn - cg)  # novel in the source camera's frame
         keys.append(k.model_copy(update={"pose": Pose(translation=tuple(map(float, cr + s * rr @ rel_t)),
                                                       rotation=matrix_to_quat((rr @ rel_r).tolist()))}))

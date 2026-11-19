@@ -210,3 +210,41 @@ def score_novel(reference_dir: str | Path, rec: Project, shot_id: str | None = N
                       "covered_mean": float(np.mean([v["covered"] for v in out["views"].values()])),
                       "extra_mean": float(np.mean([v["extra"] for v in out["views"].values()]))}
     return out
+
+
+def novel_from_blend(reference_dir: str | Path, blend: str | Path, pairs: dict[str, str],
+                     summary_keys: tuple[str, ...] = ("novel_iou_10", "novel_iou_30")) -> dict:
+    """Novel-view scores of a .blend rendered as it is (scene/novel_blend.py: the original file with a scoring camera,
+    no import or rebuild), only the views and frames the asked summary keys use. pairs: ground-truth id ->
+    reconstruction id, from the source-view score (score_blend(...)["pairs"]); fixed here, so the source view is not
+    rendered again. The novel camera's scale uses each world's floor height (the object paired with the ground
+    truth's floor, else z = 0)."""
+    from vrecon.metrics.novel import carry_relative, novel_scores
+    from vrecon.scene.novel_blend import floor_height, open_scene, render_view
+    from vrecon.schema import Camera
+
+    ref_dir = Path(reference_dir)
+    gt = load_project(ref_dir / "gt.json")
+    set_ids = {o.id for o in gt.reconstruction.objects if o.kind == "set"}
+    rec = open_scene(blend)
+    rec_cam = rec.reconstruction.cameras[0]
+    gt_floor = 0.0
+    rec_floor = floor_height(pairs.get("obj_floor"))
+    views = sorted({v for k in summary_keys for v in NOVEL_SUMMARY[k]})
+    out = {"views": {}, "floors": {"gt": gt_floor, "rec": rec_floor}}
+    for view in views:
+        d = ref_dir / "gt_passes" / "novel" / view
+        if not d.is_dir():
+            continue
+        info = json.loads((d / "camera.json").read_text(encoding="utf-8"))
+        cam = carry_relative(Camera.model_validate(info["camera"]), gt.reconstruction.cameras[0], rec_cam,
+                             gt_floor, rec_floor)
+        rec_index, rec_map = render_view(cam, info["frames"])
+        ref_index, ref_map = np.load(d / "index.npz")["index"], _load_map(d / "id_map.json")
+        out["views"][view] = novel_scores(ref_index, ref_map, rec_index, rec_map, pairs, set_ids)
+    out["summary"] = {}
+    for key in summary_keys:
+        vals = [out["views"][v]["iou_movers"] for v in NOVEL_SUMMARY[key] if v in out["views"]]
+        vals = [v for v in vals if v is not None]
+        out["summary"][key] = float(np.mean(vals)) if vals else None
+    return out
