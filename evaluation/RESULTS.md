@@ -163,3 +163,30 @@ keep proportions (thresholds.yaml changes, 2026-11-18); before that change L1 lo
 
 Cost so far: L0 dev runs about $2-4.5 each, 6-60 min; Claude usage limits stopped the runs for ~2.5 h once
 (retried automatically). Held-out numbers decide the claims (decision_rule); this table is development only.
+
+## 8. RQ1 v2: held-out results (2026-11-19) — the claims
+
+Held-out clips syn2_01, 03, 06, 08, 10, 11. L0/L1 3 runs per clip (capped from 5 by the user, thresholds.yaml
+changes 2026-11-19); syn2_11 run 3 timed out without a scene (counted as a failure, 2 runs scored). Tables:
+`runs/rq1/compare/*_held_out.md` (paired bootstrap, decision_rule). Claude cost for all 42 L0 runs (dev + held-out):
+$146; Claude usage limits stopped the runs several times (about 7 h in total).
+
+| Claim | Measure, comparison | Held-out (6 clips) | Verdict |
+|---|---|---|---|
+| H1 tools improve a scene whatever its origin | source IoU, S0 -> S1 | better 6, worse 0 (median +.080) | supported for 4RC starts |
+|  | source IoU, L0 -> L1 | better 1, worse 1, not separated 4 (median +.014) | not supported for Claude-built starts (rule: better on at most 1) |
+| H2 tools reduce spread and failures of an LLM-built scene | SD over runs, L0 vs L1; runs below S0 | SD lower on 3 of 6 (syn2_03 .044 -> .012, 06 .075 -> .036, 11 .021 -> .005), higher on 3; no run below S0 in either cell | not supported (no consistent reduction; there were no failures to reduce) |
+| H3 a 4RC start is more 3D-consistent than an LLM start | novel IoU 10/30 deg, focal error, S1 vs L1 | novel 10: S1 better 2 / worse 2; novel 30: better 2 / worse 0; focal: better 1 / worse 2. Source IoU: Claude higher on 6/6 (median .074) | not supported (not separated on most clips) |
+| H4 | dropped (user, 2026-11-18) | - | - |
+| H5 a schema-backed scene accepts the three edits without repair more often | edit success share, S1 vs L0 / L1 | S1 .944 on both splits; L0 .885 dev / .765 held-out; L1 .936 / .863. Per clip S1 vs L0: better 1, not separated 5 | not supported by the rule; S1 is higher on average |
+
+What the numbers say, without the rule's verdicts:
+- The repair tools reliably improve a 4RC start (12 of 12 clips, dev and held-out) and do not move a Claude-built
+  scene much: Claude's scenes already match the source view closely (.58-.92 held-out), at about the level of the
+  SAM masks' own error.
+- Claude's scenes match the source view better than the repaired 4RC start on every clip, but are not clearly
+  better or worse from new viewpoints or in focal length.
+- Edit failures differ in kind: Claude's scenes fail when nothing in them is keyframed (the motion was baked or
+  driven another way: "no animated object") or the camera is parented/constrained; the 4RC scenes failed one timing
+  edit (an object's first pose; under investigation).
+- Not done in v1.0: scores after an edit against an equally edited ground truth; L2/S2 (H4).
