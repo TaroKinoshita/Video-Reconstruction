@@ -348,8 +348,7 @@ def main() -> int:
                 "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()}
         if files:
             srv.download(files[0], run_dir / "video.mp4")
-            (run_dir / "inputs.sha256").write_text(r["fingerprint"] + "
-", encoding="utf-8")
+            (run_dir / "inputs.sha256").write_text(r["fingerprint"] + "\n", encoding="utf-8")
         else:
             meta["error"] = "no video in the outputs"
         (run_dir / "meta.json").write_text(json.dumps(meta, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
