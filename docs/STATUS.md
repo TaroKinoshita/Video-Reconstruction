@@ -49,8 +49,6 @@ Read this first. History: `docs/HANDOFF_EN.md` (and the Japanese `docs/HANDOFF.m
 - Tennis observation -> scene: `vrecon pipeline-scene evaluation/recipes/tennis/scene.json --check` rebuilds
   calibrate, person, proxies, observe, venue, props and matches the stored results (recipe "rebuild_check");
   complete, timing, status and final export are still scripts listed in the recipe.
-- MiniMax-H3 licence excludes the EU, UK, Korea and USA; the pods ran in euro-3 (EU). Use a non-excluded region
-  next time and settle this before showing results (`docs/LICENSES.md`).
 - H5 measures "edit applied without repair"; scoring the edited scene against an equally edited ground truth is
   not done in v1.0.
 - Repair loop: objects are drawn from their own mesh when they have one (`optimize/shape.py`); a mesh object keeps

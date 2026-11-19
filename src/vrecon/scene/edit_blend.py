@@ -42,6 +42,12 @@ def _apply(edit: str, before, target: str) -> None:
             raise RuntimeError(f"{target} has no keyframes of its own (animated by a parent, constraint or driver)")
         shift = edits.DELAY_S * scene.render.fps / scene.render.fps_base
         for fc in fcs:
+            # pin the pose of the clip's first frame before shifting: keys may sit between frames (a 4D model's
+            # sample times), and "holds its first pose" means the pose seen in the first frame
+            fc.keyframe_points.insert(scene.frame_start, fc.evaluate(scene.frame_start), options={"FAST"})
+            for kp in [k for k in fc.keyframe_points if k.co.x < scene.frame_start - 1e-6][::-1]:
+                fc.keyframe_points.remove(kp)  # keys before the clip would otherwise be held instead
+            fc.update()
             for kp in fc.keyframe_points:
                 kp.co.x += shift
                 kp.handle_left.x += shift

@@ -87,3 +87,15 @@ def test_size_edit_fails_on_shared_mesh(built, tmp_path):
     bpy.ops.wm.save_as_mainfile(filepath=str(other))
     r = run_edit(other, "object_size")
     assert not r["success"]
+
+
+def test_timing_edit_with_keys_between_frames(tmp_path):
+    """A 4D model's sample times put keys between frames; the first frame's pose is what is held."""
+    p = _project()
+    mover = next(o for o in p.reconstruction.objects if o.id == "obj_mover")
+    mover.keys = [TransformKey(time=t / 24, pose=Pose(translation=(-1 + 0.1 * t, 0, 0.25)))
+                  for t in (-0.5, 2.5, 10.5, 30.5, 46.5)]
+    build_scene(p)
+    path = save_blend(tmp_path / "half.blend")
+    r = run_edit(path, "action_timing")
+    assert r["success"], r
