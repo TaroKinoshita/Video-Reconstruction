@@ -57,7 +57,7 @@ def _add_new_objects(project, original, meshes, renamed, scene, shot, n) -> list
             base = byid.get(src_id) or next((x for x in original.reconstruction.objects if x.id == src_id), None)
             grow = np.array(o.size) / np.maximum(np.array(base.size), 1e-9) if (base is not None and o.size and base.size) else np.ones(3)
         elif o.asset is not None and str(o.asset.path).endswith(".npz"):
-            mesh = _mesh_asset(o, None, BuildReport())
+            mesh = _mesh_asset(o, None, BuildReport(shot_id=shot, camera=""))
             if mesh is None:
                 continue
             new = bpy.data.objects.new(o.name or o.id, mesh)
