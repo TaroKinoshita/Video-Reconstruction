@@ -190,3 +190,37 @@ What the numbers say, without the rule's verdicts:
   driven another way: "no animated object") or the camera is parented/constrained; the 4RC scenes failed one timing
   edit (an object's first pose; under investigation).
 - Not done in v1.0: scores after an edit against an equally edited ground truth; L2/S2 (H4).
+
+## 9. H5 completed (2026-11-19): edits applied, then scored against an equally edited ground truth
+
+Two fixes first. (1) The timing edit now pins the first frame's pose before shifting keys: 4RC scenes have keys
+between frames, and the old script held a pre-clip key (S1 failed 2 timing edits for this reason; tests/test_edits.py).
+With the fix S1 accepts all three edits on all 12 clips (1.0); L0 .885 dev / .765 held-out, L1 .936 / .863
+(Claude's failures: nothing keyframed, or a constrained camera). Per clip, S1 vs L0: better on 1, not separated on
+5 (rule: not supported), though S1 is higher on average.
+
+(2) `scripts/edit_scores.py`: the ground truth is edited by the same script on the object the scorer pairs with the
+edited one; source IoU after each edit (`runs/rq1/edit_scores/scores.json`, mean over scenes where the edit applied):
+
+| split | cell | unedited | camera path | object size | timing |
+|---|---|---|---|---|---|
+| dev | S1 | .698 | .492 | .582 | .506 |
+| dev | L0 | .822 | .486 | .724 | .831 |
+| dev | L1 | .835 | .498 | .729 | .812 |
+| held-out | S1 | .724 | .515 | .726 | .656 |
+| held-out | L0 | .783 | .533 | .747 | .786 |
+| held-out | L1 | .795 | .543 | .759 | .757 |
+
+Reading: an edit that applies cleanly is not an edit that lands right. 4RC scenes let part of an object's motion
+sit in the camera path (the camera drifts while the object moves), so delaying the object leaves part of the motion
+on time: S1's IoU after the timing edit falls by .07-.19, Claude's scenes by about .03. The camera-path edit lowers
+every cell to about .5: a truck of a fixed share of the camera-object distance moves the picture by the scene's own
+depth errors. These are the costs of editing a reconstruction, measured; they do not change the H5 verdict.
+
+## 10. Tennis observation -> scene as one command (WP-5, 2026-11-19)
+
+`vrecon pipeline-scene evaluation/recipes/tennis/scene.json --check` runs calibrate, person, proxies, observe, venue,
+props, export, status into `runs/recipes/tennis_scene` and compares each stage with the stored scene: calibration and
+the court-frame scene identical; others within 0.01-0.02 m; differences otherwise only the statuses and evidence kinds
+the current code writes from the start (stored scenes got them later by conversion), one stand line stored with the
+opposite direction, and file paths. The LLM venue layout and the strike hypothesis are recorded inputs, not re-run.

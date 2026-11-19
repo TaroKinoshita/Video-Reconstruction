@@ -48,9 +48,8 @@ Read this first. History: `docs/HANDOFF_EN.md` (and the Japanese `docs/HANDOFF.m
 - A white shape at the frame edge was drawn as a sneaker once; prompts now say edge-cut parts continue outside.
 - Tennis observation -> scene: `vrecon pipeline-scene evaluation/recipes/tennis/scene.json --check` rebuilds
   calibrate, person, proxies, observe, venue, props and matches the stored results (recipe "rebuild_check");
-  complete, timing, status and final export are still scripts listed in the recipe.
-- H5 measures "edit applied without repair"; scoring the edited scene against an equally edited ground truth is
-  not done in v1.0.
+  and further export and status, to the finished scene (RESULTS 10).
+- H5 has both halves: edits applied without repair, and scores after the edit (RESULTS 9).
 - Repair loop: objects are drawn from their own mesh when they have one (`optimize/shape.py`); a mesh object keeps
   its proportions.
 

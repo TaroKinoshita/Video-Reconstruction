@@ -53,6 +53,8 @@ def main() -> int:
             ev = [e.model_copy(update={"kind": {"standard": "standard", "observed": "observation"}.get(st, "llm")})
                   for e in o.evidence]
             o = o.model_copy(update={"status": st, "evidence": ev})
+        elif o.id in ("obj_tennis_racket", "obj_tennis_ball") and o.spans:
+            pass  # written by the current scripts/fit_props.py already: nothing to convert
         elif o.id == "obj_tennis_racket":
             n = len(o.keys)
             notes = ["sharp"] * n

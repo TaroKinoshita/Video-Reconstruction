@@ -96,6 +96,10 @@
   "hand_px": {
    "value": 35,
    "basis": "default (scripts/fit_props.py --hand-px)"
+  },
+  "moves": {
+   "value": "source,dolly-100+crane4,orbit90+dolly-60,orbit180,crane10",
+   "basis": "human: the camera moves asked for (stored controls_* folders)"
   }
  },
  "stages": [
@@ -266,6 +270,45 @@
     "{work}/props/project.json": "runs/venue/tennis/fal2c_props/project.json",
     "{work}/props/props.json": "runs/venue/tennis/fal2c_props/props.json"
    }
+  },
+  {
+   "stage": "export",
+   "argv": [
+    "{python}",
+    "scripts/export_scene_controls.py",
+    "{work}/props/project.json",
+    "{work}/props",
+    "{work}/props/final",
+    "--moves",
+    "{val:moves}",
+    "--rise-m",
+    "{val:stands_rise_m}"
+   ],
+   "outputs": [
+    "{work}/props/final/project.json"
+   ],
+   "stored": {
+    "{work}/props/final/project.json": "runs/venue/tennis/fal2c_props/final/project.json"
+   }
+  },
+  {
+   "stage": "status",
+   "argv": [
+    "{python}",
+    "scripts/convert_tennis_status.py",
+    "--final",
+    "{work}/props/final",
+    "--props",
+    "{work}/props/props.json",
+    "--out",
+    "{work}/status"
+   ],
+   "outputs": [
+    "{work}/status/project.json"
+   ],
+   "stored": {
+    "{work}/status/project.json": "runs/venue/tennis/status_v040/project.json"
+   }
   }
  ],
  "rebuild_check_2026_11_18": {
@@ -274,7 +317,7 @@
   "proxies": "same (court-frame scene)",
   "observe": "within ~0.01 m, except obs_5's line stored with the opposite direction (same line, from/to swapped)",
   "venue": "same objects and geometry; the rebuild already carries the 0.4.0 statuses and evidence kinds that scripts/convert_tennis_status.py added to the stored scene later",
-  "not yet in the run list": "complete, timing, status and the final export (scripts listed under 'stages'); the stored chain's exact arguments for them are not all recorded",
+  "not yet in the run list": "none: the stored final scene equals the props output (complete and timing were not applied after props in the stored chain); export and status added 2026-11-19",
   "props": "same objects; racket and ball geometry within 0.02; differences only the 0.4.0 statuses (as venue) and file paths written absolute"
  }
 }
