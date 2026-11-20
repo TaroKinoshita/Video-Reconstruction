@@ -160,7 +160,8 @@ def tracklets(mask: np.ndarray, link: float = 60.0, gap: int = 3, min_track: int
 
 
 def fit_sphere_track(tr: dict, t_n: int, contacts: dict, cams: list, times, fps: float, diameter: float, s: float,
-                     hand_px: float = 35.0, max_rms: float = 12.0, min_held: int = 3):
+                     hand_px: float = 35.0, max_rms: float = 12.0, min_held: int = 3,
+                     auto_split: bool = False):
     """One tracklet -> (pos [T,3] NaN where not placed, held {frame: contact}, segments).
 
     States: held where the blob is by a contact (within hand_px; runs shorter than min_held frames inside a free
@@ -232,7 +233,7 @@ def fit_sphere_track(tr: dict, t_n: int, contacts: dict, cams: list, times, fps:
             f0, f1 = max(rel - 2, 0), min(rel + 1, t_n - 1)
             vpriors[rel] = ((contacts[k][f1] - contacts[k][f0]) / max(times[f1] - times[f0], 1e-3), 3.0 * s)
         fpos, _, fsegs = P.ball_fit(free_cen, cams, fps, widths=wid, diameter=diameter, anchors=anchors,
-                                    models=("still", "ballistic"), splits=[], times=times, vpriors=vpriors)
+                                    models=("still", "ballistic"), splits=None if auto_split else [], times=times, vpriors=vpriors)
         for sg in fsegs:
             lo, hi = sg["frames"]
             sg["kept"] = bool(sg["rms_px"] <= max_rms)

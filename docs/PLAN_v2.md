@@ -175,3 +175,11 @@ LLM は「原因と変更の候補」を出す。採否は観測（LK・マス�
 ### 8.3 ラケットの当てはめ（2026-11-20）
 
 `scripts/fit_held_blend.py`：手に持つ棒状の物を、観測マスクから毎コマの向きで合わせる（`analysis/props.held_poses` を .blend に使う。握り＝観測した体の手首、大きさ＝初稿の物の寸法、持ち替えは「今の手がマスクから離れ、もう一方が0.5秒続けて近い」ときだけ）。テニス：生成区間のラケットの重なり（中央値）素の初稿 .00、改良版（付け替えのみ）.00 → 当てはめ後 .49。トスの構えで右腕の先にラケットが来る形が元映像と合う。品質点検は、観測マスクが無いコマを数えないよう修正（SAM が見失ったコマを 0 と数えていた）。
+
+### 8.4 Tennis scene, second round (2026-11-20, `scripts/improve_all.sh`)
+- Chain: outside -> person -> held (racket) -> ball -> feet -> people -> `final.blend`.
+- Racket: per-frame fit, IoU in the window .00 -> .45.
+- Ball: held in the left hand frames 85-202. The toss in the air is not in the ball masks, so the ball is not placed there (nothing is invented). A still ball-like blob that no hand holds (the top of a post) was first joined as "the ball in flight" (ballistic rms 307 px). Now it is left out. Ball QC stays low because the masks count that blob.
+- Feet: planted-foot sliding 24-40 -> 20-30 cm/s (depth direction only). Person IoU .63 kept.
+- Bystanders: Bystander_Left / Bystander_Far follow their observed masks. Side_Crowd has no observed person.
+- Next: pod run of tennis s1 (orbit45, dolly-60) with this final.blend. Jobs and dry run are ready (`runs/p5/tennis/jobs.json`).
