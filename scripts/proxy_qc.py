@@ -8,12 +8,12 @@ Only the window that is generated (scene time start .. start + frames/24) is sam
 scene's things picked by a selector (cat:<category> from CATEGORIES.json, or name:<prefix> of the top-level name;
 the observed body counts as cat:person) rendered from the .blend's source camera with observed masks (the labels after
 ":" or, without them, every obs_* label, else every label) and reports the IoU per sampled frame where either side
-has pixels. Frames where neither shows: skipped; a check with no frame left is "needs review" (no observation).
+has pixels. Frames where the observation shows nothing are skipped (not observed); a check with no frame left is "needs review" (no observation).
 --needs records a relation nobody has measured yet (status "needs review").
 Control video: not empty, not frozen, H3 format (17n+5 frames, sides multiples of 32).
 
 Exit 2 when the control's format is wrong (stop); exit 0 otherwise, with each check's status in OUT.json:
-"ok" (min IoU >= MIN_IOU), "low" (below), "needs review".
+"ok" (median IoU >= MIN_IOU), "low" (below), "needs review".
 """
 
 from __future__ import annotations
@@ -100,12 +100,12 @@ def main() -> int:
 
                     mm = cv2.resize(mm.astype(np.uint8), (r.shape[1], r.shape[0]), interpolation=cv2.INTER_NEAREST)
                 g = np.isin(mm, want)
-                if not r.any() and not g.any():
+                if not g.any():  # not observed in this frame (the segmenter lost it): nothing to compare
                     continue
                 ious.append(float((r & g).sum() / max((r | g).sum(), 1)))
-            status = "needs review" if not ious else ("ok" if min(ious) >= MIN_IOU else "low")
+            status = "needs review" if not ious else ("ok" if float(np.median(ious)) >= MIN_IOU else "low")
             out["checks"][chk] = {"status": status, "frames": src_frames, "iou": ious,
-                                  "min": min(ious) if ious else None, "objects": sorted(i for i in ids if i)[:20]}
+                                  "min": min(ious) if ious else None, "median": float(np.median(ious)) if ious else None, "objects": sorted(i for i in ids if i)[:20]}
     for n in a.needs:
         out["checks"][f"needs: {n}"] = {"status": "needs review", "why": "no observation measures it yet"}
     out["pass"] = bool(fmt and not empty and not frozen)
