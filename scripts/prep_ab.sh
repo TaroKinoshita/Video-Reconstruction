@@ -9,6 +9,7 @@
 #   s3  improved + the view-independent action timeline
 #   s4  improved with coarse figures for unobserved people
 # A control with a wrong format stops the run (proxy_qc exit 2).
+# S1_ONLY=1: only what s1 needs (no coarse controls, no first-frame pictures: nothing paid).
 set -euo pipefail
 C=$1; BARE=$2; IMP=$3; SIZE=$4; N=$5; START=$6; SRC=$7; LOOK=$8; shift 8
 P=.venv/Scripts/python.exe; D=runs/p5/$C
@@ -17,14 +18,15 @@ mkdir -p $D
 $P scripts/scene_timeline.py "$IMP" $D/categories.json $D/timeline_improved.txt --start $START --frames $N
 for mv in orbit45 dolly-60; do
   CP=$D/campath_$mv.json; rm -f $CP
-  for k in bare improved improved_coarse; do
+  KINDS="bare improved improved_coarse"; [[ ${S1_ONLY:-0} == 1 ]] && KINDS="bare improved"
+  for k in $KINDS; do
     B=$BARE; extra=""; [[ $k != bare ]] && B=$IMP; [[ $k == improved_coarse ]] && extra="--coarse"
     out=$D/${k}_$mv; mkdir -p $out
     $P scripts/export_clay_blend.py "$B" $out/control_sem.mp4 --move $mv --size $SIZE --frames $N --start $START \
       --semantic $D/categories.json --camera-path $CP $extra
     $P scripts/proxy_qc.py "$B" $D/categories.json $out/control_sem.mp4 $out/qc.json --start $START --frames $N "$@"
   done
-  $P scripts/first_frame_ref.py $D/improved_$mv/control_sem.mp4 "$SRC" $D/improved_$mv/first_frame.png --look "$LOOK"
+  [[ ${S1_ONLY:-0} == 1 ]] || $P scripts/first_frame_ref.py $D/improved_$mv/control_sem.mp4 "$SRC" $D/improved_$mv/first_frame.png --look "$LOOK"
 done
 $P scripts/make_ab_jobs.py $C
 echo PREP_DONE

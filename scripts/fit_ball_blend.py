@@ -135,17 +135,37 @@ def main() -> int:
         fill = np.isnan(pos[:, 0]) & np.isfinite(p[:, 0])
         pos[fill] = p[fill]
         segs_all += segs
-    # balls already in the scene (the draft's own, animated by guess): an animated mesh of about the ball's size is
-    # the same ball, now replaced by the observed one; hidden, not deleted (a human can bring it back)
-    replaced = []
-    for o in bpy.data.objects:
+    # balls already in the scene (the draft's own, animated by guess): an animated mesh of about the ball's size whose
+    # path, seen from the source camera, stays near the observed ball on the frames where it was placed (median distance)
+    # is the same ball, now replaced; hidden, not deleted (a human can bring it back). Nothing placed, or no path close enough:
+    # the draft's objects stay as they are (an ambiguous match keeps the draft)
+    replaced, candidates = [], {}
+    placed = [f for f in range(t) if np.all(np.isfinite(pos[f]))]
+    ball_px = np.median([float(cams[f][2][0, 0]) * diameter / max(float((cams[f][0].T @ (pos[f] - cams[f][1]))[2]), 1e-3)
+                         for f in placed]) if placed else 0.0
+    near_px = max(8.0 * ball_px, 40.0)  # a draft's guess is rough: within a few ball widths
+    for o in bpy.data.objects if placed else []:
         if o.type != "MESH" or o.hide_render or not (o.animation_data and o.animation_data.action):
             continue
         d = np.array(list(o.dimensions))
-        if np.all(d > 0.5 * diameter) and np.all(d < 2.0 * diameter):
-            o.hide_render = o.hide_viewport = True
-            o["vrecon_replaced_by"] = a.name
-            replaced.append(o.name)
+        if not (np.all(d > 0.5 * diameter) and np.all(d < 2.0 * diameter)):
+            continue
+        dist = []
+        for f in placed[::max(1, len(placed) // 40)]:
+            sc.frame_set(sc.frame_start + f)
+            q = np.array(list(o.matrix_world.translation))
+            dist.append(float(np.linalg.norm(project_pts(q, cams[f])[0] - project_pts(pos[f], cams[f])[0])))
+        candidates[o.name] = round(float(np.median(dist)), 1)
+    # one observed ball replaces one draft ball: the closest, when it is near and clearly closer than the next one
+    # (at most half its distance); otherwise it is ambiguous and the draft is kept
+    order = sorted(candidates, key=candidates.get)
+    close = order[:1] if order and candidates[order[0]] < near_px and (
+        len(order) == 1 or candidates[order[0]] <= 0.5 * candidates[order[1]]) else []
+    for n in close:
+        o = bpy.data.objects[n]
+        o.hide_render = o.hide_viewport = True
+        o["vrecon_replaced_by"] = a.name
+        replaced.append(n)
     # the ball object
     me = bpy.data.meshes.new(a.name)
     bm = bmesh.new()
@@ -168,7 +188,7 @@ def main() -> int:
             kp.interpolation = "CONSTANT" if fc.data_path == "scale" else "LINEAR"
     a.out.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(a.out.resolve()))
-    rep = {"replaced": replaced, "tracklets_kept": kept, "frames_placed": int(np.isfinite(pos[:, 0]).sum()), "frames": t,
+    rep = {"replaced": replaced, "replace_candidates_px": candidates, "near_px": round(near_px, 1) if placed else None, "tracklets_kept": kept, "frames_placed": int(np.isfinite(pos[:, 0]).sum()), "frames": t,
            "segments": [{k: v for k, v in s.items() if k in ("frames", "model", "contacts", "rms_px", "kept")} for s in segs_all]}
     if a.report:
         a.report.write_text(json.dumps(rep, indent=1, default=str) + "\n", encoding="utf-8")
