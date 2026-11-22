@@ -1,6 +1,6 @@
 """Put the cuts of a multi-cut clip in one world (after scripts/multishot_prep.py).
 
-    python scripts/multishot_join.py PREP.npz JOINT_DIR OUT.npz
+    python scripts/multishot_join.py PREP.npz JOINT_DIR OUT.npz [TAG]
 
 JOINT_DIR holds one 4RC run over keyframes of several cuts (frames.json = [[cut, frame], ...] in file order,
 4rc.npz). 4RC sees all keyframes together, so their cameras share one world. Per joined cut k a similarity maps
@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 from multishot_prep import CAM_CV_TO_BL, CV_TO_Z, angle_deg, m2q, q2m, slerp  # noqa: E402
-from vrecon.analysis.from_4d import load_4rc  # noqa: E402
+from vrecon.analysis.from_4d import fit_plane, load_4rc  # noqa: E402
 
 
 def proj_rot(m: np.ndarray) -> np.ndarray:
@@ -53,6 +53,33 @@ def rot_to(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     return np.eye(3) + k + k @ k / (1 + d)
 
 
+def level_cut(z: dict, k: int, max_tilt: float = 25.0, min_share: float = 0.3):
+    """When a cut's own points hold a dominant near-level plane (its floor), turn the cut about it so the plane is
+    level and put it at z = 0: each cut's floor is the shared floor (a tilt left by the joint alignment goes)."""
+    pts = z[f"s{k}_pts"]
+    if len(pts) < 1000:
+        return None
+    n, d, _ = fit_plane(pts)
+    if n[2] < 0:
+        n, d = -n, -d
+    share = float((np.abs(pts @ n + d) < 0.05).mean())
+    tilt = float(np.degrees(np.arccos(np.clip(n[2], -1, 1))))
+    if tilt > max_tilt or share < min_share:
+        return None
+    p0 = -d * n  # a point on the plane
+    R = rot_to(n, np.array([0, 0, 1.0]))
+    t = -(R @ p0)  # plane -> z = 0
+    t[:2] = 0
+    t[:2] = (p0 - R @ p0)[:2]  # keep it in place sideways
+    cam = z[f"s{k}_cam"]
+    cam[:, :3, :3] = R @ cam[:, :3, :3]
+    cam[:, :3, 3] = cam[:, :3, 3] @ R.T + t
+    for key in ("body", "pts"):
+        if len(z[f"s{k}_{key}"]):
+            z[f"s{k}_{key}"] = z[f"s{k}_{key}"] @ R.T + t
+    return {"tilt_deg": tilt, "share": share, "height_before_m": float((R @ p0)[2])}
+
+
 def main() -> int:
     prep, jd, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
     z = dict(np.load(prep))
@@ -74,9 +101,10 @@ def main() -> int:
     # joint units per metre from the people: 4RC depth of the person's mask pixels / GVHMR depth, every keyframe
     # (camera centres cannot give it: most cuts barely move, and the joint run may shrink a long path)
     ratios, diag = [], prep.parent
+    tag = sys.argv[4] if len(sys.argv) > 4 else "A"  # clip tag: <tag>_shotNN, gvhmr_<tag>NN
     for i, (k, f) in enumerate(keys):
-        gp = diag / f"gvhmr_A{k:02d}" / "gvhmr_skeleton.npz"
-        mp = diag / f"A_shot{k:02d}.masks.npz"
+        gp = diag / f"gvhmr_{tag}{k:02d}" / "gvhmr_skeleton.npz"
+        mp = diag / f"{tag}_shot{k:02d}.masks.npz"
         if not gp.exists() or not mp.exists():
             continue
         mk = np.load(mp)["masks"][f]
@@ -125,7 +153,10 @@ def main() -> int:
         for key in ("body", "pts"):
             if len(z[f"s{k}_{key}"]):
                 z[f"s{k}_{key}"] = z[f"s{k}_{key}"] @ R.T + tt
-        if len(z[f"s{k}_body"]) and "floor_from_cut" in report:
+        lev = level_cut(z, k) if "floor_from_cut" in report else None
+        if lev is not None:
+            report["cuts"][k]["levelled_by_own_floor"] = lev
+        elif len(z[f"s{k}_body"]) and "floor_from_cut" in report:
             # the person touches the shared floor at some point (as GVHMR assumes): the whole cut moves up or down
             dz = -float(np.percentile(z[f"s{k}_body"][..., 2].min(1), 2))
             for key in ("body", "pts"):

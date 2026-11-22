@@ -20,35 +20,7 @@ from vrecon.analysis.appearance import body_part
 from vrecon.schema import Project, SceneObject, Shot
 
 BONE_TAIL = 0.05  # m, along +Y
-RADIUS = {"spine": 0.11, "pelvis": 0.11, "hip": 0.08, "knee": 0.06, "ankle": 0.045, "foot": 0.04, "neck": 0.05,
-          "collar": 0.05, "shoulder": 0.05, "elbow": 0.04, "wrist": 0.035, "head": 0.05}
-
-
-def _radius(name: str) -> float:
-    return next((r for k, r in RADIUS.items() if k in name), 0.05)
-
-
-def _cylinder(a: np.ndarray, b: np.ndarray, r: float, n: int = 8):
-    axis = b - a
-    length = float(np.linalg.norm(axis))
-    if length < 1e-6:
-        return [], []
-    z = axis / length
-    x = np.cross(z, [0, 0, 1.0]) if abs(z[2]) < 0.9 else np.cross(z, [1.0, 0, 0])
-    x /= np.linalg.norm(x)
-    y = np.cross(z, x)
-    ring = [x * math.cos(2 * math.pi * i / n) * r + y * math.sin(2 * math.pi * i / n) * r for i in range(n)]
-    verts = [tuple(a + v) for v in ring] + [tuple(b + v) for v in ring]
-    faces = [(i, (i + 1) % n, n + (i + 1) % n, n + i) for i in range(n)]
-    faces += [tuple(range(n - 1, -1, -1)), tuple(range(n, 2 * n))]
-    return verts, faces
-
-
-def _box(c: np.ndarray, size: tuple[float, float, float]):
-    sx, sy, sz = (s / 2 for s in size)
-    verts = [tuple(c + np.array([x * sx, y * sy, z * sz])) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
-    faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
-    return verts, faces
+from .mannequin import RADIUS, _box, _cylinder, _radius  # noqa: E402,F401  (pure numpy, shared)
 
 
 def build_character(project: Project, obj: SceneObject, shot: Shot, root: Path | None, report, id_prop: str) -> bool:

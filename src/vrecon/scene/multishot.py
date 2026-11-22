@@ -80,6 +80,159 @@ def _body(name: str, joints: np.ndarray, start: int, parent) -> None:
     del sk
 
 
+NAMES = ["pelvis", "left_hip", "right_hip", "spine1", "left_knee", "right_knee", "spine2", "left_ankle",
+         "right_ankle", "spine3", "left_foot", "right_foot", "neck", "left_collar", "right_collar", "head",
+         "left_shoulder", "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist"]
+# semantic proxy colours (scripts/export_clay_blend.SEMANTIC): the V2V prompt's legend names them
+SEMANTIC = {"person": (0.95, 0.55, 0.15), "ground": (0.45, 0.6, 0.4), "structure": (0.55, 0.55, 0.75),
+            "sky": (0.8, 0.88, 0.95), "held": (0.15, 0.85, 0.95), "prop": (0.9, 0.85, 0.3)}
+
+
+from .mannequin import frustum as _frustum, mannequin as _mannequin  # noqa: E402  (pure numpy, also used by the close-up search)
+
+
+def _body_mannequin(name: str, joints: np.ndarray, start: int, parent, garment=None) -> None:
+    v0, faces = _mannequin(joints[0], garment)
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(v0.tolist(), [], faces)
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(ob)
+    ob.parent = parent
+    ob.shape_key_add(name="Basis")
+    for t in range(len(joints)):
+        kb = ob.shape_key_add(name=f"f{t}")
+        kb.data.foreach_set("co", _mannequin(joints[t], garment)[0].astype(np.float32).ravel())
+        for f, v in ((t - 1, 0.0), (t, 1.0), (t + 1, 0.0)):
+            kb.value = v
+            kb.keyframe_insert("value", frame=start + f)
+    _label(ob, "person")
+
+
+def _label(ob, cat: str) -> None:
+    ob["vrecon_category"] = cat
+    ob.color = (*SEMANTIC[cat], 1.0)
+
+
+def _surface(name: str, pts: np.ndarray, radius: float, parent, cat: str) -> None:
+    """points -> a closed surface (points to volume, volume to mesh): solid set pieces for clay renders."""
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(pts.tolist(), [], [])
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(ob)
+    ob.parent = parent
+    ng = bpy.data.node_groups.new(name + "_surf", "GeometryNodeTree")
+    ng.interface.new_socket("Geometry", in_out="INPUT", socket_type="NodeSocketGeometry")
+    ng.interface.new_socket("Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry")
+    gi, go = ng.nodes.new("NodeGroupInput"), ng.nodes.new("NodeGroupOutput")
+    m2p = ng.nodes.new("GeometryNodeMeshToPoints")
+    p2v = ng.nodes.new("GeometryNodePointsToVolume")
+    v2m = ng.nodes.new("GeometryNodeVolumeToMesh")
+    m2p.inputs["Radius"].default_value = radius * 2.0
+    p2v.inputs["Resolution Mode"].default_value = "Size"
+    p2v.inputs["Voxel Size"].default_value = radius * 1.2
+    p2v.inputs["Radius"].default_value = radius * 2.0
+    ng.links.new(gi.outputs[0], m2p.inputs["Mesh"])
+    ng.links.new(m2p.outputs["Points"], p2v.inputs["Points"])
+    ng.links.new(p2v.outputs["Volume"], v2m.inputs["Volume"])
+    ng.links.new(v2m.outputs["Mesh"], go.inputs[0])
+    ob.modifiers.new("surface", "NODES").node_group = ng
+    _label(ob, cat)
+
+
+def _layout(z, parent) -> None:
+    """flat pieces (one mesh per category) and boxes from scripts/multishot_layout.py."""
+    from .character import _box
+
+    quads, cats = z["layout_quads"], z["layout_quad_cat"]
+    for cat in sorted(set(cats.tolist())):
+        q = quads[cats == cat]
+        me = bpy.data.meshes.new(f"Layout_{cat}")
+        me.from_pydata(q.reshape(-1, 3).tolist(), [], [tuple(range(4 * i, 4 * i + 4)) for i in range(len(q))])
+        me.validate()
+        ob = bpy.data.objects.new(f"Layout_{cat}", me)
+        bpy.context.collection.objects.link(ob)
+        ob.parent = parent
+        ob.modifiers.new("thick", "SOLIDIFY").thickness = 0.05
+        _label(ob, cat)
+    for i, b in enumerate(z["layout_boxes"]):
+        v, f = _box(b[:3], tuple(b[3:6]))
+        me = bpy.data.meshes.new(f"LayoutBox{i:02d}")
+        me.from_pydata(v, [], f)
+        ob = bpy.data.objects.new(f"LayoutBox{i:02d}", me)
+        bpy.context.collection.objects.link(ob)
+        ob.parent = parent
+        _label(ob, "structure")
+
+
+def _extra_people(k: int, arr: np.ndarray, start: int, parent) -> None:
+    """coarse figures (no limbs: a body and a head, as export_clay_blend's coarse people) where extra people stand;
+    keyed place, shown only while seen."""
+    from .character import _box, _cylinder
+
+    for pi, track in enumerate(arr):
+        h = float(track[:, 2].max())
+        if h <= 0:
+            continue
+        v1, f1 = _cylinder(np.zeros(3), np.array([0, 0, h * 0.86]), 0.19, 12)
+        v2, f2 = _box(np.array([0, 0, h * 0.93]), (0.2, 0.22, h * 0.14))
+        me = bpy.data.meshes.new(f"Extra{k:02d}_{pi}")
+        me.from_pydata(v1 + v2, [], f1 + [tuple(x + len(v1) for x in ff) for ff in f2])
+        ob = bpy.data.objects.new(me.name, me)
+        bpy.context.collection.objects.link(ob)
+        ob.parent = parent
+        _label(ob, "person")
+        prev = None
+        for t, (x, y, _, vis) in enumerate(track):
+            ob.location = (x, y, 0.0)
+            ob.keyframe_insert("location", frame=start + t)
+            hide = bool(vis < 0.5)
+            if hide != prev:
+                ob.hide_render = ob.hide_viewport = hide
+                ob.keyframe_insert("hide_render", frame=start + t)
+                ob.keyframe_insert("hide_viewport", frame=start + t)
+                prev = hide
+        ob.hide_render = ob.hide_viewport = True
+        ob.keyframe_insert("hide_render", frame=start + len(track))
+        ob.keyframe_insert("hide_viewport", frame=start + len(track))
+        if start > 1:
+            ob.keyframe_insert("hide_render", frame=1)
+            ob.keyframe_insert("hide_viewport", frame=1)
+
+
+def _objects(k: int, arr: np.ndarray, labels, start: int, parent) -> None:
+    """object proxies (boxes of the object's size), keyed place, shown only while seen."""
+    from .character import _box
+
+    for oi, (track, lab) in enumerate(zip(arr, labels)):
+        vis = track[:, 6] > 0
+        if not vis.any():
+            continue
+        size = tuple(float(x) for x in track[vis][0, 3:6])
+        v, f = _box(np.zeros(3), size)
+        me = bpy.data.meshes.new(f"Obj{k:02d}_{oi}_{str(lab).split(':')[1]}")
+        me.from_pydata(v, [], f)
+        ob = bpy.data.objects.new(me.name, me)
+        bpy.context.collection.objects.link(ob)
+        ob.parent = parent
+        _label(ob, str(lab).split(":")[0])
+        idx = np.flatnonzero(vis)
+        prev = None
+        for t in range(len(track)):
+            j = idx[np.argmin(np.abs(idx - t))]  # hold the nearest seen place
+            ob.location = tuple(track[j, :3])
+            ob.keyframe_insert("location", frame=start + t)
+            hide = not bool(vis[t])
+            if hide != prev:
+                ob.hide_render = ob.hide_viewport = hide
+                ob.keyframe_insert("hide_render", frame=start + t)
+                ob.keyframe_insert("hide_viewport", frame=start + t)
+                prev = hide
+        for fr in ([1] if start > 1 else []) + [start + len(track)]:
+            ob.hide_render = ob.hide_viewport = True
+            ob.keyframe_insert("hide_render", frame=fr)
+            ob.keyframe_insert("hide_viewport", frame=fr)
+
+
 def _flat(name: str, rgb) -> bpy.types.Material:
     m = bpy.data.materials.new(name)
     m.use_nodes = True
@@ -96,8 +249,10 @@ def _fill(k: int, s: dict, floor: np.ndarray, cam0: np.ndarray, parent) -> None:
     bpy.ops.mesh.primitive_uv_sphere_add(radius=300.0, location=tuple(cam0))
     sp = bpy.context.active_object
     sp.name = f"Backdrop{k:02d}"
+    sp.data.flip_normals()  # seen from inside: lit like a dome, not its dark back
     sp.data.materials.append(_flat(f"Backdrop{k:02d}", s["backdrop_rgb"]))
     sp.parent = parent
+    _label(sp, "sky")
     if len(floor):
         bpy.ops.mesh.primitive_plane_add(size=60.0, location=tuple(floor[:3]))
         pl = bpy.context.active_object
@@ -106,6 +261,7 @@ def _fill(k: int, s: dict, floor: np.ndarray, cam0: np.ndarray, parent) -> None:
         pl.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(Vector(tuple(floor[3:6])))
         pl.data.materials.append(_flat(f"Floor{k:02d}", [float(v) for v in floor[6:9]]))
         pl.parent = parent
+        _label(pl, "ground")
 
 
 def _only_during(ob, start: int, frames: int) -> None:
@@ -116,7 +272,9 @@ def _only_during(ob, start: int, frames: int) -> None:
         ob.keyframe_insert("hide_viewport", frame=f)
 
 
-def build(prep: Path, out: Path) -> dict:
+def build(prep: Path, out: Path, finished: bool = False) -> dict:
+    """finished: mannequin bodies, points as labelled surfaces (ground near z = 0 in the shared world, else
+    structure), backdrop = sky, floor = ground; colours are the semantic proxy colours (render_semantic)."""
     z = np.load(prep)
     info = json.loads(str(z["info"]))
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -146,16 +304,37 @@ def build(prep: Path, out: Path) -> dict:
             cam.keyframe_insert("rotation_quaternion", frame=start + t)
         mk = sc.timeline_markers.new(f"shot{k:02d}", frame=start)
         mk.camera = cam
-        if len(z[f"s{k}_pts"]):
+        if finished and "layout_quads" in z and s.get("slot", k) == 0 and not s.get("points_only_during_cut"):
+            if not bpy.data.objects.get("Layout_ground") and not bpy.data.objects.get("Layout_structure"):
+                _layout(z, root)
+        elif finished and s.get("points_only_during_cut") and "layout_quads" in z:
+            pass  # a close-up placed in the shared world: its own close points are blurred people and hands, the world's layout is its background
+        elif len(z[f"s{k}_pts"]) and finished:
+            P = z[f"s{k}_pts"]
+            r = max(s.get("point_radius", 0.03), 0.02)
+            g = (np.abs(P[:, 2]) < 0.12) if s.get("slot", k) == 0 and "joined" in info else np.zeros(len(P), bool)
+            for cat, sel in (("ground", g), ("structure", ~g)):
+                if sel.sum() > 50:
+                    _surface(f"{cat.title()}{k:02d}", P[sel], r, root, cat)
+                    if s.get("points_only_during_cut"):
+                        _only_during(bpy.data.objects[f"{cat.title()}{k:02d}"], start, s["frames"])
+        elif len(z[f"s{k}_pts"]):
             _points(f"Background{k:02d}", z[f"s{k}_pts"], z[f"s{k}_col"], mat, root, s.get("point_radius", 0.03))
             if s.get("points_only_during_cut"):
                 _only_during(bpy.data.objects[f"Background{k:02d}"], start, s["frames"])
         if not s.get("shared_fill_from"):
             _fill(k, s, z[f"s{k}_floor"], z[f"s{k}_cam"][0, :3, 3], root)
         if len(z[f"s{k}_body"]):
-            _body(f"Body{k:02d}", z[f"s{k}_body"], start, root)
+            if finished:
+                _body_mannequin(f"Body{k:02d}", z[f"s{k}_body"], start, root, z[f"s{k}_garment"] if f"s{k}_garment" in z else None)
+            else:
+                _body(f"Body{k:02d}", z[f"s{k}_body"], start, root)
             if s.get("slot", k) != k or "slot" in s:  # in a shared world: the body only during its own cut
                 _only_during(bpy.data.objects[f"Body{k:02d}"], start, s["frames"])
+        if finished and f"s{k}_objects" in z and len(z[f"s{k}_objects"]):
+            _objects(k, z[f"s{k}_objects"], z[f"s{k}_object_labels"], start, root)
+        if finished and f"s{k}_extra" in z and len(z[f"s{k}_extra"]):
+            _extra_people(k, z[f"s{k}_extra"], start, root)
         ends.append(start + s["frames"] - 1)
     sc.frame_start, sc.frame_end = 1, max(ends)
     sc.camera = bpy.data.objects["Cam00"]
@@ -202,3 +381,97 @@ def render_top(path: Path, frame: int, extent: float = 16.0) -> None:
     sc.frame_set(frame)
     sc.render.filepath = str(path)
     bpy.ops.render.render(write_still=True)
+
+
+def render_semantic(out_mp4: Path, frames: int, size: tuple[int, int], start: int = 1) -> Path:
+    """Semantic clay control (as scripts/export_clay_blend.py --semantic): Workbench, studio light fixed in the
+    world, object colours = category colours, cavity and shadows; the marker cameras; H3 sizes are the caller's."""
+    import tempfile
+
+    from vrecon.control.core import encode_mp4
+
+    sc = bpy.context.scene
+    sc.render.engine = "BLENDER_WORKBENCH"
+    sh = sc.display.shading
+    sh.light, sh.color_type = "STUDIO", "OBJECT"
+    sh.show_cavity, sh.show_shadows = True, True
+    sh.use_world_space_lighting = True
+    sc.display.light_direction = (0.35, -0.45, 0.82)
+    sc.render.resolution_x, sc.render.resolution_y = size
+    sc.render.resolution_percentage = 100
+    sc.render.image_settings.file_format = "PNG"
+    for cam in (o for o in bpy.data.objects if o.type == "CAMERA"):
+        cam.data.clip_end = 1000
+    from vrecon.control.core import load_frames
+
+    if out_mp4 is None:
+        return None
+    with tempfile.TemporaryDirectory() as td:
+        paths = []
+        for i in range(frames):
+            sc.frame_set(start + i)
+            sc.render.filepath = str(Path(td) / f"{i:05d}.png")
+            bpy.ops.render.render(write_still=True)
+            paths.append(Path(td) / f"{i:05d}.png")
+        imgs = load_frames(paths)
+        encode_mp4(imgs, out_mp4, fps=24)
+    return out_mp4
+
+
+LABELS = ["none", *SEMANTIC]  # index in the label images: 0 = nothing drawn
+
+
+def render_labels(out_npz: Path, frames: list[int], size: tuple[int, int], hide: tuple[str, ...] = ()) -> Path:
+    """Category label images for checking (scripts/multishot_check.py): Workbench flat, no anti-aliasing, object
+    colour = category colour, decoded back to LABELS indices. Objects whose name starts with a `hide` prefix are left
+    out (component ablation). Writes labels uint8 [F, H, W], frames [F]."""
+    import tempfile
+
+    from vrecon.control.core import load_frames
+
+    sc = bpy.context.scene
+    sc.render.engine = "BLENDER_WORKBENCH"
+    sh = sc.display.shading
+    sh.light, sh.color_type = "FLAT", "OBJECT"
+    sh.show_cavity = sh.show_shadows = sh.show_specular_highlight = sh.show_object_outline = False
+    sh.background_type = "VIEWPORT"
+    sh.background_color = (0.0, 0.0, 0.0)
+    sc.display.render_aa = "OFF"
+    sc.view_settings.view_transform = "Standard"
+    sc.render.film_transparent = False
+    sc.render.resolution_x, sc.render.resolution_y = size
+    sc.render.resolution_percentage = 100
+    sc.render.image_settings.file_format = "PNG"
+    for ob in bpy.data.objects:
+        if ob.type == "CAMERA":
+            ob.data.clip_end = 1000
+        elif hide and ob.name.startswith(tuple(hide)):
+            ob.hide_render = True
+            for fc in [c for c in _fcurves(ob) if c.data_path == "hide_render"]:
+                for kp in fc.keyframe_points:  # keyed visibility (_only_during) would bring it back
+                    kp.co[1] = 1.0
+    ref = np.array([[0, 0, 0], *[_srgb(c) for c in SEMANTIC.values()]], float)
+    out = []
+    with tempfile.TemporaryDirectory() as td:
+        for f in frames:
+            sc.frame_set(f)
+            sc.render.filepath = str(Path(td) / f"{f:05d}.png")
+            bpy.ops.render.render(write_still=True)
+            img = load_frames([Path(td) / f"{f:05d}.png"])[0][..., :3].astype(float)
+            d = ((img[..., None, :] - ref) ** 2).sum(-1)
+            out.append(d.argmin(-1).astype(np.uint8))
+    np.savez_compressed(out_npz, labels=np.array(out), frames=np.array(frames), names=np.array(LABELS))
+    return out_npz
+
+
+def _srgb(c) -> list[float]:
+    c = np.asarray(c, float)
+    return list(255 * np.where(c <= 0.0031308, 12.92 * c, 1.055 * c ** (1 / 2.4) - 0.055))
+
+
+def _fcurves(ob):
+    from bpy_extras.anim_utils import action_get_channelbag_for_slot
+
+    ad = ob.animation_data
+    cb = action_get_channelbag_for_slot(ad.action, ad.action_slot) if ad and ad.action else None
+    return list(cb.fcurves) if cb else []

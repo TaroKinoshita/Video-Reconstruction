@@ -90,6 +90,44 @@ def interp_c2w(frames: list[int], c2w: np.ndarray, n: int) -> np.ndarray:
     return out
 
 
+def kabsch(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """rotation r with b - mean ~ r (a - mean)."""
+    a0, b0 = a - a.mean(0), b - b.mean(0)
+    u, _, vt = np.linalg.svd(b0.T @ a0)
+    d = np.sign(np.linalg.det(u @ vt))
+    return u @ np.diag([1, 1, d]) @ vt
+
+
+def floor_scale(m, labels, fr, gv, min_support: float = 0.1):
+    """metres per 4RC unit from the floor: in each sampled frame, 'up' in the camera comes from GVHMR (its camera-
+    frame joints against its gravity-aligned world joints); the floor is the densest level of the background points
+    along up below the camera; the lowest foot (metres) lies on it. Median over frames, or None."""
+    out = []
+    for i, f in enumerate(fr):
+        if f >= len(gv["joints_cam"]):
+            continue
+        jc, jw = gv["joints_cam"][f], gv["joints_world"][f]
+        up = kabsch(jw, jc) @ np.array([0, 0, 1.0])  # world up seen in the camera frame
+        sel = labels[i] == 0
+        if sel.sum() < 500:
+            continue
+        w2c = np.linalg.inv(m.c2w[i])
+        pc = m.pts[i][sel] @ w2c[:3, :3].T + w2c[:3, 3]
+        h = pc @ up
+        low = h[h < 0]
+        if len(low) < 200:
+            continue
+        hist, edges = np.histogram(low, bins=60)
+        b = int(np.argmax(hist))
+        level = 0.5 * (edges[b] + edges[b + 1])
+        if (np.abs(h - level) < 2 * (edges[1] - edges[0])).mean() < min_support:
+            continue
+        feet = float(min(jc[[7, 8, 10, 11]] @ up))
+        if feet < 0 and level < 0:
+            out.append(feet / level)
+    return float(np.median(out)) if len(out) >= 2 else None
+
+
 def shot(diag: Path, tag: str, k: int, prefix: str) -> dict:
     vid = diag / f"{prefix}{k:02d}.mp4"
     rgb = read_video_rgb(vid)
@@ -124,6 +162,12 @@ def shot(diag: Path, tag: str, k: int, prefix: str) -> dict:
             if zs:
                 z = np.array(zs)
                 scale = float(np.median(z[:, 0] / np.maximum(z[:, 1], 1e-6)))
+        info["scale_person_depth"] = scale
+        if gv is not None:
+            fs = floor_scale(m, labels, fr, gv)
+            info["scale_floor"] = fs
+            if fs is not None:
+                scale = fs  # the person stands on the floor: the floor under the feet fixes the scale
         info["scale"] = scale
         info["unitless"] = gv is None
         fx = float(np.median(m.K[:, 0, 0]))

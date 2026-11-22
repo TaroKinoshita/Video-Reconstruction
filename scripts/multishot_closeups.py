@@ -8,7 +8,7 @@ in the wide cuts. Per close-up k (a cut still in its own slot):
            in time on ties
   pose     that person's body at the wide cut's frame nearest in time (the close-up shows the same moment or near)
   camera   searched: look-at joint x azimuth x elevation x distance (+ the close-up's own lens), scoring the
-           overlap (IoU) of the body's thick stick silhouette with the close-up mask at its middle frame; then
+           overlap (IoU) of the drawn mannequin's silhouette (scene/mannequin.py) with the close-up mask at its middle frame; then
            the cut's own camera motion is kept relative to that pose
   scale    the found distance / the 4RC depth of the mask: the close-up's own points and motion in metres
 The overlap is reported; below MIN_IOU the cut is left where it was (not placed).
@@ -25,6 +25,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from vrecon.control.core import read_video_rgb  # noqa: E402
+from vrecon.scene.mannequin import mannequin, silhouette as mannequin_silhouette  # noqa: E402
 
 PARENTS = [-1, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 12, 13, 14, 16, 17, 18, 19]
 RADIUS = {15: 0.11, 12: 0.06, 9: 0.13, 6: 0.13, 3: 0.13, 0: 0.13}  # head, neck, torso; limbs 0.06
@@ -42,34 +43,9 @@ def hist(rgb: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return (h / h.sum()).ravel()
 
 
-def silhouette(joints: np.ndarray, cam: np.ndarray, lens: float, w: int, h: int) -> np.ndarray:
-    """body as spheres sampled along the bones, projected by a Blender-axes camera (4x4 c2w)."""
-    pts, rad = [], []
-    for j, p in enumerate(PARENTS):
-        if p < 0:
-            continue
-        r = RADIUS.get(p, 0.06) if p in RADIUS else RADIUS.get(j, 0.06)
-        for u in np.linspace(0, 1, 6):
-            pts.append(joints[p] * (1 - u) + joints[j] * u)
-            rad.append(r)
-    pts, rad = np.array(pts), np.array(rad)
-    w2c = np.linalg.inv(cam)
-    pc = pts @ w2c[:3, :3].T + w2c[:3, 3]
-    z = -pc[:, 2]
-    ok = z > 0.05
-    f = lens / 36.0 * w
-    u = w / 2 + f * pc[ok, 0] / z[ok]
-    v = h / 2 - f * pc[ok, 1] / z[ok]
-    rr = f * rad[ok] / z[ok]
-    sil = np.zeros((h, w), bool)
-    for a, b, r in zip(u, v, rr):
-        x0, x1 = max(int(a - r), 0), min(int(a + r) + 1, w)
-        y0, y1 = max(int(b - r), 0), min(int(b + r) + 1, h)
-        if x0 >= x1 or y0 >= y1:
-            continue
-        yy, xx = np.mgrid[y0:y1, x0:x1]
-        sil[y0:y1, x0:x1] |= (xx - a) ** 2 + (yy - b) ** 2 < r * r
-    return sil
+def silhouette(joints: np.ndarray, cam: np.ndarray, lens: float, w: int, h: int, mesh=None) -> np.ndarray:
+    """the drawn mannequin's silhouette (scene/mannequin.py): the search fits the shape the render shows."""
+    return mannequin_silhouette(joints, cam, lens, w, h, mesh=mesh)
 
 
 def look_at(eye: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -126,13 +102,14 @@ def main() -> int:
         tf = int(np.clip(a0 - a, 0, len(z[f"s{who}_body"]) - 1))
         body = z[f"s{who}_body"][tf]
         small = mk[np.arange(GH) * mk.shape[0] // GH][:, np.arange(GW) * mk.shape[1] // GW]
+        mesh = mannequin(body)
         S = np.zeros((22, len(AZ), len(EL), len(DIST)))
         for j in range(22):
             for ia, az in enumerate(np.radians(AZ)):
                 for ie, el in enumerate(np.radians(EL)):
                     for i_d, d in enumerate(DIST):
                         eye = body[j] + d * np.array([np.cos(el) * np.cos(az), np.cos(el) * np.sin(az), np.sin(el)])
-                        sil = silhouette(body, look_at(eye, body[j]), s["lens_35mm"], GW, GH)
+                        sil = silhouette(body, look_at(eye, body[j]), s["lens_35mm"], GW, GH, mesh)
                         S[j, ia, ie, i_d] = (sil & small).sum() / max((sil | small).sum(), 1)
         fits[k] = {"who": who, "sim": sim, "tf": tf, "body": body, "S": S, "t": t}
     # neighbouring close-ups of the same person (only a short transition between them) are one set-up: they share
