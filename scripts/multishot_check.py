@@ -12,6 +12,13 @@
             different cuts, objects under the floor
 3 score     per cut: the mean of its picture IoUs (person, object when the cut has objects), minus the empty share;
             the clip score is the frame-weighted mean. `flags` lists what is clearly wrong, with the cut and numbers.
+MAVE-style evidence checks (Chang et al. 2026, "evidence-based verification"), adapted:
+  blocked     share of the video's person / object pixels where the render shows the set (ground, structure)
+              although without the set the thing is drawn there: the set stands in front of it (depth conflict)
+  inside      joints inside a set piece: closer than PEN_TOL to a structure quad, within its extent
+  teleport    a placed thing or extra person that jumps more than JUMP_M between two frames it is seen in, or is
+              seen in fewer than 3 frames (a flash): noise turned into motion
+  floating    a cut in the shared world whose body never comes near the floor (lowest joint > FLOAT_M all the cut)
 --hide leaves objects out by name prefix (Body03, Obj02_, Layout_): rerun with it to see whether a part helps.
 """
 
@@ -31,6 +38,11 @@ FLOOR_TOL = 0.15  # m below the floor before a joint counts as under it
 HEIGHT = (1.4, 2.1)  # m, a plausible adult
 SIZE_SPREAD = 0.15  # the same person's height may differ this much between cuts
 MIN_IOU = 0.4  # below: a flag
+PEN_TOL = 0.08  # m
+JUMP_M = 0.6  # m per frame
+FLOAT_M = 0.35  # m
+MAX_BLOCKED = 0.15
+SET_PARTS = ["Layout", "Floor", "Backdrop", "Ground", "Structure", "P_", "LLM_"]  # scene/multishot.py object names of the set
 
 
 def resize_nearest(m: np.ndarray, h: int, w: int) -> np.ndarray:
@@ -66,6 +78,27 @@ def sense(z, info) -> tuple[dict, list]:
             heights[k] = h
             if not HEIGHT[0] <= h <= HEIGHT[1] and not s.get("unitless"):
                 flags.append({"cut": k, "what": "body height", "value": round(h, 2)})
+            if world and "layout_quads" in z and len(z["layout_quads"]):
+                Qs = z["layout_quads"][np.array(z["layout_quad_cat"]) == "structure"]
+                ins = 0
+                for q in Qs:
+                    o, e1, e2 = q[0], q[1] - q[0], q[3] - q[0]
+                    n = np.cross(e1, e2)
+                    if np.linalg.norm(n) < 1e-9:
+                        continue
+                    n /= np.linalg.norm(n)
+                    d = (body - o) @ n
+                    u = (body - o) @ e1 / (e1 @ e1)
+                    v = (body - o) @ e2 / (e2 @ e2)
+                    hit = (np.abs(d) < PEN_TOL) & (u > 0) & (u < 1) & (v > 0) & (v < 1)
+                    ins = max(ins, float(hit.any(1).mean()))
+                r["frames_inside_set"] = ins
+                if ins > 0.2:
+                    flags.append({"cut": k, "what": "body inside a set piece", "share_frames": round(ins, 2)})
+            if world and not s.get("points_only_during_cut"):
+                lowest = float(body[:, :, 2].min())
+                if lowest > FLOAT_M:
+                    flags.append({"cut": k, "what": "body floating above the floor", "lowest_m": round(lowest, 2)})
             if world:
                 low = body[:, :, 2].min(1)
                 under = float((low < -FLOOR_TOL).mean())
@@ -81,18 +114,34 @@ def sense(z, info) -> tuple[dict, list]:
             r["object_frames_under_floor"] = bad
             if bad > 0.2:
                 flags.append({"cut": k, "what": "objects under the floor", "share_frames": round(bad, 2)})
+        for name, tracks, pos, vcol in (("object", z.get(f"s{k}_objects", np.zeros((0, 0, 7))), slice(0, 3), 6),
+                                        ("extra person", z.get(f"s{k}_extra", np.zeros((0, 0, 4))), slice(0, 2), 3)):
+            for i, tr in enumerate(tracks):
+                vis = np.flatnonzero(tr[:, vcol] > 0)
+                if not len(vis):
+                    continue
+                jump = float(np.linalg.norm(np.diff(tr[vis, pos], axis=0), axis=1).max()) if len(vis) > 1 else 0.0
+                if jump > JUMP_M or len(vis) < 3:
+                    flags.append({"cut": k, "what": f"{name} teleports or flashes", "index": i,
+                                  "max_jump_m": round(jump, 2), "frames_seen": int(len(vis))})
         rep[k] = r
-    # the same person in several cuts: close-ups name whose body they hold
-    who = {int(k): c["who"] for k, c in info.get("closeups", {}).items() if c.get("placed")}
-    groups: dict[int, list] = {}
+    # the same person in several cuts should have one size: group by person (scripts/multishot_who.py identity,
+    # else the close-up's matched body), compare within each person only
+    ident = {int(k): w.get("identity") for k, w in info.get("who", {}).items() if w.get("identity") not in (None, "?")}
+    held = {int(k): c["who"] for k, c in info.get("closeups", {}).items() if c.get("placed")}
+    groups: dict[str, dict] = {}
     for k in heights:
-        groups.setdefault(who.get(k, k), []).append(heights[k])
-    if len(heights) > 1:
-        hs = np.array(list(heights.values()))
+        g = ident.get(k) or f"cut{held.get(k, k)}"
+        groups.setdefault(g, {})[k] = heights[k]
+    rep["height_spread_by_person"] = {}
+    for g, hk in groups.items():
+        if len(hk) < 2:
+            continue
+        hs = np.array(list(hk.values()))
         spread = float(hs.max() / hs.min() - 1)
-        rep["height_spread_between_cuts"] = spread
+        rep["height_spread_by_person"][g] = round(spread, 3)
         if spread > SIZE_SPREAD:
-            flags.append({"what": "people differ in size between cuts", "heights_m": {k: round(v, 2) for k, v in heights.items()}})
+            flags.append({"what": f"person {g} differs in size between cuts", "heights_m": {k: round(v, 2) for k, v in hk.items()}})
     return rep, flags
 
 
@@ -117,16 +166,22 @@ def main() -> int:
     for s in shots:
         st = s["source_frames"][0] + 1
         frames += list(range(st, st + s["frames"], a.every))
-    lab_npz = a.out.with_suffix(".labels.npz")
-    rc = subprocess.run([sys.executable, str(ROOT / "scripts/multishot_labels.py"), str(a.blend), str(lab_npz), str(w),
-                         str(h), json.dumps(frames), "--hide", *a.hide], capture_output=True, text=True, encoding="utf-8",
-                        errors="replace")
-    if rc.returncode or not lab_npz.exists():
-        print(rc.stdout[-2000:], rc.stderr[-2000:])
+    def render(path: Path, hide: list) -> np.ndarray | None:
+        rc = subprocess.run([sys.executable, str(ROOT / "scripts/multishot_labels.py"), str(a.blend), str(path), str(w),
+                             str(h), json.dumps(frames), "--hide", *hide], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace")
+        if rc.returncode or not path.exists():
+            print(rc.stdout[-2000:], rc.stderr[-2000:])
+            return None
+        return np.load(path)
+
+    L = render(a.out.with_suffix(".labels.npz"), a.hide)
+    # the same views without the set: what the set hides (a depth conflict needs the thing to be drawn behind it)
+    L0 = render(a.out.with_suffix(".labels_noset.npz"), [*a.hide, *SET_PARTS])
+    if L is None or L0 is None:
         return 1
-    L = np.load(lab_npz)
-    labels, lf = L["labels"], list(L["frames"])
-    P, HELD, PROP, NONE = (LABELS.index(c) for c in ("person", "held", "prop", "none"))
+    labels, lf, bare = L["labels"], list(L["frames"]), L0["labels"]
+    P, HELD, PROP, NONE, G, S = (LABELS.index(c) for c in ("person", "held", "prop", "none", "ground", "structure"))
     cuts, flags = {}, []
     tot_w = tot = 0.0
     for k, s in enumerate(shots):
@@ -136,6 +191,7 @@ def main() -> int:
         pm = np.load(mp)["masks"] if mp.exists() else None
         om = np.load(op)["masks"] if op.exists() else None
         acc: dict[str, list] = {"person": [], "object": []}
+        blocked: dict[str, list] = {"person": [], "object": []}
         empty = []
         for i, f in enumerate(lf):
             t = f - st
@@ -143,11 +199,18 @@ def main() -> int:
                 continue
             lab = labels[i]
             empty.append((lab == NONE).mean())
+            set_px = ((lab == G) | (lab == S)) & (bare[i] != NONE) & (bare[i] != LABELS.index("sky"))
             if pm is not None and t < len(pm):
-                r = iou_parts(lab == P, resize_nearest(pm[t] > 0, h, w))
+                obs = resize_nearest(pm[t] > 0, h, w)
+                if obs.any():
+                    blocked["person"].append((set_px & obs).sum() / obs.sum())
+                r = iou_parts(lab == P, obs)
                 if r:
                     acc["person"].append(r)
             if om is not None and t < len(om):
+                obs = resize_nearest(om[t] > 0, h, w)
+                if obs.any():
+                    blocked["object"].append((set_px & obs).sum() / obs.sum())
                 r = iou_parts((lab == HELD) | (lab == PROP), resize_nearest(om[t] > 0, h, w))
                 if r:
                     acc["object"].append(r)
@@ -161,6 +224,11 @@ def main() -> int:
                 parts.append(c[name]["iou"])
                 if c[name]["iou"] < MIN_IOU:
                     flags.append({"cut": k, "what": f"{name} does not match the video", **{q: round(v, 2) for q, v in c[name].items() if v is not None}})
+        for name, b in blocked.items():
+            if b:
+                c[f"{name}_blocked"] = float(np.mean(b))
+                if c[f"{name}_blocked"] > MAX_BLOCKED:
+                    flags.append({"cut": k, "what": f"set in front of the {name} (depth conflict)", "share": round(c[f"{name}_blocked"], 2)})
         if c["empty"] and c["empty"] > 0.1:
             flags.append({"cut": k, "what": "nothing drawn", "share": round(c["empty"], 2)})
         if parts:

@@ -88,7 +88,7 @@ SEMANTIC = {"person": (0.95, 0.55, 0.15), "ground": (0.45, 0.6, 0.4), "structure
             "sky": (0.8, 0.88, 0.95), "held": (0.15, 0.85, 0.95), "prop": (0.9, 0.85, 0.3)}
 
 
-from .mannequin import frustum as _frustum, mannequin as _mannequin  # noqa: E402  (pure numpy, also used by the close-up search)
+from .mannequin import dressed, frustum as _frustum, mannequin as _mannequin  # noqa: E402  (pure numpy, also used by the close-up search)
 
 
 def _body_mannequin(name: str, joints: np.ndarray, start: int, parent, garment=None) -> None:
@@ -104,6 +104,30 @@ def _body_mannequin(name: str, joints: np.ndarray, start: int, parent, garment=N
         kb.data.foreach_set("co", _mannequin(joints[t], garment)[0].astype(np.float32).ravel())
         for f, v in ((t - 1, 0.0), (t, 1.0), (t + 1, 0.0)):
             kb.value = v
+            kb.keyframe_insert("value", frame=start + f)
+    _label(ob, "person")
+
+
+def _body_smpl(name: str, verts: np.ndarray, faces: np.ndarray, start: int, parent, joints=None, dress=None) -> None:
+    """a person as the SMPL surface fitted to the measured joints (gpu/observe/fit_smpl.py), dressed as measured
+    (scripts/multishot_dress.py, scene/mannequin.dressed): one mesh, one shape key per frame, smooth shading."""
+    v = np.asarray(verts, np.float32)
+    if dress is not None and joints is not None and np.any(np.asarray(dress) > 0):
+        out = [dressed(v[t], faces, joints[min(t, len(joints) - 1)], dress) for t in range(len(v))]
+        faces = out[0][1]
+        v = np.stack([o[0] for o in out]).astype(np.float32)
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(v[0].tolist(), [], np.asarray(faces).tolist())
+    me.shade_smooth()
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(ob)
+    ob.parent = parent
+    ob.shape_key_add(name="Basis")
+    for t in range(len(v)):
+        kb = ob.shape_key_add(name=f"f{t}")
+        kb.data.foreach_set("co", v[t].ravel())
+        for f, val in ((t - 1, 0.0), (t, 1.0), (t + 1, 0.0)):
+            kb.value = val
             kb.keyframe_insert("value", frame=start + f)
     _label(ob, "person")
 
@@ -200,16 +224,18 @@ def _extra_people(k: int, arr: np.ndarray, start: int, parent) -> None:
 
 
 def _objects(k: int, arr: np.ndarray, labels, start: int, parent) -> None:
-    """object proxies (boxes of the object's size), keyed place, shown only while seen."""
-    from .character import _box
+    """object proxies: a rough shape of the object's kind (scene/props.py) at its size, keyed place, shown only
+    while seen. Sizes are (width, height, depth) in the picture's sense; z is up."""
+    from .props import prop_mesh
 
     for oi, (track, lab) in enumerate(zip(arr, labels)):
         vis = track[:, 6] > 0
         if not vis.any():
             continue
         size = tuple(float(x) for x in track[vis][0, 3:6])
-        v, f = _box(np.zeros(3), size)
-        me = bpy.data.meshes.new(f"Obj{k:02d}_{oi}_{str(lab).split(':')[1]}")
+        word, _, shape = str(lab).split(":")[1].partition("|")
+        v, f = prop_mesh(shape or word, size)  # "gun|box": the box matched the masks better
+        me = bpy.data.meshes.new(f"Obj{k:02d}_{oi}_{word}")
         me.from_pydata(v, [], f)
         ob = bpy.data.objects.new(me.name, me)
         bpy.context.collection.objects.link(ob)
@@ -231,6 +257,30 @@ def _objects(k: int, arr: np.ndarray, labels, start: int, parent) -> None:
             ob.hide_render = ob.hide_viewport = True
             ob.keyframe_insert("hide_render", frame=fr)
             ob.keyframe_insert("hide_viewport", frame=fr)
+
+
+def _llm_set(pieces: list, parent) -> None:
+    """set pieces a model added (scripts/multishot_llm.py): one object each, LLM_<name>, so a check can hide one."""
+    from .mannequin import _box
+
+    for p in pieces:
+        c, s = np.array(p["center"], float), np.array(p["size"], float)
+        if p.get("type") == "plane":
+            hx, hy = s[0] / 2, s[1] / 2
+            v, f = [(-hx, -hy, 0.0), (hx, -hy, 0.0), (hx, hy, 0.0), (-hx, hy, 0.0)], [(0, 1, 2, 3)]
+        else:
+            v, f = _box(np.zeros(3), tuple(max(x, 1e-3) for x in s))
+        th = np.radians(float(p.get("yaw_deg", 0)))
+        R = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+        v = [tuple(R @ np.array(x) + c) for x in v]
+        me = bpy.data.meshes.new(f"LLM_{p['name']}")
+        me.from_pydata(v, [], f)
+        ob = bpy.data.objects.new(me.name, me)
+        bpy.context.collection.objects.link(ob)
+        ob.parent = parent
+        if p.get("type") == "plane":
+            ob.modifiers.new("thick", "SOLIDIFY").thickness = 0.05
+        _label(ob, "ground" if p.get("category") == "ground" else "structure")
 
 
 def _flat(name: str, rgb) -> bpy.types.Material:
@@ -272,8 +322,9 @@ def _only_during(ob, start: int, frames: int) -> None:
         ob.keyframe_insert("hide_viewport", frame=f)
 
 
-def build(prep: Path, out: Path, finished: bool = False) -> dict:
-    """finished: mannequin bodies, points as labelled surfaces (ground near z = 0 in the shared world, else
+def build(prep: Path, out: Path, finished: bool = False, evidence_only: bool = False) -> dict:
+    """evidence_only (DESIGN_v3): cameras, people, floor and backdrop only, the locked base an agent builds on; no
+    set pieces, objects or added pieces from the observations. finished: mannequin bodies, points as labelled surfaces (ground near z = 0 in the shared world, else
     structure), backdrop = sky, floor = ground; colours are the semantic proxy colours (render_semantic)."""
     z = np.load(prep)
     info = json.loads(str(z["info"]))
@@ -304,7 +355,9 @@ def build(prep: Path, out: Path, finished: bool = False) -> dict:
             cam.keyframe_insert("rotation_quaternion", frame=start + t)
         mk = sc.timeline_markers.new(f"shot{k:02d}", frame=start)
         mk.camera = cam
-        if finished and "layout_quads" in z and s.get("slot", k) == 0 and not s.get("points_only_during_cut"):
+        if evidence_only:
+            pass
+        elif finished and "layout_quads" in z and s.get("slot", k) == 0 and not s.get("points_only_during_cut"):
             if not bpy.data.objects.get("Layout_ground") and not bpy.data.objects.get("Layout_structure"):
                 _layout(z, root)
         elif finished and s.get("points_only_during_cut") and "layout_quads" in z:
@@ -325,17 +378,22 @@ def build(prep: Path, out: Path, finished: bool = False) -> dict:
         if not s.get("shared_fill_from"):
             _fill(k, s, z[f"s{k}_floor"], z[f"s{k}_cam"][0, :3, 3], root)
         if len(z[f"s{k}_body"]):
-            if finished:
+            if finished and f"s{k}_smpl" in z:
+                _body_smpl(f"Body{k:02d}", z[f"s{k}_smpl"], z["smpl_faces"], start, root, z[f"s{k}_body"],
+                           z[f"s{k}_dress"] if f"s{k}_dress" in z else None)
+            elif finished:
                 _body_mannequin(f"Body{k:02d}", z[f"s{k}_body"], start, root, z[f"s{k}_garment"] if f"s{k}_garment" in z else None)
             else:
                 _body(f"Body{k:02d}", z[f"s{k}_body"], start, root)
             if s.get("slot", k) != k or "slot" in s:  # in a shared world: the body only during its own cut
                 _only_during(bpy.data.objects[f"Body{k:02d}"], start, s["frames"])
-        if finished and f"s{k}_objects" in z and len(z[f"s{k}_objects"]):
+        if finished and not evidence_only and f"s{k}_objects" in z and len(z[f"s{k}_objects"]):
             _objects(k, z[f"s{k}_objects"], z[f"s{k}_object_labels"], start, root)
         if finished and f"s{k}_extra" in z and len(z[f"s{k}_extra"]):
             _extra_people(k, z[f"s{k}_extra"], start, root)
         ends.append(start + s["frames"] - 1)
+    if finished and not evidence_only and "llm_set" in z:
+        _llm_set(json.loads(str(z["llm_set"])), bpy.data.objects.get("Shot00"))
     sc.frame_start, sc.frame_end = 1, max(ends)
     sc.camera = bpy.data.objects["Cam00"]
     bpy.ops.wm.save_as_mainfile(filepath=str(out))

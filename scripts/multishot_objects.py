@@ -25,6 +25,12 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 from multishot_people import project, ray  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from vrecon.scene.mannequin import mesh_silhouette  # noqa: E402
+from vrecon.scene.props import prop_mesh  # noqa: E402
+
+SW, SH = 320, 136  # shape check size
+
 HAND_PX = 40
 WRISTS = (20, 21)
 FRONT = 0.12  # m: a thing seen over the person is at least this far in front of the nearest body joint there
@@ -132,8 +138,25 @@ def main() -> int:
                 # sizes: one size per object (median), the place follows the frames
                 vis = arr[:, 6] > 0
                 arr[vis, 3:6] = np.median(arr[vis, 3:6], 0)
+                # shape: the kind's rough shape only where it matches the mask better than a plain box
+                score = {}
+                for shape in ("kind", "box"):
+                    v0, fc = prop_mesh(word if shape == "kind" else "box", arr[vis][0, 3:6])
+                    v0 = np.asarray(v0, float)
+                    ious = []
+                    for t in np.flatnonzero(vis)[:: max(1, int(vis.sum()) // 8)]:
+                        sil = mesh_silhouette(v0 + arr[t, :3], fc, cam[t], s["lens_35mm"], SW, SH)
+                        mm = masks[t] == oid
+                        mm = mm[np.arange(SH) * mm.shape[0] // SH][:, np.arange(SW) * mm.shape[1] // SW]
+                        ious.append((sil & mm).sum() / max((sil | mm).sum(), 1))
+                    score[shape] = float(np.mean(ious))
+                if score["box"] > score["kind"]:
+                    word_shape = "box"
+                else:
+                    word_shape = word
+                r[-1]["shape"] = {"used": word_shape, "iou_kind": score["kind"], "iou_box": score["box"]}
                 objs.append(arr)
-                labels.append(("held:" if hand is not None else "prop:") + word)
+                labels.append(("held:" if hand is not None else "prop:") + word + ("" if word_shape == word else "|box"))
                 hands.append((hand, dist))
         # one thing per hand: the one closest to the wrist; the others were the same thing or a misreading
         keep = [i for i, (hd, dd) in enumerate(hands) if hd is None or dd <= min(e for h2, e in hands if h2 == hd)]

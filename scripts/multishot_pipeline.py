@@ -8,6 +8,7 @@ Steps (all local; GPU ones run one at a time):
   sam       people masks per cut (SAM 3.1; long cuts at half size, 8 GB VRAM)  (gpu/observe/run_sam3.py)
   objects   things from one fixed word list, tracked per cut (SAM 3.1)          (gpu/observe/find_objects_sam3.py)
   gvhmr     body per cut where a person is seen whole enough (WSL)              (gpu/observe/run_gvhmr.py)
+  fab       body per frame where GVHMR cannot follow (close-ups), FAB-L        (gpu/observe/run_fab.py)
   4rc       camera path and points per cut                                     (4RC inference.py)
   joint     one 4RC run over keyframes of the cuts with a body                  (4RC inference.py)
   prep      per-cut cameras, bodies, points in metres                           (multishot_prep.py)
@@ -17,7 +18,13 @@ Steps (all local; GPU ones run one at a time):
   people    figures for people GVHMR did not follow; carve what blocks them     (multishot_people.py)
   place_objects  held things follow a wrist, loose ones stand on the floor      (multishot_objects.py)
   clothing  loose clothing below the waist from the masks                       (multishot_clothing.py)
+  gate      every per-frame placed thing held to what the world does (no teleports, still props, no flashes)
+                                                                                 (multishot_gate.py)
+  who       man / woman / child per cut by an image-reading model (fal; --fake without FAL_KEY) (multishot_who.py)
+  smpl      SMPL body surfaces fitted to every cut's joints (fab env)          (gpu/observe/fit_smpl.py)
+  dress     clothes on the SMPL bodies (cloth offset, long-coat skirt) by mask fit (multishot_dress.py)
   render    finished .blend + semantic control (24 fps, /32 sizes, 17n+5)      (multishot_render.py)
+  check     category labels vs the SAM masks, sense checks -> check_TAG.json    (multishot_check.py)
 Needs: the observe env (SAM 3.1), GVHMR in WSL (~/vrecon), the 4rc env and src under %LOCALAPPDATA%/vrecon.
 """
 
@@ -38,8 +45,10 @@ LOCAL = Path(os.environ.get("LOCALAPPDATA", ""))
 OBS = LOCAL / "vrecon/envs/observe/Scripts/python.exe"
 RC_PY = LOCAL / "vrecon/envs/4rc/Scripts/python.exe"
 RC_SRC = LOCAL / "vrecon/src/4RC"
-STEPS = ["cuts", "sam", "objects", "gvhmr", "4rc", "joint", "prep", "join", "closeups", "layout", "people",
-         "place_objects", "clothing", "render"]
+FAB_PY = LOCAL / "vrecon/envs/fab/Scripts/python.exe"
+FAB_SRC = LOCAL / "vrecon/src/FAB"
+STEPS = ["cuts", "sam", "objects", "gvhmr", "fab", "4rc", "joint", "prep", "join", "closeups", "layout", "people",
+         "place_objects", "clothing", "gate", "who", "smpl", "dress", "render", "check"]
 HALF_ABOVE = 120  # frames: longer cuts are masked at half size
 JOINT_N = 30  # 4RC's frame budget
 
@@ -110,6 +119,16 @@ def main() -> int:
                  f"python '{wsl_root}/gpu/observe/run_gvhmr.py' '{wsl_d}/{tag}_shot{k:02d}.mp4' '{wsl_d}/gvhmr_{tag}{k:02d}'"])
         if g.exists():
             bodies.append(k)
+    for k in K:  # close-ups: a body from each image (FAB), used for the pose shape (multishot_closeups.py)
+        m = d / f"{tag}_shot{k:02d}.masks.npz"
+        fo = d / f"fab_{tag}_shot{k:02d}.npz"
+        if FAB_PY.exists() and m.exists() and k not in bodies and need("fab", fo):
+            fr = d / f"rc_{tag}{k:02d}" / "frames"
+            if fr.exists():
+                # the lens is not known before 4RC: a 39 mm-equivalent guess (4RC's lens on film cuts so far); only the
+                # pose's shape is used downstream, which a wrong focal length changes little
+                focal = 39.0 / 36.0 * int(json.loads((d / f"shots_{tag}.json").read_text(encoding="utf-8")).get("width", 1280))
+                run([FAB_PY, ROOT / "gpu/observe/run_fab.py", fr, m, focal, fo], cwd=FAB_SRC, log=d / f"fab_{tag}{k:02d}.log")
     for k in K:
         o = d / f"rc_{tag}{k:02d}" / "4rc.npz"
         if need("4rc", o):
@@ -134,7 +153,7 @@ def main() -> int:
                 i += 1
         (jd / "frames.json").write_text(json.dumps(rows), encoding="utf-8")
         run([RC_PY, "inference.py", "--input", jd / "frames", "--save", jd / "4rc.npz"], cwd=RC_SRC, log=jd / "4rc.log")
-    n = {s: d / f"ms_{tag}_{s}.npz" for s in ("prep", "join", "closeups", "layout", "people", "objects", "clothing")}
+    n = {s: d / f"ms_{tag}_{s}.npz" for s in ("prep", "join", "closeups", "layout", "people", "objects", "clothing", "gate", "who", "smpl", "dress")}
     if need("prep", n["prep"]):
         run([PY, S("multishot_prep.py"), d, f"{tag}_shot", n["prep"]], log=d / "prep.log")
     last = n["prep"]
@@ -151,10 +170,28 @@ def main() -> int:
             run([PY, S("multishot_objects.py"), n["people"], d, tag, n["objects"]], log=d / "place_objects.log")
         if need("clothing", n["clothing"]):
             run([PY, S("multishot_clothing.py"), n["objects"], d, tag, n["clothing"]], log=d / "clothing.log")
-        last = n["clothing"]
+        if need("gate", n["gate"]):
+            run([PY, S("multishot_gate.py"), n["clothing"], n["gate"]], log=d / "gate.log")
+        last = n["gate"]
+        if FAB_PY.exists():
+            if need("who", n["who"]):
+                run([PY, ROOT / "scripts/multishot_who.py", n["gate"], d, tag, n["who"]] + ([] if os.environ.get("FAL_KEY") else ["--fake"]),
+                    log=d / "who.log")
+            fit_in = n["who"] if n["who"].exists() else n["gate"]
+            if need("smpl", n["smpl"]):
+                run([FAB_PY, ROOT / "gpu/observe/fit_smpl.py", fit_in, n["smpl"]], cwd=FAB_SRC, log=d / "smpl.log")
+            if n["smpl"].exists():
+                last = n["smpl"]
+            if n["smpl"].exists() and need("dress", n["dress"]):
+                run([PY, ROOT / "scripts/multishot_dress.py", n["smpl"], d, tag, n["dress"]], log=d / "dress.log")
+            if n["dress"].exists():
+                last = n["dress"]
     ctl = d / f"{tag}_control_sem.mp4"
     if need("render", ctl):
         run([PY, S("multishot_render.py"), last, d / f"{tag}_final.blend", ctl], log=d / "render.log")
+    chk = d / f"check_{tag}.json"
+    if need("check", chk) and (d / f"{tag}_final.blend").exists():
+        run([PY, S("multishot_check.py"), last, d / f"{tag}_final.blend", d, tag, chk], log=d / "check.log")
     print(json.dumps({"blend": str(d / f"{tag}_final.blend"), "control": str(ctl), "cuts": len(shots),
                       "bodies": bodies}))
     return 0

@@ -221,6 +221,67 @@ def regularize(raw: list, cams: np.ndarray):
     return quads, cats, cols, {"raw_planes": len(raw), "surfaces": len(quads), "pieces": rep}
 
 
+LOW_CELL = 0.3  # m grid for low walls
+LOW_TOP = (0.4, 1.8)  # m: a parapet / railing / low wall reaches this high from the floor
+LOW_CLEAR = 2.5  # m: nothing of it above this (else it is a building, handled by the planes)
+LOW_MIN_CELLS, LOW_ELONG = 4, 3.0
+
+
+def low_walls(P: np.ndarray, keep_out: np.ndarray, cams: np.ndarray, report: dict) -> list[np.ndarray]:
+    """Edges the plane fit smooths away: parapets, railings, low walls. Grid cells (LOW_CELL, ground plane) whose
+    points rise from near the floor to LOW_TOP and stop there; connected cells forming a long thin run become one
+    upright quad from the floor to their 90th-percentile height. Generic: only height and shape, no labels."""
+    if not len(P):
+        return []
+    near = np.linalg.norm(P[:, None, :2] - cams[None, ::max(len(cams) // 50, 1), :2], axis=2).min(1) < FAR
+    P = P[near]
+    ij = np.floor(P[:, :2] / LOW_CELL).astype(int)
+    cells: dict = {}
+    for key, z in zip(map(tuple, ij), P[:, 2]):
+        cells.setdefault(key, []).append(z)
+    ok = set()
+    for key, zs in cells.items():
+        zs = np.array(zs)
+        if len(zs) < 6 or zs.max() > LOW_CLEAR:
+            continue
+        top = np.percentile(zs, 90)
+        if zs.min() < 0.5 and LOW_TOP[0] <= top <= LOW_TOP[1] and top - zs.min() > 0.3:
+            ok.add(key)
+    if len(keep_out):
+        ko = keep_out[:, :2]
+        ok = {c for c in ok if np.min(np.linalg.norm(ko - (np.array(c) + 0.5) * LOW_CELL, axis=1)) > 0.8}
+    quads, seen = [], set()
+    for c in ok:
+        if c in seen:
+            continue
+        comp, todo = [], [c]
+        seen.add(c)
+        while todo:
+            a = todo.pop()
+            comp.append(a)
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    b = (a[0] + dx, a[1] + dy)
+                    if b in ok and b not in seen:
+                        seen.add(b)
+                        todo.append(b)
+        if len(comp) < LOW_MIN_CELLS:
+            continue
+        xy = (np.array(comp) + 0.5) * LOW_CELL
+        m = xy.mean(0)
+        u, sv, vt = np.linalg.svd(xy - m, full_matrices=False)
+        if sv[0] < LOW_ELONG * max(sv[1], 1e-6):
+            continue
+        ax = vt[0]
+        t = (xy - m) @ ax
+        h = float(np.percentile(np.concatenate([cells[tuple(c)] for c in comp]), 90))
+        a, b = m + ax * (t.min() - LOW_CELL / 2), m + ax * (t.max() + LOW_CELL / 2)
+        quads.append(np.array([[*a, 0], [*b, 0], [*b, h], [*a, h]]))
+    report["low_walls"] = [{"length_m": round(float(np.linalg.norm(q[1] - q[0])), 2), "height_m": round(float(q[2, 2]), 2)}
+                           for q in quads]
+    return quads
+
+
 def main() -> int:
     src, out = Path(sys.argv[1]), Path(sys.argv[2])
     z = dict(np.load(src))
@@ -265,6 +326,10 @@ def main() -> int:
     cams = np.concatenate([z[f"s{k}_cam"][:, :3, 3] for k, s_ in enumerate(info["shots"]) if s_.get("slot") == 0])
     q2, c2, l2, reg = regularize(raw, cams)
     Q += q2; QC += c2; QL += l2
+    allp = np.concatenate([z[f"s{k}_pts"] for k, s_ in enumerate(info["shots"]) if s_.get("slot") == 0
+                           and not s_.get("points_only_during_cut") and len(z[f"s{k}_pts"])] or [np.zeros((0, 3))])
+    for q in low_walls(allp, keep_out, cams, rep):
+        Q.append(q); QC.append("structure"); QL.append([0.5, 0.5, 0.5])
     rep["regularized"] = reg
     z["layout_quads"] = np.array(Q).reshape(-1, 4, 3)
     z["layout_quad_cat"] = np.array(QC)

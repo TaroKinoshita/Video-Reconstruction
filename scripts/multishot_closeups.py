@@ -10,6 +10,9 @@ in the wide cuts. Per close-up k (a cut still in its own slot):
   camera   searched: look-at joint x azimuth x elevation x distance (+ the close-up's own lens), scoring the
            overlap (IoU) of the drawn mannequin's silhouette (scene/mannequin.py) with the close-up mask at its middle frame; then
            the cut's own camera motion is kept relative to that pose
+  own pose a FAB body of the close-up itself (DIAG/fab_PREFIXNN.npz, gpu/observe/run_fab.py) replaces the
+           borrowed pose's shape when present (pose_onto); place and size stay the matched body's
+  arms     the borrowed pose's arms are refit to the close-up mask (refine_arms): arms move between cuts
   scale    the found distance / the 4RC depth of the mask: the close-up's own points and motion in metres
 The overlap is reported; below MIN_IOU the cut is left where it was (not placed).
 """
@@ -46,6 +49,95 @@ def hist(rgb: np.ndarray, mask: np.ndarray) -> np.ndarray:
 def silhouette(joints: np.ndarray, cam: np.ndarray, lens: float, w: int, h: int, mesh=None) -> np.ndarray:
     """the drawn mannequin's silhouette (scene/mannequin.py): the search fits the shape the render shows."""
     return mannequin_silhouette(joints, cam, lens, w, h, mesh=mesh)
+
+
+ARMS = ((16, 18, 20), (17, 19, 21))  # shoulder, elbow, wrist
+STEPS_DEG = (80, 40, 20, 10)
+
+
+def _rot(axis: np.ndarray, deg: float) -> np.ndarray:
+    a = axis / np.linalg.norm(axis)
+    th = np.radians(deg)
+    K = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
+    return np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * K @ K
+
+
+def _pose(body: np.ndarray, q: np.ndarray, cam: np.ndarray) -> np.ndarray:
+    """q [2 arms x (upper yaw, upper pitch, fore yaw, fore pitch)] in degrees, about the camera's up and right axes
+    (the moves the picture can show)."""
+    b = body.copy()
+    up, right = cam[:3, 1], cam[:3, 0]
+    for (sh, el, wr), (a1, a2, a3, a4) in zip(ARMS, q.reshape(2, 4)):
+        R = _rot(up, a1) @ _rot(right, a2)
+        b[el] = b[sh] + R @ (b[el] - b[sh])
+        b[wr] = b[sh] + R @ (b[wr] - b[sh])
+        R2 = _rot(up, a3) @ _rot(right, a4)
+        b[wr] = b[el] + R2 @ (b[wr] - b[el])
+    return b
+
+
+def refine_arms(body: np.ndarray, cam: np.ndarray, lens: float, mask: np.ndarray, hint) -> tuple[np.ndarray, dict]:
+    """A close-up borrows the pose of a wide cut, but arms move (a gun raised at the camera). Pattern search over
+    both arms' upper and fore rotations for the mannequin silhouette's IoU with the close-up mask, plus a bonus when
+    a wrist falls inside the box of an object seen in the cut (things are held in hands). Kept only if it helps."""
+    def score(b):
+        sil = silhouette(b, cam, lens, GW, GH)
+        iou = (sil & mask).sum() / max((sil | mask).sum(), 1)
+        bonus = 0.0
+        if hint is not None:
+            uv = _project(b[[20, 21]], cam, lens / 36.0 * GW, GW, GH)
+            x0, y0, x1, y1 = hint
+            c = np.array([(x0 + x1) / 2, (y0 + y1) / 2])
+            dist = np.linalg.norm(uv - c, axis=1).min() / np.hypot(GW, GH)  # nearest wrist to the thing, 0..~1
+            bonus = 0.2 * (1 - min(dist * 2, 1.0))  # a slope the search can follow, not only a hit
+        return iou + bonus, iou
+
+    q = np.zeros(8)
+    best, iou0 = score(body)
+    start = best
+    for step in STEPS_DEG:
+        improved = True
+        while improved:
+            improved = False
+            for i in range(8):
+                for sgn in (1, -1):
+                    c = q.copy()
+                    c[i] += sgn * step
+                    if abs(c[i]) > 160:
+                        continue
+                    sc, _ = score(_pose(body, c, cam))
+                    if sc > best + 1e-4:
+                        q, best, improved = c, sc, True
+    out = _pose(body, q, cam)
+    _, iou1 = score(out)
+    rep = {"angles_deg": q.tolist(), "score_before": float(start), "score_after": float(best), "iou_before": float(iou0),
+           "iou_after": float(iou1)}
+    ok = best > start + 0.01 and iou1 >= iou0 - 0.02  # the hand may move to the thing, the outline must not get worse
+    return (out, rep) if ok else (body, {**rep, "kept": False})
+
+
+def _project(p: np.ndarray, cam: np.ndarray, f: float, W: int, H: int) -> np.ndarray:
+    w2c = np.linalg.inv(cam)
+    pc = p @ w2c[:3, :3].T + w2c[:3, 3]
+    z = np.maximum(-pc[:, 2], 1e-3)
+    return np.stack([W / 2 + f * pc[:, 0] / z, H / 2 - f * pc[:, 1] / z], 1)
+
+
+TORSO = [0, 1, 2, 3, 6, 9, 12, 16, 17]
+
+
+def pose_onto(own: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """A pose seen in the close-up (its own camera frame, its own size) put where the matched person stands: the
+    torso joints are fitted to the matched body's torso (rotation, translation, one scale), then the whole pose
+    follows. The pose's shape (arms, head) is the close-up's, its place and size the wide cut's."""
+    a, b = own[TORSO], ref[TORSO]
+    ca, cb = a.mean(0), b.mean(0)
+    A, B = a - ca, b - cb
+    sc = np.sqrt((B ** 2).sum() / max((A ** 2).sum(), 1e-12))
+    U, _, Vt = np.linalg.svd(A.T @ B)
+    d = np.sign(np.linalg.det(U @ Vt))
+    R = (U @ np.diag([1, 1, d]) @ Vt).T
+    return (own - ca) @ R.T * sc + cb
 
 
 def look_at(eye: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -101,6 +193,14 @@ def main() -> int:
         a, b = shots[who]["source_frames"]
         tf = int(np.clip(a0 - a, 0, len(z[f"s{who}_body"]) - 1))
         body = z[f"s{who}_body"][tf]
+        fp = diag / f"fab_{prefix}{k:02d}.npz"
+        own_pose = False
+        if fp.exists():  # the close-up's own pose (gpu/observe/run_fab.py): its shape, the matched body's place and size
+            fz = np.load(fp)
+            if fz["ok"].any():
+                t_ok = np.flatnonzero(fz["ok"])
+                body = pose_onto(fz["joints"][t_ok[np.argmin(np.abs(t_ok - t))]], body)
+                own_pose = True
         small = mk[np.arange(GH) * mk.shape[0] // GH][:, np.arange(GW) * mk.shape[1] // GW]
         mesh = mannequin(body)
         S = np.zeros((22, len(AZ), len(EL), len(DIST)))
@@ -111,7 +211,16 @@ def main() -> int:
                         eye = body[j] + d * np.array([np.cos(el) * np.cos(az), np.cos(el) * np.sin(az), np.sin(el)])
                         sil = silhouette(body, look_at(eye, body[j]), s["lens_35mm"], GW, GH, mesh)
                         S[j, ia, ie, i_d] = (sil & small).sum() / max((sil | small).sum(), 1)
-        fits[k] = {"who": who, "sim": sim, "tf": tf, "body": body, "S": S, "t": t}
+        hint = None
+        op = diag / f"{prefix}{k:02d}.objects.npz"
+        if op.exists():
+            om = np.load(op)["masks"]
+            om = om[min(t, len(om) - 1)] > 0
+            if om.any():
+                ys, xs = np.nonzero(om[np.arange(GH) * om.shape[0] // GH][:, np.arange(GW) * om.shape[1] // GW])
+                if len(xs):
+                    hint = (xs.min(), ys.min(), xs.max() + 1, ys.max() + 1)
+        fits[k] = {"own_pose": own_pose, "who": who, "sim": sim, "tf": tf, "body": body, "S": S, "t": t, "small": small, "hint": hint}
     # neighbouring close-ups of the same person (only a short transition between them) are one set-up: they share
     # the viewing direction (azimuth, elevation); each keeps its own look-at joint and distance
     groups, cur = [], []
@@ -135,7 +244,7 @@ def main() -> int:
     for k, (j, az, el, d, iou, g) in choice.items():
         f = fits[k]
         t, body, who, tf = f["t"], f["body"], f["who"], f["tf"]
-        report[k] = {"who": who, "similarity": f["sim"], "body_frame_of_cut": tf, "iou": iou,
+        report[k] = {"own_pose": f["own_pose"], "who": who, "similarity": f["sim"], "body_frame_of_cut": tf, "iou": iou,
                      "iou_alone": float(f["S"].max()), "shares_view_with": [c for c in g if c != k],
                      "look_at_joint": j, "azimuth_deg": az, "elevation_deg": el, "distance_m": d}
         if iou < MIN_IOU:
@@ -159,7 +268,9 @@ def main() -> int:
             z[f"s{k}_pts"] = pr @ P[:3, :3].T + P[:3, 3]
         z[f"s{k}_cam"] = new
         shots[k]["point_radius"] = shots[k].get("point_radius", 0.03) * sc
-        z[f"s{k}_body"] = np.repeat(body[None], len(new), 0)  # the matched person, held, shown during this cut
+        body, pose_rep = refine_arms(body, new[t], shots[k]["lens_35mm"], f["small"], f["hint"])
+        report[k]["pose"] = pose_rep
+        z[f"s{k}_body"] = np.repeat(body[None], len(new), 0)  # the matched person, arms refit, shown during this cut
         shots[k]["points_only_during_cut"] = True  # its points are mostly the person up close: not a shared set
         shots[k]["slot"] = 0
         shots[k]["shared_fill_from"] = info["joined"].get("floor_from_cut", 0)

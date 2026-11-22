@@ -95,6 +95,13 @@ def silhouette(joints: np.ndarray, cam: np.ndarray, lens: float, w: int, h: int,
     import cv2
 
     v, faces = mesh if mesh is not None else mannequin(joints, garment)
+    return mesh_silhouette(np.asarray(v, float), faces, cam, lens, w, h, near)
+
+
+def mesh_silhouette(v: np.ndarray, faces, cam: np.ndarray, lens: float, w: int, h: int, near: float = 0.02) -> np.ndarray:
+    """any mesh (world vertices) filled as seen from a Blender-axes camera; faces clipped at the near plane."""
+    import cv2
+
     w2c = np.linalg.inv(cam)
     pc = v @ w2c[:3, :3].T + w2c[:3, 3]
     f = lens / 36.0 * w
@@ -120,3 +127,53 @@ def silhouette(joints: np.ndarray, cam: np.ndarray, lens: float, w: int, h: int,
         uv = np.clip(uv, -4 * w, 5 * w)
         cv2.fillPoly(sil, [np.round(uv * 4).astype(np.int32)], 1, shift=2)
     return sil.astype(bool)
+
+
+def vertex_normals(v: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """area-weighted vertex normals of a triangle mesh."""
+    f = np.asarray(faces)
+    fn = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
+    n = np.zeros_like(v)
+    for i in range(3):
+        np.add.at(n, f[:, i], fn)
+    return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-9)
+
+
+def dressed(v: np.ndarray, faces: np.ndarray, joints: np.ndarray, dress) -> tuple[np.ndarray, np.ndarray]:
+    """a body surface with clothes (scripts/multishot_dress.py): dress = [offset_m, hem_radius_m, length_share].
+    offset: the whole surface pushed out along its normals (suit, jacket, coat cloth over the body);
+    hem > 0: a flared skirt from the waist toward the ankles, open at the front (long coat; the legs stay visible)."""
+    v = np.asarray(v, float)
+    f = np.asarray(faces)
+    off, hem, length = (float(x) for x in dress)
+    if off > 0:
+        v = v + vertex_normals(v, f) * off
+    if hem > 0:
+        cv, cf = open_skirt(joints, length, 0.17 + off, hem)
+        f = np.concatenate([f, np.asarray(cf) + len(v)])
+        v = np.concatenate([v, cv])
+    return v, f
+
+
+OPEN_FRONT_DEG = 50.0  # half-angle of the open front of a long coat
+
+
+def open_skirt(joints: np.ndarray, length: float, r_top: float, r_hem: float, n: int = 20):
+    """a coat's lower part: a flared surface from the waist (spine joint 3) toward the ankles that wraps the sides and
+    the back and leaves the front open by +-OPEN_FRONT_DEG (SMPL joints: 1 = left hip, 2 = right hip, x left, y up,
+    so forward = left x up). Triangles."""
+    top = joints[3]
+    bottom = top + (0.5 * (joints[7] + joints[8]) - top) * length
+    axis = bottom - top
+    axis = axis / max(np.linalg.norm(axis), 1e-6)
+    left = joints[1] - joints[2]
+    left = left - (left @ axis) * axis
+    left = left / max(np.linalg.norm(left), 1e-6)
+    fwd = np.cross(left, -axis)  # -axis points up the body
+    a = np.radians(np.linspace(OPEN_FRONT_DEG, 360 - OPEN_FRONT_DEG, n))
+    ring = np.cos(a)[:, None] * fwd + np.sin(a)[:, None] * left
+    v = np.concatenate([top + ring * r_top, bottom + ring * r_hem])
+    f = []
+    for i in range(n - 1):
+        f += [(i, i + 1, n + i + 1), (i, n + i + 1, n + i)]
+    return v, f
