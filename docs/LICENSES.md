@@ -18,7 +18,7 @@ project's earlier notes and must be checked against the source before anything i
 | MegaSaM `a27b4e6` | comparison only | Apache-2.0 (code), CC-BY-4.0 (other materials) | checked 2026-11-18 (repository README) |
 | MoRe `f330a34` | comparison only, not used | no licence stated | from notes |
 | fal (GPT Image 2.5 Sunburst) | look checks, outside pictures (stopped for layout) | service terms | user's account |
-| Tennis clip (shipped with GVHMR) | case study | see GVHMR's terms | D8: may be sent to Claude, fal and the rented GPU for research; results not published |
+| Tennis clip (shipped with GVHMR) | case study | see GVHMR's terms | D8: may be sent to Claude, fal and the rented GPU for research; source frames and generated videos not published. Renders of our own 3D scenes (clay / colour clay) are shown in the README (user, 2026-11-23) |
 | Pexels stock clips | real-clip runs | Pexels licence | from notes |
 
 Before any result is shown outside: every "from notes" row checked at its source, D8 revisited for the tennis
