@@ -68,12 +68,23 @@ def main() -> int:
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     root = Path.cwd()  # GVHMR checkout
-    cmd = [sys.executable, "tools/demo/demo.py", f"--video={a.video}", f"--output_root={out}"]
+    # GVHMR's config parser (hydra) rejects non-ASCII paths: run it in an ASCII work folder and keep its results there
+    import hashlib
+    import shutil
+
+    work = Path.home() / "vrecon" / "work" / ("gvhmr_" + hashlib.sha1(str(out).encode("utf-8")).hexdigest()[:12])
+    work.mkdir(parents=True, exist_ok=True)
+    name = "clip"
+    vid = work / f"{name}{Path(a.video).suffix}"
+    shutil.copyfile(a.video, vid)
+    cmd = [sys.executable, "tools/demo/demo.py", f"--video={vid}", f"--output_root={work}"]
     if not a.moving_camera:
         cmd.append("-s")
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
-    name = Path(a.video).stem
-    res_path = out / name / "hmr4d_results.pt"
+    res_path = work / name / "hmr4d_results.pt"
+    if res_path.exists():
+        (out / name).mkdir(exist_ok=True)
+        shutil.copyfile(res_path, out / name / "hmr4d_results.pt")
     if not res_path.exists():  # the demo's final rendering may fail (pytorch3d without GPU); results come first
         print(proc.stdout[-3000:], proc.stderr[-3000:])
         return 1

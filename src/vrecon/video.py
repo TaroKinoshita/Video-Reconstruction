@@ -144,6 +144,42 @@ def detect_shots(path: str | Path, frames: int, threshold: float = 27.0, min_len
     return shots, params
 
 
+def frame_changes(frames) -> tuple[list[float], list[float], list[float]]:
+    """Per frame (vs the previous one): colour histogram change (0..2), mean pixel change (0..255), mean brightness."""
+    import cv2
+    import numpy as np
+
+    small = [cv2.resize(np.asarray(f), (160, 90), interpolation=cv2.INTER_AREA) for f in frames]
+    hists = []
+    for f in small:
+        h = cv2.calcHist([cv2.cvtColor(f, cv2.COLOR_RGB2HSV)], [0, 1], None, [16, 8], [0, 180, 0, 256]).ravel()
+        hists.append(h / max(h.sum(), 1.0))
+    hist_d, pix_d = [0.0], [0.0]
+    for i in range(1, len(small)):
+        hist_d.append(float(np.abs(hists[i] - hists[i - 1]).sum()))
+        pix_d.append(float(np.abs(small[i].astype(np.float32) - small[i - 1]).mean()))
+    return hist_d, pix_d, [float(f.mean()) for f in small]
+
+
+def detect_shots_fine(frames, hist_cut: float = 0.9, pix_cut: float = 25.0, transition_max: int = 3
+                      ) -> tuple[list[tuple[int, int]], dict]:
+    """Shot boundaries for edited footage (films): a cut where both the colour histogram and the pixels change at once
+    (one test alone fires on fast motion or on lighting); no minimum shot length, so cuts a few frames apart are kept.
+    A run of at most `transition_max` frames between two cuts (a white flash, a whip blur, a one-frame dissolve) is a
+    transition, not a shot: it is listed in params["transitions"] and still covered by the returned list, so the shots
+    tile the video. Returns ([start, end) per shot, params)."""
+    hist_d, pix_d, lum = frame_changes(frames)
+    n = len(hist_d)
+    cuts = [i for i in range(1, n) if hist_d[i] >= hist_cut and pix_d[i] >= pix_cut]
+    bounds = [0] + cuts + [n]
+    shots = [(a, b) for a, b in zip(bounds, bounds[1:]) if b > a]
+    transitions = [(a, b) for a, b in shots if b - a <= transition_max and 0 < a and b < n]
+    params = {"detector": "fine (histogram + pixel change)", "hist_cut": hist_cut, "pix_cut": pix_cut,
+              "transition_max": transition_max, "transitions": transitions,
+              "cut_scores": {int(i): [round(hist_d[i], 2), round(pix_d[i], 1)] for i in cuts}}
+    return shots, params
+
+
 STANDARD_RATES = (Fraction(24000, 1001), Fraction(24), Fraction(25), Fraction(30000, 1001), Fraction(30))
 
 

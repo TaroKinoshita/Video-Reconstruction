@@ -82,6 +82,10 @@ def main() -> int:
                     "(at least one track, quality and steadiness >= QUICK_OK): each try is a full tracking pass")
     ap.add_argument("--keep-raw", action="store_true", help="keep every raw track (no selection); for anchored "
                     "recuts, where the caller picks by the body part (scripts/props_recut.py)")
+    ap.add_argument("--min-present", type=float, default=0.5, help="a track counts when present in this share of frames "
+                    "(films: people who show briefly, e.g. 0.1)")
+    ap.add_argument("--max-area", type=float, default=0.25, help="a track counts when its mean area share is below this "
+                    "(guards against floor/wall leaks; films: close-ups fill the frame, e.g. 0.9)")
     ap.add_argument("--set", dest="sets", action="append", default=[], metavar="PROMPT=LABEL")
     args = ap.parse_args()
 
@@ -122,7 +126,7 @@ def main() -> int:
     for word in words:
         for pf in prompt_frames:
             found = segment(predictor, args.video, word, frames, pf)
-            candidates.append(((word, pf, found), score_candidate(found)))
+            candidates.append(((word, pf, found), score_candidate(found, args.min_present, args.max_area)))
             print(json.dumps({"movers": word, "prompt_frame": pf, **candidates[-1][1]}), flush=True)
             sc = candidates[-1][1]
             if args.quick and sc["tracks"] >= 1 and sc["quality"] >= QUICK_OK and sc["steadiness"] >= QUICK_OK:

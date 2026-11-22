@@ -41,13 +41,15 @@ def _split_fraction(m: np.ndarray) -> float:
     return hits / n if n else 0.0
 
 
-def score_candidate(found: dict[int, np.ndarray]) -> dict:
+def score_candidate(found: dict[int, np.ndarray], min_present: float = MIN_PRESENT, max_area: float = MAX_AREA) -> dict:
+    """min_present / max_area: film shots have people who show briefly and close-ups that fill the frame (lower
+    min_present, raise max_area for them)."""
     kept: list[int] = []
     for oid, m in sorted(found.items()):
         present = m.reshape(len(m), -1).any(1)
-        if present.mean() < MIN_PRESENT:
+        if present.mean() < min_present:
             continue
-        if m[present].mean() > MAX_AREA:
+        if m[present].mean() > max_area:
             continue
         if any(_iou(m, found[k]) > DUPLICATE_IOU for k in kept):
             continue
