@@ -9,18 +9,35 @@ looks plausible from the original camera but falls apart once the camera moves o
 
 ## Results: tennis case study
 
-All pictures below are renders of our own Blender scenes. Source frames and generated videos are not shown here
-(see [Data and licences](#data-and-licences)).
+Each GIF shows the input video, the 3D scene built from it (rendered in Blender), and the video generated from that
+scene. **Videos labelled "AI-generated" are machine-generated** (MiniMax-H3, reference-to-video: the clay render
+gives camera, layout and motion, crops of the input give the look; 1024×896, 30 steps, seed 43).
+
+### Camera edits: the scene is edited, the generator follows
+
+The scene stays the same; only the Blender camera changes. The generated video keeps the player's motion and the
+court from the new viewpoint.
+
+**Source camera**
+
+![input, 3D scene, generated: source camera](docs/media/tennis_v2v_source.gif)
+
+**Dolly + crane**
+
+![input, 3D scene, generated: dolly and crane](docs/media/tennis_v2v_dolly.gif)
+
+**Orbit 90°**
+
+![input, 3D scene, generated: orbit 90](docs/media/tennis_v2v_orbit90.gif)
 
 ### Measured scene vs. a bare LLM draft
 
-Same clip, same new camera path, same colour per object (people orange, held objects cyan). Left: the scene an LLM
-built from the video alone. Right: the scene this pipeline built (measured camera, court, and the player's body
-motion; the racket fitted to the observed racket in every frame).
+Same clip, same new camera path (orbit 45°), same references, prompt and seed. "bare LLM" is the scene an LLM built
+from the video alone; "pipeline" is the scene this project builds (measured camera, court and body motion; the
+racket fitted to the observed racket in every frame). Colours in the 3D renders are labels (people orange, held
+objects cyan).
 
-| Orbit 45° around the player | Dolly back |
-|---|---|
-| ![bare LLM vs pipeline, orbit](docs/media/tennis_bare_vs_system_orbit45.gif) | ![bare LLM vs pipeline, dolly](docs/media/tennis_bare_vs_system_dolly-60.gif) |
+![input, bare LLM 3D and generated, pipeline 3D and generated](docs/media/tennis_v2v_bare_vs_pipeline_orbit45.gif)
 
 Overlap with the observed masks in the original camera view (median over 6 checked frames, `runs/p5/tennis/*/qc.json`):
 
@@ -30,17 +47,10 @@ Overlap with the observed masks in the original camera view (median over 6 check
 | racket | 0.00 | **0.49** |
 | ball | 0.00 | **0.21** |
 
-After generation (MiniMax-H3, same references, prompt and seed), both versions look like real footage: the
-generator fills the empty space the bare draft leaves when the camera turns. The difference that survives is
-**motion**: with the measured body, the toss, the swing and the step match the source. The bare draft's mannequin
-drags the generated player into a different motion (stooping, running forward).
-
-### Camera edits on one scene
-
-The scene stays the same; only the Blender camera changes. These clay renders were the structure input for
-generation (`runs/pipeline/tennis_v2v`).
-
-![camera edits](docs/media/tennis_camera_edits.gif)
+Both generated videos look like real footage: the generator fills the empty space the bare draft leaves when the
+camera turns. The difference that survives generation is **motion**: with the measured body, the toss, the swing
+and the step follow the input. The bare draft's mannequin pulls the generated player into a different motion
+(stooping, running forward).
 
 ## How it works
 
@@ -100,6 +110,7 @@ Lower-level commands: `vrecon new | build | handoff | ingest | control | score |
 
 ## Data and licences
 
-Licences of the tools, weights and clips: [`docs/LICENSES.md`](docs/LICENSES.md). The tennis clip comes with GVHMR
-and is used for research only; its frames and the generated videos from it are not published. Body models (SMPL,
+Licences of the tools, weights and clips: [`docs/LICENSES.md`](docs/LICENSES.md). The tennis clip is the demo
+video shipped with GVHMR, shown here for non-commercial research only. Generated videos are machine-generated
+(MiniMax-H3 Community License; outputs are disclosed as such and not used to train other models). Body models (SMPL,
 SMPL-X) and several tools are non-commercial research licences.
