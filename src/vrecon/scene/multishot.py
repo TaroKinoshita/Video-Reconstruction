@@ -108,6 +108,14 @@ def _fill(k: int, s: dict, floor: np.ndarray, cam0: np.ndarray, parent) -> None:
         pl.parent = parent
 
 
+def _only_during(ob, start: int, frames: int) -> None:
+    """visible only in timeline frames [start, start + frames)."""
+    for f, hide in ((1, True), (start, False), (start + frames, True)):
+        ob.hide_render = ob.hide_viewport = hide
+        ob.keyframe_insert("hide_render", frame=f)
+        ob.keyframe_insert("hide_viewport", frame=f)
+
+
 def build(prep: Path, out: Path) -> dict:
     z = np.load(prep)
     info = json.loads(str(z["info"]))
@@ -140,16 +148,14 @@ def build(prep: Path, out: Path) -> dict:
         mk.camera = cam
         if len(z[f"s{k}_pts"]):
             _points(f"Background{k:02d}", z[f"s{k}_pts"], z[f"s{k}_col"], mat, root, s.get("point_radius", 0.03))
+            if s.get("points_only_during_cut"):
+                _only_during(bpy.data.objects[f"Background{k:02d}"], start, s["frames"])
         if not s.get("shared_fill_from"):
             _fill(k, s, z[f"s{k}_floor"], z[f"s{k}_cam"][0, :3, 3], root)
         if len(z[f"s{k}_body"]):
             _body(f"Body{k:02d}", z[f"s{k}_body"], start, root)
             if s.get("slot", k) != k or "slot" in s:  # in a shared world: the body only during its own cut
-                ob = bpy.data.objects[f"Body{k:02d}"]
-                for f, hide in ((1, True), (start, False), (start + s["frames"], True)):
-                    ob.hide_render = ob.hide_viewport = hide
-                    ob.keyframe_insert("hide_render", frame=f)
-                    ob.keyframe_insert("hide_viewport", frame=f)
+                _only_during(bpy.data.objects[f"Body{k:02d}"], start, s["frames"])
         ends.append(start + s["frames"] - 1)
     sc.frame_start, sc.frame_end = 1, max(ends)
     sc.camera = bpy.data.objects["Cam00"]
