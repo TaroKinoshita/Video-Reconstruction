@@ -24,7 +24,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
-from multishot_prep import CAM_CV_TO_BL, CV_TO_Z, angle_deg  # noqa: E402
+from multishot_prep import CAM_CV_TO_BL, CV_TO_Z, angle_deg, m2q, q2m, slerp  # noqa: E402
 from vrecon.analysis.from_4d import load_4rc  # noqa: E402
 
 
@@ -132,6 +132,37 @@ def main() -> int:
                 z[f"s{k}_{key}"] = z[f"s{k}_{key}"] + np.array([0, 0, dz])
             z[f"s{k}_cam"][:, 2, 3] += dz
             report["cuts"][k]["floor_shift_m"] = dz
+        ii, ff = idx[k]
+        cam = z[f"s{k}_cam"]
+        if len(ii) >= 4:
+            # the cut's own path and the joint keyframes disagree: bend the path through the keyframes (a rigid
+            # correction per keyframe, interpolated between them); the body rides with its camera
+            JRw = G @ JR[ii]
+            JCw = (JC[ii] * to_m) @ G.T + g + np.array([0, 0, report["cuts"][k].get("floor_shift_m", 0.0)])
+            n_t = len(cam)
+            dq, dt = [], []
+            for j, f in enumerate(ff):
+                D = JRw[j] @ cam[f, :3, :3].T
+                dq.append(m2q(D[None])[0])
+                dt.append(JCw[j] - D @ cam[f, :3, 3])
+            dq, dt = np.array(dq), np.array(dt)
+            before = float(np.linalg.norm(np.ptp(z[f"s{k}_body"][:, 0, :2], 0))) if len(z[f"s{k}_body"]) else None
+            newcam, newbody = cam.copy(), z[f"s{k}_body"].copy()
+            for t in range(n_t):
+                x = np.clip(t, ff[0], ff[-1])
+                a = min(int(np.searchsorted(ff, x, side="right")) - 1, len(ff) - 2)
+                u = (x - ff[a]) / max(ff[a + 1] - ff[a], 1)
+                D = q2m(slerp(dq[a], dq[a + 1], u)[None])[0]
+                d = (1 - u) * dt[a] + u * dt[a + 1]
+                newcam[t, :3, :3] = D @ cam[t, :3, :3]
+                newcam[t, :3, 3] = D @ cam[t, :3, 3] + d
+                if t < len(newbody):
+                    newbody[t] = newbody[t] @ D.T + d
+            after = float(np.linalg.norm(np.ptp(newbody[:, 0, :2], 0))) if len(newbody) else None
+            report["cuts"][k]["pelvis_spread_m"] = {"own_path": before, "bent_path": after}
+            if after is not None and before is not None and after < 0.9 * before:  # keep the bend only when the person
+                z[f"s{k}_cam"], z[f"s{k}_body"] = newcam, newbody  # stays more in place (a still subject test)
+                report["cuts"][k]["path_bent"] = True
         info["shots"][k]["slot"] = 0
         if k != report.get("floor_from_cut", cuts[0]):
             info["shots"][k]["shared_fill_from"] = report.get("floor_from_cut", cuts[0])
