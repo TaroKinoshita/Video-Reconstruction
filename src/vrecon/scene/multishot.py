@@ -123,7 +123,7 @@ def build(prep: Path, out: Path) -> dict:
         start = a + 1
         root = bpy.data.objects.new(f"Shot{k:02d}", None)
         bpy.context.collection.objects.link(root)
-        root.location = (k * SPACING, 0, 0)
+        root.location = (s.get("slot", k) * SPACING, 0, 0)  # joined cuts share slot 0
         cd = bpy.data.cameras.new(f"Cam{k:02d}")
         cd.sensor_fit, cd.sensor_width, cd.lens = "HORIZONTAL", 36.0, s["lens_35mm"]
         cam = bpy.data.objects.new(f"Cam{k:02d}", cd)
@@ -140,9 +140,16 @@ def build(prep: Path, out: Path) -> dict:
         mk.camera = cam
         if len(z[f"s{k}_pts"]):
             _points(f"Background{k:02d}", z[f"s{k}_pts"], z[f"s{k}_col"], mat, root, s.get("point_radius", 0.03))
-        _fill(k, s, z[f"s{k}_floor"], z[f"s{k}_cam"][0, :3, 3], root)
+        if not s.get("shared_fill_from"):
+            _fill(k, s, z[f"s{k}_floor"], z[f"s{k}_cam"][0, :3, 3], root)
         if len(z[f"s{k}_body"]):
             _body(f"Body{k:02d}", z[f"s{k}_body"], start, root)
+            if s.get("slot", k) != k or "slot" in s:  # in a shared world: the body only during its own cut
+                ob = bpy.data.objects[f"Body{k:02d}"]
+                for f, hide in ((1, True), (start, False), (start + s["frames"], True)):
+                    ob.hide_render = ob.hide_viewport = hide
+                    ob.keyframe_insert("hide_render", frame=f)
+                    ob.keyframe_insert("hide_viewport", frame=f)
         ends.append(start + s["frames"] - 1)
     sc.frame_start, sc.frame_end = 1, max(ends)
     sc.camera = bpy.data.objects["Cam00"]
@@ -164,3 +171,28 @@ def render_check(out_dir: Path, every: int = 12) -> int:
         sc.render.filepath = str(out_dir / f"{f:04d}.png")
         bpy.ops.render.render(write_still=True)
     return len(frames)
+
+
+def render_top(path: Path, frame: int, extent: float = 16.0) -> None:
+    """Orthographic view from above of the shared world (slot 0), every body shown, for checking the layout."""
+    sc = bpy.context.scene
+    for ob in bpy.data.objects:
+        if ob.name.startswith("Backdrop"):
+            ob.hide_render = True
+        if ob.name.startswith("Body") and ob.animation_data:
+            ob.animation_data.action = None
+            ob.hide_render = False
+    cd = bpy.data.cameras.new("Top")
+    cd.type, cd.ortho_scale = "ORTHO", extent
+    top = bpy.data.objects.new("Top", cd)
+    bpy.context.collection.objects.link(top)
+    top.location = (0, 0, 30)
+    sc.camera = top
+    for m in list(sc.timeline_markers):
+        sc.timeline_markers.remove(m)
+    sc.render.engine = "BLENDER_EEVEE"
+    sc.render.resolution_x = sc.render.resolution_y = 900
+    sc.render.resolution_percentage = 100
+    sc.frame_set(frame)
+    sc.render.filepath = str(path)
+    bpy.ops.render.render(write_still=True)
