@@ -39,7 +39,9 @@ def evidence_json(z, info) -> dict:
                      "looking_first_mid_last": [np.round(-c[i, :3, 2], 2).tolist() for i in (0, len(c) // 2, -1)]})
         b = z[f"s{k}_body"]
         if len(b):
-            people.append({"name": f"Body{k:02d}", "cut": k, "pelvis_first_mid_last": [np.round(b[i, 0], 2).tolist() for i in (0, len(b) // 2, -1)],
+            rig = f"Rig_{z[f's{k}_person']}" if f"s{k}_person" in z and f"person_{z[f's{k}_person']}_rest_verts" in z else None
+            people.append({"name": f"Body_{z[f's{k}_person']}" if rig else f"Body{k:02d}", "rig": rig,
+                           "person": str(z[f"s{k}_person"]) if rig else None, "cut": k, "pelvis_first_mid_last": [np.round(b[i, 0], 2).tolist() for i in (0, len(b) // 2, -1)],
                            "height_m": round(float(b[len(b) // 2, :, 2].max() - b[len(b) // 2, :, 2].min()), 2)})
     planes = [{"category": str(cat), "corners": np.round(q, 2).tolist()} for q, cat in zip(z["layout_quads"], z["layout_quad_cat"])] if "layout_quads" in z else []
     objs = []
@@ -72,6 +74,9 @@ def main() -> int:
         (out / "evidence.json").write_text(json.dumps(evidence_json(z, info), indent=1), encoding="utf-8")
     bpy.ops.wm.open_mainfile(filepath=str(base.resolve()))
     errors = []
+    agent_api.CONTEXT.update({"diag": diag.resolve(), "tag": tag,
+                              "starts": {k: s["source_frames"][0] + 1 for k, s in enumerate(info["shots"])},
+                              "frames": {k: s["frames"] for k, s in enumerate(info["shots"])}})
     ns = dict(agent_api.API)
     ns["EVIDENCE"] = json.loads((out / "evidence.json").read_text(encoding="utf-8"))
     try:
@@ -127,10 +132,11 @@ def main() -> int:
             where = f"cut {f['cut']}: " if "cut" in f else ""
             issues.append(f"check: {where}{f['what']}" + (f" ({nums})" if nums else ""))
         cuts = {k: {q: c.get(q) for q in ("score", "empty", "person_blocked", "object_blocked")} for k, c in r["cuts"].items()}
-    rep = {"errors": errors, "issues": issues, "parts": len(pb), "hidden_people": agent_api.HIDDEN_PEOPLE, "cuts": cuts}
+    rep = {"errors": errors, "log": [m for m in agent_api.LOG if m.startswith("fit_held")], "issues": issues, "parts": len(pb), "hidden_people": agent_api.HIDDEN_PEOPLE, "cuts": cuts}
     (out / "report.json").write_text(json.dumps(rep, indent=1), encoding="utf-8")
     md = ["# report", f"parts: {len(pb)}", "", "## script errors", *(errors or ["none"]), "", "## issues (fix, or say why not)",
-          *([f"- {i}" for i in issues] or ["none"]), "", "## per cut (score: person/object match minus empty share)",
+          *([f"- {i}" for i in issues] or ["none"]), "", "## tool results",
+          *([f"- {m}" for m in agent_api.LOG if m.startswith("fit_held")] or ["none"]), "", "## per cut (score: person/object match minus empty share)",
           *[f"- cut {k}: " + ", ".join(f"{q} {v:.2f}" for q, v in c.items() if isinstance(v, (int, float))) for k, c in cuts.items()],
           "", "## pictures: look/cut<K>.jpg (film left, scene right)"]
     (out / "report.md").write_text("\n".join(md), encoding="utf-8")

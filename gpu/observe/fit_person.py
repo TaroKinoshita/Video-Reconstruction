@@ -78,6 +78,44 @@ def own_motion(J3: np.ndarray, fab_path: Path) -> tuple[np.ndarray, str]:
     return out, f"fab (frame {int(best)} anchors the place)"
 
 
+ALIGN_CLOSEUP = False  # tried on Matrix A: cut 2 held-out 62 -> 111 px with it, so off (kept for later tests)
+MIN_POINTS = 15  # a cut with fewer confident keypoints keeps its current body and is marked "too little evidence"
+
+
+def align_closeup(J3: np.ndarray, cam: np.ndarray, lens: float, kp: np.ndarray, w: int, h: int) -> np.ndarray:
+    """a close-up's start: slide the body across the picture (at its current depth) so that its shoulders and head
+    land on the keypoints' shoulders and face; per frame, then a running median over frames. The depth stays (the
+    picture cannot tell it, docs/PLAN_v4.md: camera distance stays open)."""
+    f = lens / 36.0 * w
+    T = min(len(J3), len(cam), len(kp))
+    shift = np.full((T, 3), np.nan)
+    for t in range(T):
+        w2c = np.linalg.inv(cam[t])
+        src, dst = [], []
+        for sj, cj in ((16, 5), (17, 6), (15, 0), (15, 1), (15, 2), (18, 7), (19, 8)):
+            if kp[t, cj, 2] >= KP_CONF:
+                src.append(J3[t, sj])
+                dst.append(kp[t, cj, :2])
+        if not src:
+            continue
+        pc = np.array(src) @ w2c[:3, :3].T + w2c[:3, 3]
+        d = np.median(-pc[:, 2])
+        if d <= 0.05:
+            continue
+        uv = np.stack([w / 2 + f * pc[:, 0] / -pc[:, 2], h / 2 - f * pc[:, 1] / -pc[:, 2]], 1)
+        du, dv = np.median(np.array(dst) - uv, 0)
+        shift[t] = cam[t, :3, :3] @ np.array([du * d / f, -dv * d / f, 0.0])
+    ok = np.isfinite(shift[:, 0])
+    if not ok.any():
+        return J3
+    idx = np.flatnonzero(ok)
+    shift = shift[idx[np.abs(np.arange(T)[:, None] - idx[None]).argmin(1)]]
+    sm = np.array([np.median(shift[max(0, t - 2):t + 3], 0) for t in range(T)])
+    out = J3.copy()
+    out[:T] += sm[:, None]
+    return out
+
+
 def matrix_to_axis_angle(R: torch.Tensor) -> torch.Tensor:
     cos = ((R[:, 0, 0] + R[:, 1, 1] + R[:, 2, 2]) - 1) / 2
     ang = torch.arccos(cos.clamp(-1 + 1e-6, 1 - 1e-6))
@@ -187,10 +225,14 @@ def main() -> int:
     for k in cuts:
         kp = np.load(a.diag / f"kp2d_{a.tag}{k:02d}.npz")["kp2d"]
         J3, start = own_motion(z[f"s{k}_body"], a.diag / f"fab_{a.tag}_shot{k:02d}.npz")
+        if ALIGN_CLOSEUP and info["shots"][k].get("points_only_during_cut"):
+            J3 = align_closeup(J3, z[f"s{k}_cam"], info["shots"][k]["lens_35mm"], kp, int(z["W"]), int(z["H"]))
+            start += ", slid onto the face and shoulders"
         c = Cut(k, J3, z[f"s{k}_cam"], info["shots"][k]["lens_35mm"], kp, int(z["W"]), int(z["H"]), dev)
         if start == "scene" and c.start_from_gvhmr(a.diag / f"gvhmr_{a.tag}{k:02d}" / "gvhmr_skeleton.npz"):
             start = "gvhmr joint rotations"
         rep_start[k] = start
+        c.Jcur = torch.tensor(z[f"s{k}_body"][: c.T], dtype=torch.float32, device=dev)  # the "current" candidate
         C.append(c)
     kw = torch.tensor(KP_W, device=dev)
     betas = torch.zeros(1, 10, device=dev, requires_grad=True)
@@ -212,8 +254,8 @@ def main() -> int:
         for c in C:  # before: the scene's current joints (faces: the head joint stands in)
             P0 = torch.zeros(c.T, 17, 3, device=dev)
             for sj, cc in J2C:
-                P0[:, cc] = c.J3[:, sj]
-            P0[:, :5] = c.J3[:, 15:16]
+                P0[:, cc] = c.Jcur[:, sj]
+            P0[:, :5] = c.Jcur[:, 15:16]
             rep["cuts"][c.k] = {"before_heldout": c.px_error(P0, ~c.fit_mask), "before_fit": c.px_error(P0, c.fit_mask)}
     params = [betas] + [p for c in C for p in (c.go, c.bp, c.tr)]
     # stage 1: to the current 3D joints (a start); stage 2: to the picture
@@ -263,7 +305,10 @@ def main() -> int:
                 else:
                     verdict[q] = "same"
             r["parts"] = verdict
-            accept = b["all"] is not None and f["all"] is not None and f["all"] < b["all"]
+            enough = int((c.kp[..., 2] > 0).sum()) >= MIN_POINTS
+            accept = enough and b["all"] is not None and f["all"] is not None and f["all"] < b["all"]
+            if not enough:
+                r["evidence"] = "too little: the picture shows too few body points to choose (current body kept)"
             r["choice"] = "body" if accept else "current"
             # what the picture does not show stays an open question for later steps
             seen = (c.kp[..., 2] > 0).float().mean(0).cpu().numpy()

@@ -25,7 +25,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 PY = sys.executable
 FAB_PY = Path(os.environ.get("LOCALAPPDATA", "")) / "vrecon/envs/fab/Scripts/python.exe"
-MIN_PAIRS = 30
+MIN_PAIRS = 20
 GAIN = 0.9  # a refit camera is kept when its check error is below GAIN x the current one
 
 

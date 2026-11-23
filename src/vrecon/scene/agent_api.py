@@ -14,6 +14,11 @@ World: metres, Z up, the floor is z = 0; the same world for every cut. Names mus
     visible(name, start, end) only shown in timeline frames [start, end]
     remove(name)
     hide_person(name, reason)  a measured person the agent judges wrong (must give a reason)
+    attach(name, joint, person=None, offset=(0, 0, 0), rot_deg=(0, 0, 0))
+        a held thing goes with a person's joint in every cut (the person's rig, Rig_<id>; joint = an SMPL joint name
+        such as right_wrist). offset / rot_deg are in the joint's frame: SMPL rest axes (x = the person's left, y = up,
+        z = forward); in the rest pose the right arm points to -x, the left to +x. A gun (barrel +x, grip -z as made by
+        prop) in the right hand pointing along the forearm: rot_deg=(-90, 180, 0); in the left hand: (-90, 0, 0).
 
 Measured cameras, people and the floor cannot be changed: they are the evidence.
 """
@@ -153,7 +158,114 @@ def hide_person(name, reason):
     HIDDEN_PEOPLE[name] = str(reason)
 
 
-API = {"part": part, "prop": prop, "animate": animate, "visible": visible, "remove": remove,
+def attach(name, joint, person=None, offset=(0, 0, 0), rot_deg=(0, 0, 0)):
+    ob = _get(name)
+    rigs = [o for o in bpy.data.objects if o.type == "ARMATURE" and o.name.startswith("Rig_")]
+    rig = bpy.data.objects.get(f"Rig_{person}") if person else (rigs[0] if len(rigs) == 1 else None)
+    if rig is None:
+        raise ValueError(f"no rig for person {person!r}; rigs: {[r.name for r in rigs]}")
+    if joint not in rig.data.bones:
+        raise ValueError(f"no joint {joint!r}; joints: {[b.name for b in rig.data.bones]}")
+    ob.parent = rig
+    ob.parent_type = "BONE"
+    ob.parent_bone = joint
+    bone = rig.data.bones[joint]
+    # a bone child sits at the bone's tail; the offset is meant from the joint (the head), so step back along the bone
+    ob.location = (float(offset[0]), float(offset[1]) - bone.length, float(offset[2]))
+    ob.rotation_euler = tuple(math.radians(float(a)) for a in rot_deg)
+    ob["vrecon_attached"] = f"{rig.name}:{joint}"
+    LOG.append(f"attach {name} -> {rig.name}:{joint}")
+    return name
+
+
+CONTEXT: dict = {}  # set by scripts/v3_run.py: diag, tag, starts {cut: timeline start}, frames {cut: n}
+
+
+def _rotations() -> list:
+    from mathutils import Euler
+
+    out = []
+    for a in (0, 90, 180, 270):
+        for b in (0, 90, 180, 270):
+            for c in (0, 90, 180, 270):
+                m = Euler((math.radians(a), math.radians(b), math.radians(c))).to_matrix()
+                if not any(np.allclose(np.array(m), np.array(o[1]), atol=1e-4) for o in out):
+                    out.append(((a, b, c), m))
+    return out
+
+
+def fit_held(name, cut, word="gun", step=2):
+    """an attached held thing: choose its turn (24 right-angle turns) and how far along the joint it sits, so that its
+    outline matches the observed masks of `word` (SAM 3.1, TAG_shotNN.objects.npz) over the cut. Returns a sentence
+    with the overlap before and after; the change is kept only if the overlap grows."""
+    import cv2
+    from mathutils import Matrix
+
+    ob = _get(name)
+    if ob.parent_type != "BONE":
+        raise ValueError(f"{name!r} is not attached to a joint (attach it first)")
+    op = CONTEXT["diag"] / f"{CONTEXT['tag']}_shot{int(cut):02d}.objects.npz"
+    if not op.exists():
+        return f"fit_held {name}: no object masks for cut {cut}"
+    oz = np.load(op, allow_pickle=True)
+    import json as _json
+
+    ids = [int(i) for i, w in _json.loads(str(oz["id_map"])).items() if word in w]
+    masks = np.isin(oz["masks"], ids)
+    h, w = masks.shape[1:]
+    camob = bpy.data.objects[f"Cam{int(cut):02d}"]
+    f = camob.data.lens / camob.data.sensor_width * w
+    sc = bpy.context.scene
+    start = CONTEXT["starts"][int(cut)]
+    verts = np.array([v.co[:] for v in ob.data.vertices])
+    frames = []
+    for t in range(0, min(len(masks), CONTEXT["frames"][int(cut)]), step):
+        if not masks[t].any():
+            continue
+        sc.frame_set(start + t)
+        if ob.hide_render:
+            continue
+        base = ob.matrix_world @ ob.matrix_basis.inverted()
+        frames.append((t, np.array(base), np.array(camob.matrix_world.inverted())))
+    if not frames:
+        return f"fit_held {name}: the cut shows no {word} while {name} is visible"
+
+    def score(loc, rot):
+        L = np.array(Matrix.Translation(loc) @ rot.to_4x4())
+        ious = []
+        for t, base, w2c in frames:
+            P = (w2c @ base @ L)[:3]
+            pc = verts @ P[:, :3].T + P[:, 3]
+            if (pc[:, 2] > -0.02).any():
+                ious.append(0.0)
+                continue
+            uv = np.stack([w / 2 + f * pc[:, 0] / -pc[:, 2], h / 2 - f * pc[:, 1] / -pc[:, 2]], 1)
+            im = np.zeros((h, w), np.uint8)
+            cv2.fillConvexPoly(im, cv2.convexHull(np.round(uv).astype(np.int32)), 1)
+            m = masks[t]
+            u = (im.astype(bool) | m).sum()
+            ious.append((im.astype(bool) & m).sum() / u if u else 0.0)
+        return float(np.mean(ious))
+
+    loc0, rot0 = ob.location.copy(), ob.rotation_euler.to_matrix()
+    before = score(loc0, rot0)
+    best = (before, loc0, ob.rotation_euler.copy())
+    from mathutils import Euler, Vector
+
+    for d in (-0.06, -0.03, 0.0, 0.03, 0.06):
+        for ang, m in _rotations():
+            loc = Vector((loc0.x + (d if loc0.x >= 0 else -d), loc0.y, loc0.z))
+            sco = score(loc, m)
+            if sco > best[0]:
+                best = (sco, loc, Euler([math.radians(a) for a in ang]))
+    if best[0] > before:
+        ob.location, ob.rotation_euler = best[1], best[2]
+    msg = f"fit_held {name} cut {cut}: outline overlap {before:.2f} -> {max(before, best[0]):.2f} over {len(frames)} frames"
+    LOG.append(msg)
+    return msg
+
+
+API = {"part": part, "attach": attach, "fit_held": fit_held, "prop": prop, "animate": animate, "visible": visible, "remove": remove,
        "hide_person": hide_person}
 
 
