@@ -88,7 +88,7 @@ SEMANTIC = {"person": (0.95, 0.55, 0.15), "ground": (0.45, 0.6, 0.4), "structure
             "sky": (0.8, 0.88, 0.95), "held": (0.15, 0.85, 0.95), "prop": (0.9, 0.85, 0.3)}
 
 
-from .mannequin import dressed, frustum as _frustum, mannequin as _mannequin  # noqa: E402  (pure numpy, also used by the close-up search)
+from .mannequin import dressed, frustum as _frustum, mannequin as _mannequin, open_skirt  # noqa: E402  (pure numpy, also used by the close-up search)
 
 
 def _body_mannequin(name: str, joints: np.ndarray, start: int, parent, garment=None) -> None:
@@ -130,6 +130,156 @@ def _body_smpl(name: str, verts: np.ndarray, faces: np.ndarray, start: int, pare
             kb.value = val
             kb.keyframe_insert("value", frame=start + f)
     _label(ob, "person")
+
+
+SMPL_JOINTS = ["pelvis", "left_hip", "right_hip", "spine1", "left_knee", "right_knee", "spine2", "left_ankle",
+               "right_ankle", "spine3", "left_foot", "right_foot", "neck", "left_collar", "right_collar", "head",
+               "left_shoulder", "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist",
+               "left_hand", "right_hand"]
+
+
+def _aa_to_quat(aa: np.ndarray) -> np.ndarray:
+    """axis-angle [..., 3] -> quaternion (w, x, y, z) [..., 4]."""
+    th = np.linalg.norm(aa, axis=-1, keepdims=True)
+    ax = aa / np.maximum(th, 1e-12)
+    return np.concatenate([np.cos(th / 2), ax * np.sin(th / 2)], -1)
+
+
+def _person_rig(ident: str, z, cuts: list[tuple[int, int]], parent) -> None:
+    """one person = one SMPL rig for all the cuts it appears in (gpu/observe/fit_person.py: one shared body).
+    Rig_<id>: an armature whose bones are SMPL's 24 joints at the person's rest joints, every bone along +Y with no
+    roll (rest orientation = identity, so a pose bone's rotation is SMPL's local joint rotation as it is), the
+    pelvis bone's location the root shift. Body_<id>: the rest surface (with the measured cloth layer and open coat,
+    scripts/multishot_dress.py) skinned with SMPL's weights. One action holds the motion of every cut at its
+    timeline frames; the body is shown only during those cuts. Editing the rest body or a bone changes every cut."""
+    rest_v = z[f"person_{ident}_rest_verts"].astype(float)
+    rest_j = z[f"person_{ident}_rest_joints"].astype(float)
+    W = z[f"person_{ident}_weights"]
+    parents = z["smpl_parents"]
+    faces = np.asarray(z["smpl_faces"])
+    dress = [z[f"s{k}_dress"] for k, _ in cuts if f"s{k}_dress" in z]
+    off = float(np.median([d[0] for d in dress])) if dress else 0.0
+    hem = max([float(d[1]) for d in dress], default=0.0)
+    length = max([float(d[2]) for d in dress if d[1] > 0], default=0.0)
+    v, f = dressed(rest_v, faces, rest_j[:22], (off, 0.0, 0.0))  # the coat's skirt is cloth (_coat_cloth)
+    weights = np.asarray(W, np.float32)
+    arm = bpy.data.armatures.new(f"Rig_{ident}")
+    rig = bpy.data.objects.new(f"Rig_{ident}", arm)
+    bpy.context.collection.objects.link(rig)
+    rig.parent = parent
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="EDIT")
+    bones = []
+    for i, name in enumerate(SMPL_JOINTS):
+        b = arm.edit_bones.new(name)
+        b.head = tuple(rest_j[i])
+        b.tail = tuple(rest_j[i] + np.array([0, 0.05, 0]))
+        b.roll = 0.0
+        if parents[i] >= 0:
+            b.parent = bones[parents[i]]
+        bones.append(b)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    me = bpy.data.meshes.new(f"Body_{ident}")
+    me.from_pydata(v.tolist(), [], np.asarray(f).tolist())
+    me.shade_smooth()
+    ob = bpy.data.objects.new(f"Body_{ident}", me)
+    bpy.context.collection.objects.link(ob)
+    ob.parent = rig
+    for i, name in enumerate(SMPL_JOINTS):
+        g = ob.vertex_groups.new(name=name)
+        idx = np.flatnonzero(weights[:, i] > 1e-4)
+        for wv in np.unique(np.round(weights[idx, i], 3)):
+            g.add(idx[np.round(weights[idx, i], 3) == wv].tolist(), float(wv), "REPLACE")
+    ob.modifiers.new("rig", "ARMATURE").object = rig
+    _label(ob, "person")
+    ob["vrecon_person"] = ident
+    rig["vrecon_person"] = ident
+    for pb in rig.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+    shown = []
+    for k, start in cuts:
+        q = _aa_to_quat(z[f"s{k}_pose"].reshape(-1, 24, 3))
+        tr = z[f"s{k}_transl"]
+        for t in range(len(q)):
+            for i, pb in enumerate(rig.pose.bones):
+                pb.rotation_quaternion = tuple(q[t, SMPL_JOINTS.index(pb.name)])
+                pb.keyframe_insert("rotation_quaternion", frame=start + t)
+            root = rig.pose.bones["pelvis"]
+            root.location = tuple(tr[t])  # SMPL rotates about the rest pelvis joint, then adds transl
+            root.keyframe_insert("location", frame=start + t)
+        shown.append((start, start + len(q) - 1))
+    if hem > 0:
+        ob.modifiers.new("collision", "COLLISION")
+        ob.collision.thickness_outer = 0.015
+        for k, start in cuts:
+            _coat_cloth(f"Coat_{ident}_cut{k:02d}", rest_j, rig, ob, start, len(z[f"s{k}_pose"]), length, 0.17 + off, hem)
+    for o in (ob,):
+        o.hide_render = o.hide_viewport = True
+        o.keyframe_insert("hide_render", frame=1)
+        o.keyframe_insert("hide_viewport", frame=1)
+        for a0, a1 in sorted(shown):
+            for fr, hide in ((a0, False), (a1 + 1, True)):
+                o.hide_render = o.hide_viewport = hide
+                o.keyframe_insert("hide_render", frame=fr)
+                o.keyframe_insert("hide_viewport", frame=fr)
+
+
+COAT_RINGS, COAT_SEGMENTS = 14, 28
+
+
+def _coat_cloth(name, rest_j, rig, body, start, frames, length, r_top, r_hem) -> None:
+    """a long coat's skirt as Blender cloth, one per cut (a cut change moves the body at once, which a single cloth
+    run could not follow): an open-front flared surface (scene/mannequin.open_skirt) at the rest pose, its waist ring
+    pinned and carried by the rig (armature modifier before the cloth), the rest hanging and swinging with the body,
+    colliding with it. The simulation covers the cut's frames only and is baked into the .blend; the coat is shown
+    only during the cut."""
+    v, f = open_skirt(rest_j[:22], length, r_top, r_hem, COAT_SEGMENTS, COAT_RINGS)
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(v.tolist(), [], [tuple(int(i) for i in q) for q in f])
+    me.shade_smooth()
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(ob)
+    ob.parent = rig
+    n = COAT_SEGMENTS
+    rows = np.arange(len(v)) // n
+    sp = ob.vertex_groups.new(name="spine1")  # the waist follows the spine, the hem its side's hip a little
+    sp.add(np.flatnonzero(rows == 0).tolist(), 1.0, "REPLACE")
+    pin = ob.vertex_groups.new(name="pin")
+    pin.add(np.flatnonzero(rows == 0).tolist(), 1.0, "REPLACE")
+    pin.add(np.flatnonzero(rows == 1).tolist(), 0.6, "REPLACE")
+    hips = (ob.vertex_groups.new(name="left_hip"), ob.vertex_groups.new(name="right_hip"))
+    side = (v - rest_j[0]) @ (rest_j[1] - rest_j[2]) > 0
+    for r in range(1, COAT_RINGS + 1):
+        u = r / COAT_RINGS
+        idx = np.flatnonzero(rows == r)
+        sp.add(idx.tolist(), 1.0 - 0.5 * u, "REPLACE")
+        hips[0].add(idx[side[idx]].tolist(), 0.5 * u, "REPLACE")
+        hips[1].add(idx[~side[idx]].tolist(), 0.5 * u, "REPLACE")
+    ob.modifiers.new("rig", "ARMATURE").object = rig
+    cl = ob.modifiers.new("cloth", "CLOTH")
+    st = cl.settings
+    st.quality = 8
+    st.mass = 0.4
+    st.air_damping = 2.0
+    st.tension_stiffness = st.compression_stiffness = 20.0
+    st.bending_stiffness = 4.0  # coat cloth: heavier and stiffer than a shirt, fewer small creases
+    st.vertex_group_mass = "pin"
+    st.pin_stiffness = 1.0
+    cl.collision_settings.use_collision = True
+    cl.collision_settings.distance_min = 0.015
+    cl.collision_settings.use_self_collision = True
+    cl.collision_settings.self_distance_min = 0.01
+    cache = cl.point_cache
+    cache.frame_start, cache.frame_end = start, start + frames - 1
+    _label(ob, "person")
+    ob["vrecon_coat_of"] = body.name
+    _only_during(ob, start, frames)
+    sc = bpy.context.scene
+    keep = (sc.frame_start, sc.frame_end)
+    sc.frame_start, sc.frame_end = min(sc.frame_start, start), max(sc.frame_end, start + frames - 1)
+    with bpy.context.temp_override(scene=sc, active_object=ob, object=ob, point_cache=cache):
+        bpy.ops.ptcache.bake(bake=True)
+    sc.frame_start, sc.frame_end = keep
 
 
 def _label(ob, cat: str) -> None:
@@ -335,6 +485,7 @@ def build(prep: Path, out: Path, finished: bool = False, evidence_only: bool = F
     sc.render.fps, sc.render.fps_base = 24000, 1001
     mat = _points_material()
     ends = []
+    rigged: dict[str, list] = {}  # person id -> [(cut, timeline start)] (_person_rig)
     for k, s in enumerate(info["shots"]):
         a, b = s["source_frames"]
         start = a + 1
@@ -377,7 +528,9 @@ def build(prep: Path, out: Path, finished: bool = False, evidence_only: bool = F
                 _only_during(bpy.data.objects[f"Background{k:02d}"], start, s["frames"])
         if not s.get("shared_fill_from"):
             _fill(k, s, z[f"s{k}_floor"], z[f"s{k}_cam"][0, :3, 3], root)
-        if len(z[f"s{k}_body"]):
+        if finished and f"s{k}_person" in z and f"person_{z[f's{k}_person']}_rest_verts" in z:
+            rigged.setdefault(str(z[f"s{k}_person"]), []).append((k, start, root))  # drawn once per person after the loop
+        elif len(z[f"s{k}_body"]):
             if finished and f"s{k}_smpl" in z:
                 _body_smpl(f"Body{k:02d}", z[f"s{k}_smpl"], z["smpl_faces"], start, root, z[f"s{k}_body"],
                            z[f"s{k}_dress"] if f"s{k}_dress" in z else None)
@@ -392,6 +545,8 @@ def build(prep: Path, out: Path, finished: bool = False, evidence_only: bool = F
         if finished and f"s{k}_extra" in z and len(z[f"s{k}_extra"]):
             _extra_people(k, z[f"s{k}_extra"], start, root)
         ends.append(start + s["frames"] - 1)
+    for ident, cuts in rigged.items():  # parented to the first cut's root (joined cuts share slot 0)
+        _person_rig(ident, z, [(k, st) for k, st, _ in cuts], cuts[0][2])
     if finished and not evidence_only and "llm_set" in z:
         _llm_set(json.loads(str(z["llm_set"])), bpy.data.objects.get("Shot00"))
     sc.frame_start, sc.frame_end = 1, max(ends)

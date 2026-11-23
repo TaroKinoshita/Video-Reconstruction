@@ -158,10 +158,11 @@ def dressed(v: np.ndarray, faces: np.ndarray, joints: np.ndarray, dress) -> tupl
 OPEN_FRONT_DEG = 50.0  # half-angle of the open front of a long coat
 
 
-def open_skirt(joints: np.ndarray, length: float, r_top: float, r_hem: float, n: int = 20):
+def open_skirt(joints: np.ndarray, length: float, r_top: float, r_hem: float, n: int = 20, rings: int = 1):
     """a coat's lower part: a flared surface from the waist (spine joint 3) toward the ankles that wraps the sides and
     the back and leaves the front open by +-OPEN_FRONT_DEG (SMPL joints: 1 = left hip, 2 = right hip, x left, y up,
-    so forward = left x up). Triangles."""
+    so forward = left x up). rings + 1 rows of n points (row 0 at the waist; more rows for cloth simulation).
+    Triangles."""
     top = joints[3]
     bottom = top + (0.5 * (joints[7] + joints[8]) - top) * length
     axis = bottom - top
@@ -172,8 +173,14 @@ def open_skirt(joints: np.ndarray, length: float, r_top: float, r_hem: float, n:
     fwd = np.cross(left, -axis)  # -axis points up the body
     a = np.radians(np.linspace(OPEN_FRONT_DEG, 360 - OPEN_FRONT_DEG, n))
     ring = np.cos(a)[:, None] * fwd + np.sin(a)[:, None] * left
-    v = np.concatenate([top + ring * r_top, bottom + ring * r_hem])
+    rows = []
+    for r in range(rings + 1):
+        u = r / rings
+        rows.append(top + (bottom - top) * u + ring * (r_top + (r_hem - r_top) * u))
+    v = np.concatenate(rows)
     f = []
-    for i in range(n - 1):
-        f += [(i, i + 1, n + i + 1), (i, n + i + 1, n + i)]
+    for r in range(rings):
+        o, q = r * n, (r + 1) * n
+        for i in range(n - 1):
+            f += [(o + i, o + i + 1, q + i + 1), (o + i, q + i + 1, q + i)]
     return v, f
