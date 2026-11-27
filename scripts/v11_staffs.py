@@ -12,7 +12,10 @@ Per stick label:
 - tilt: with the length known, the far end lies on the ray through its pixel at that distance from the grip; of the
   two solutions the one nearer the grip's depth is taken (the picture cannot tell toward / away); the near end
   continues the line through the grip. Picture-exact on both ends when the mask is whole.
-- gaps up to --gap frames with the same hand are filled: direction slerped, grip from the hand on that frame.
+- gaps up to --gap frames with the same hand are filled: direction slerped, grip from the hand on that frame;
+- longer gaps (up to --hold) with the same person on both sides: the staff turns with the hand (vertex Kabsch),
+  carried from both sides and blended;
+- one staff per person and frame (staffs are held two-handed): the label seen on more frames wins (whole-frame and hand-window masks overlap).
 Output per label "<label>_t", "<label>_a", "<label>_b" world ends (PREP space), "<label>_r"; "labels".
 """
 from __future__ import annotations
@@ -75,6 +78,8 @@ def main() -> int:
     ap.add_argument("--min-px", type=int, default=40)
     ap.add_argument("--min-hits", type=int, default=3)
     ap.add_argument("--gap", type=int, default=12, help="frames: longest gap filled from the hand's motion")
+    ap.add_argument("--hold", type=int, default=72, help="frames: longest gap bridged when the same person holds "
+                    "the staff on both sides (the staff turns with the hand)")
     ap.add_argument("--max-len", type=float, default=2.5, help="metres; longer is not a hand-held staff")
     a = ap.parse_args()
     prep = np.load(a.prep)
@@ -97,7 +102,29 @@ def main() -> int:
         X = body_at(anim, p, f, a.gap)
         return None if X is None else X[hv[h]].mean(0)
 
-    out, report = {}, {}
+    def hand_rot(p, h, f0, f1):
+        """Rotation of the hand's vertices from frame f0 to f1 (Kabsch), or None."""
+        X0, X1 = body_at(anim, p, f0, a.gap), body_at(anim, p, f1, a.gap)
+        if X0 is None or X1 is None:
+            return None
+        P, Q = X0[hv[h]] - X0[hv[h]].mean(0), X1[hv[h]] - X1[hv[h]].mean(0)
+        U, _, Vt = np.linalg.svd(P.T @ Q)
+        D = np.diag([1, 1, np.sign(np.linalg.det(U @ Vt))])
+        return (U @ D @ Vt).T
+
+    def carried(o, f0, f1):
+        """World direction of a staff held in o's hand, carried frame by frame from f0 toward f1."""
+        step = 1 if f1 > f0 else -1
+        d, out_ = o["dirw"], {}
+        for k in range(f0 + step, f1, step):
+            R = hand_rot(o["p"], o["h"], k - step, k)
+            if R is None:
+                return None
+            d = R @ d
+            out_[k] = d
+        return out_
+
+    out, report, staffs = {}, {}, []
     for num, lab in id_map.items():
         obs = {}  # f -> (person, hand, grip_c, end_far_px, end_near_px, len_far_px, len_px)
         for f in range(len(masks)):
@@ -172,21 +199,43 @@ def main() -> int:
                         w = (k - f) / (f2 - f)
                         frames.append((k, dict(p=o1["p"], h=o1["h"], dirw=slerp_dir(o1["dirw"], o2["dirw"], w),
                                                frac=(1 - w) * o1["frac"] + w * o2["frac"], r=o1["r"])))
+                elif a.gap < f2 - f <= a.hold and o1["p"] == o2["p"]:
+                    # longer gap, same person: the staff stays in the hand and turns with it (motion blur hides it)
+                    fwd = carried(o1, f, f2)
+                    bwd = carried(dict(o2, h=o1["h"]), f2, f)
+                    if fwd is None or bwd is None:
+                        continue
+                    for k in range(f + 1, f2):
+                        w = (k - f) / (f2 - f)
+                        d = slerp_dir(fwd[k] / np.linalg.norm(fwd[k]), bwd[k] / np.linalg.norm(bwd[k]), w)
+                        frames.append((k, dict(p=o1["p"], h=o1["h"], dirw=d,
+                                               frac=(1 - w) * o1["frac"] + w * o2["frac"], r=o1["r"])))
+        staffs.append((len(obs), lab, L, frames, obs))
+    # one staff per person: where two labels (e.g. a whole-frame mask and a hand-window mask of the same staff) are
+    # held by the same person on a frame (either hand: staffs are held two-handed), the label seen on more frames keeps it
+    claimed = set()
+    for _, lab, L, frames, obs in sorted(staffs, key=lambda x: -x[0]):
         T, A, B = [], [], []
         for f, o in frames:
+            if (f, o["p"]) in claimed:
+                continue
             G = grip_at(o["p"], o["h"], f)
             if G is None:
                 continue
+            claimed.add((f, o["p"]))
             dw = o["dirw"] / np.linalg.norm(o["dirw"])
             T.append(f)
             B.append(G + dw * L * o["frac"])
             A.append(G - dw * L * (1 - o["frac"]))
+        if len(T) < 5:
+            report[lab] = {"seen_frames": len(obs), "kept": False, "reason": "holder taken by another label"}
+            continue
         out[f"{lab}_t"] = np.array(T, np.int32)
         out[f"{lab}_a"] = np.array(A, np.float32)
         out[f"{lab}_b"] = np.array(B, np.float32)
         out[f"{lab}_r"] = np.float32(np.clip(np.median([o["r"] for o in obs.values()]), 0.015, 0.035))
         report[lab] = {"seen_frames": len(obs), "frames_with_fill": len(T), "first": int(min(T)), "last": int(max(T)),
-                       "length_m": round(L, 2), "holders": sorted({f"{o['p']}:{o['h']}" for o in res.values()})}
+                       "length_m": round(L, 2), "holders": sorted({f"{o['p']}:{o['h']}" for _, o in frames})}
     out["labels"] = np.array(json.dumps(sorted(k[:-2] for k in out if k.endswith("_t"))))
     np.savez_compressed(a.out, **out)
     print(json.dumps(report, indent=1))
