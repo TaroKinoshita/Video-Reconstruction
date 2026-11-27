@@ -11,6 +11,8 @@ Time: each sample is scored by how well its silhouette fits the person's mask (c
 samples that fit much worse than their neighbours get little weight, and the turn (quaternion) and the shape in the
 body's own orientation are smoothed with those weights, so a bad fit is carried by its neighbours and the motion is
 smooth instead of following every per-frame fit.
+Size: after smoothing, each person gets one body size (median over samples); each sample is scaled about the
+camera centre, so the picture is kept and the distance absorbs the change.
 Colours: a vertex takes the film's colour on frames where it is nearest the camera at its pixel (vertex z-buffer) and
 inside its own person mask; median over frames; vertices never seen take the colour of their seen neighbours.
 ASCII paths only (cv2).
@@ -92,6 +94,26 @@ def silhouette_fit(Xc: np.ndarray, F: np.ndarray, own: np.ndarray, anyone: np.nd
     return float(cover * inside)
 
 
+def constant_size(Xs: np.ndarray, centres: np.ndarray, win: int = 4, seed: int = 0):
+    """One body size per person (as MAVE's m_k). Each sample's size is measured on vertex pairs whose distance hardly
+    changes with pose (log distance minus the frame's median, lowest spread over time), median over +-win samples;
+    each sample is then scaled about its camera centre to the person's median size, so the picture stays exact and
+    the size error goes into the distance (MAVE fixes the depth instead; on F002 that moved silhouettes off the film).
+    Returns the bodies and the measured sizes."""
+    rng = np.random.default_rng(seed)
+    n = Xs.shape[1]
+    i, k = rng.integers(0, n, 3000), rng.integers(0, n, 3000)
+    L = np.log(np.linalg.norm(Xs[:, i] - Xs[:, k], axis=2) + 1e-6)
+    long_ = np.exp(L).mean(0) > 0.15
+    sd = (L - np.median(L, 1, keepdims=True)).std(0)
+    rigid = long_ & (sd < np.percentile(sd[long_], 10))
+    size = np.exp(np.median(L[:, rigid] - L[:, rigid].mean(0), 1))
+    size_s = np.array([np.median(size[max(0, j - win):j + win + 1]) for j in range(len(size))])
+    f = np.median(size_s) / size_s
+    o = centres[:, None, :]
+    return (o + (Xs - o) * f[:, None, None]).astype(np.float32), size
+
+
 def fill_colours(col: np.ndarray, seen: np.ndarray, F: np.ndarray, iters: int = 200) -> np.ndarray:
     """Spread colours from seen vertices to unseen ones over mesh edges."""
     n = len(col)
@@ -119,6 +141,7 @@ def main() -> int:
         ap.add_argument(name, type=Path)
     ap.add_argument("--sigma-root", type=float, default=3.0, help="frames; smoothing of the body's position")
     ap.add_argument("--sigma-pose", type=float, default=1.5, help="frames; smoothing of the turn and pose around it")
+    ap.add_argument("--constant-size", type=int, default=1, help="1: one body size per person (centre kept)")
     ap.add_argument("--min-fit", type=float, default=0.25, help="samples fitting their mask worse are not used")
     a = ap.parse_args()
     prep = np.load(a.prep)
@@ -221,6 +244,9 @@ def main() -> int:
         Rs = np.array([quat_to_rot(q) for q in q_s])
         rel_s = np.einsum("svl,skl->svk", local_s, Rs)  # local @ R.T
         Xs = (rel_s + root_s[:, None]).astype(np.float32)
+        size = np.ones(len(ts))
+        if a.constant_size:
+            Xs, size = constant_size(Xs, cam_T[np.array(ts)])
         # colours from the film
         nV = Xs.shape[1]
         samples = np.full((len(ts), nV, 3), np.nan, np.float32)
@@ -257,6 +283,7 @@ def main() -> int:
                          "root_jitter_smoothed_m": round(float(np.median(np.linalg.norm(np.diff(root_s, axis=0), axis=1))), 3),
                          "z_extent_median_m": round(float(np.median(height)), 2),
                          "fit_median": round(float(np.median(fit)), 2),
+                         "size_spread_before": [round(float(x), 3) for x in np.percentile(size, [5, 95])],
                          "bad_fit_frames": [int(t) for t, x in zip(ts, w) if x < 0.1]}
     out["labels"] = np.array(json.dumps(sorted(files)))
     a.out.parent.mkdir(parents=True, exist_ok=True)
