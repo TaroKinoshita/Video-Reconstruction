@@ -1,4 +1,4 @@
-# Review instructions for GPT: F002 reconstruction (v4)
+# Review instructions for GPT: F002 reconstruction (v9, second round)
 
 You are an outside reviewer. Give an honest second opinion: no flattery, and no fixes applied. Do not edit files in this repository. Write your answer as one report.
 
@@ -12,10 +12,10 @@ Everything in the scene comes from the clip alone. The benchmark's ground truth 
 
 ## What to look at
 
-- `runs/mave/F002/review/compare.mp4` (main input; not in git):
+- `runs/mave/F002/review/compare_v9.mp4` (main input; not in git; `compare.mp4` is the v4 you reviewed first):
   - left half: the film;
   - right half: the scene rendered from the reconstructed camera on every frame.
-- `runs/mave/F002/scene_v4.blend` (optional; Blender 4.5+). Collections:
+- `runs/mave/F002/scene_v9.blend` (optional; Blender 4.5+). Collections:
   - `Environment`: Ground, Backdrop, Trees, SetPieces;
   - `People`: one moving body per person;
   - `Props`: held staffs;
@@ -25,15 +25,27 @@ Everything in the scene comes from the clip alone. The benchmark's ground truth 
   - `gpu/body/run_sam3dbody.py`: local SAM 3D Body per person per frame, using our focal.
   - `scripts/v11_people_anim.py`: bodies in world space, scale fitted to 4RC depth, time smoothing, colours from the film.
   - `scripts/v11_parts.py`: level ground, trunks, posts, beam, backdrop, imagined trees.
-  - `scripts/v11_staffs.py`: a stick mask counts as a staff only where it touches a hand.
+  - `scripts/v11_staffs.py`: a stick mask counts as a staff only where it touches a hand vertex; fixed length, tilt, carried with the hand across gaps.
+  - `scripts/v11_hand_windows.py`, `gpu/observe/run_sam3_points.py`: crops around the hands; SAM tracking from point seeds.
+  - `scripts/v11_colour_gain.py`: people colour gain measured against the film.
   - `src/vrecon/scene/mave_blend.py`: Blender builder.
+
+## What changed since your first review (v4, 6/10)
+
+- Shards at 00:04-00:05.5: backdrop points are kept only if other views confirm them as static.
+- Light ground patch: sky sheen on the ground; specular turned off. Unseen ground is tiled from seen ground.
+- Staffs:
+  - grip uses hand vertices only;
+  - one length per staff, with tilt;
+  - mask pieces cut by a hand are joined;
+  - the holder is a majority over nearby frames;
+  - point-seeded SAM tracking and carrying with the hand fill part of the middle of the clip.
+- People colour: the render is matched to the film brightness.
 
 ## Known weak points (check them, but do not stop at them)
 
-- Staffs are missing in the later cuts, because the stick masks were not found there.
-- A staff's depth is assumed to equal its hand's depth, facing the camera.
-- Floating shards near hands.
-- A visible edge of the ground texture in high-angle shots.
+- Staffs are still missing around 00:08.5-00:09.6.
+- A staff's holder can still switch between people.
 - The sacks are part of the backdrop surface, not separate objects.
 
 ## Scores so far (for context only; judge by the picture)
@@ -43,20 +55,22 @@ MAVE eval (camera / depth order / people), total score:
 | Version | Total |
 |---|---|
 | MAVE baseline | 76.5 |
-| This v4 | 86.5 |
+| v4 (first review) | 86.5 |
+| This v9 | 86.7 |
 
-v4 detail:
+v9 detail:
 
 | Measure | Value |
 |---|---|
 | RRA@15 | 1.000 |
 | RTA@15 | 0.895 |
-| Depth OrdAcc | 0.895 |
+| Depth OrdAcc | 0.899 |
 | HOTA | 0.778 |
-| MaskIoU | 0.691 |
+| MaskIoU | 0.696 |
 
 ## Questions
 
+0. **Compared with v4:** which of your first-review points are fixed, partly fixed, or not fixed? Give a new score 1-10.
 1. **Overall:** how faithful is the right side to the left, frame by frame? Score it 1-10 with a reason. Name the 3 worst moments, with timestamps.
 2. **People:**
    - Do position, pose, size and motion match the film?

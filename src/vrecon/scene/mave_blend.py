@@ -13,6 +13,7 @@ With --parts PARTS.npz (scripts/v11_parts.py) the world is turned so the ground 
 background is built as parts: Ground (height field, film colours), Trunk_*, Post_*, Beam_*, Canopy_* (unit meshes
 scaled, colour per object), Backdrop (what is not split yet, film colours), and the "Imagined" collection (trees
 outside every camera's view, custom property imagined = 1).
+With --people-gain R G B the people's film colours are multiplied (linear) to undo the scene lighting's darkening.
 With --staffs STAFFS.npz (scripts/v11_staffs.py) each held staff is one cylinder in the "Props" collection, keyed on
 the frames where it is held and hidden elsewhere.
 """
@@ -29,6 +30,9 @@ size = [int(argv[argv.index("--size") + 1]), int(argv[argv.index("--size") + 2])
 fps = float(argv[argv.index("--fps") + 1])
 anim = np.load(argv[argv.index("--people-anim") + 1]) if "--people-anim" in argv else None
 pz = np.load(argv[argv.index("--parts") + 1]) if "--parts" in argv else None
+# linear RGB gain on people's film colours, measured by comparing a render with the film (scripts/v11_colour_gain.py)
+people_gain = ([float(argv[argv.index("--people-gain") + k]) for k in (1, 2, 3)] if "--people-gain" in argv
+               else [1.0, 1.0, 1.0])
 parts = json.loads(str(pz["parts"])) if pz is not None else None
 GR = np.array(parts["world_R"]) if parts else np.eye(3)
 Gt = np.array(parts["world_t"]) if parts else np.zeros(3)
@@ -282,7 +286,7 @@ def animated_person(label: str, collection):
     ob = mesh_object(label, Vs[0], F, collection, (0.7, 0.7, 0.7, 1))
     me = ob.data
     col = me.color_attributes.new("film", "FLOAT_COLOR", "POINT")
-    rgba = np.concatenate([anim[f"{label}_col"], np.ones((len(Vs[0]), 1), np.float32)], 1)
+    rgba = np.concatenate([np.clip(anim[f"{label}_col"] * np.float32(people_gain), 0, 1), np.ones((len(Vs[0]), 1), np.float32)], 1)
     col.data.foreach_set("color", rgba.ravel())
     me.materials.clear()
     me.materials.append(colour_material(label + "_film"))
