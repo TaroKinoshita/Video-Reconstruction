@@ -15,6 +15,8 @@ Per stick label:
 - gaps up to --gap frames with the same hand are filled: direction slerped, grip from the hand on that frame;
 - longer gaps (up to --hold) with the same person on both sides: the staff turns with the hand (vertex Kabsch),
   carried from both sides and blended;
+- mask pieces on the main piece's line are joined (a hand cuts the mask); the span reaches at least the grip;
+- the holder is the majority of nearby sightings (--holder-win), so it does not jump to a passing hand;
 - one staff per person and frame (staffs are held two-handed): the label seen on more frames wins (whole-frame and hand-window masks overlap).
 Output per label "<label>_t", "<label>_a", "<label>_b" world ends (PREP space), "<label>_r"; "labels".
 """
@@ -80,6 +82,9 @@ def main() -> int:
     ap.add_argument("--gap", type=int, default=12, help="frames: longest gap filled from the hand's motion")
     ap.add_argument("--hold", type=int, default=72, help="frames: longest gap bridged when the same person holds "
                     "the staff on both sides (the staff turns with the hand)")
+    ap.add_argument("--seeds", type=Path, default=None, help="write point seeds (JSON) for gpu/observe/run_sam3_points.py")
+    ap.add_argument("--seeds-per", type=int, default=6)
+    ap.add_argument("--holder-win", type=int, default=4, help="sightings on each side for the holder majority")
     ap.add_argument("--max-len", type=float, default=2.5, help="metres; longer is not a hand-held staff")
     a = ap.parse_args()
     prep = np.load(a.prep)
@@ -124,16 +129,40 @@ def main() -> int:
             out_[k] = d
         return out_
 
+    def join_pieces(m):
+        """Largest piece plus the pieces on its line: a hand or arm across a staff cuts its mask in two."""
+        n_cc, cc = cv2.connectedComponents(m.astype(np.uint8))
+        if n_cc <= 2:
+            return m
+        sizes = np.bincount(cc.ravel())[1:]
+        k0 = 1 + int(np.argmax(sizes))
+        ys, xs = np.nonzero(cc == k0)
+        P = np.stack([xs, ys], 1).astype(float)
+        if len(P) < 5:
+            return cc == k0
+        c = P.mean(0)
+        ev, evec = np.linalg.eigh(np.cov((P - c).T))
+        d, nrm = evec[:, 1], evec[:, 0]
+        tol = max(3.0, 3 * np.sqrt(max(ev[0], 0.25)))
+        span = np.ptp((P - c) @ d)
+        keep = cc == k0
+        for k in range(1, n_cc):
+            if k == k0 or sizes[k - 1] < a.min_px / 4:
+                continue
+            ys, xs = np.nonzero(cc == k)
+            Q = np.stack([xs, ys], 1).astype(float) - c
+            if np.median(np.abs(Q @ nrm)) < tol and np.abs(Q @ d).min() < span / 2 + span:
+                keep |= cc == k
+        return keep
+
     out, report, staffs = {}, {}, []
     for num, lab in id_map.items():
-        obs = {}  # f -> (person, hand, grip_c, end_far_px, end_near_px, len_far_px, len_px)
+        seen = {}  # f -> (mask, person, hand)
         for f in range(len(masks)):
             m = masks[f] == int(num)
             if m.sum() < a.min_px:
                 continue
-            n_cc, cc = cv2.connectedComponents(m.astype(np.uint8))
-            if n_cc > 2:  # keep the largest piece
-                m = cc == 1 + np.argmax(np.bincount(cc[cc > 0])[1:])
+            m = join_pieces(m)
             near = cv2.dilate(m.astype(np.uint8), ker).astype(bool)
             best = None
             for p in people:
@@ -146,9 +175,18 @@ def main() -> int:
                     hits = int(near[v[ok].astype(int), u[ok].astype(int)].sum())
                     if hits >= a.min_hits and (best is None or hits > best[0]):
                         best = (hits, p, h)
-            if best is None:
-                continue
-            _, p, h = best
+            if best is not None:
+                seen[f] = (m, best[1], best[2])
+        # the holder changes only when most nearby sightings agree (a passing hand of another person does not take it)
+        fs_seen = sorted(seen)
+        obs = {}
+        for i, f in enumerate(fs_seen):
+            m, _, _ = seen[f]
+            win = [seen[g][1:] for g in fs_seen[max(0, i - a.holder_win):i + a.holder_win + 1]
+                   if abs(g - f) <= 2 * a.holder_win]
+            p = max({x[0] for x in win}, key=lambda q: sum(x[0] == q for x in win))
+            hs = [x[1] for x in win if x[0] == p]
+            h = seen[f][2] if seen[f][1] == p else max(set(hs), key=hs.count)
             ys, xs = np.nonzero(m)
             P = np.stack([xs, ys], 1).astype(float)
             c = P.mean(0)
@@ -159,12 +197,17 @@ def main() -> int:
             if np.ptp(s) < 4 * thick:  # not long and thin
                 continue
             g = grip_at(p, h, f)
+            if g is None:
+                continue
             gc, gu, gv = project(g[None], f)
             sg = (np.array([gu[0], gv[0]]) - c) @ d
-            e_lo, e_hi = c + s.min() * d, c + s.max() * d
-            far, nearp = (e_hi, e_lo) if s.max() - sg >= sg - s.min() else (e_lo, e_hi)
+            # a held staff passes through the hand: the hand hides it there, so the span reaches at least the grip
+            s_lo, s_hi = min(s.min(), sg), max(s.max(), sg)
+            e_lo, e_hi = c + s_lo * d, c + s_hi * d
+            far, nearp = (e_hi, e_lo) if s_hi - sg >= sg - s_lo else (e_lo, e_hi)
             obs[f] = dict(p=p, h=h, gc=gc[0], far=far, near=nearp, lfar=float(np.linalg.norm(far - [gu[0], gv[0]])),
-                          lpx=float(np.ptp(s)), r=thick / 2 * gc[0, 2] / f_img)
+                          lpx=float(s_hi - s_lo), r=thick / 2 * gc[0, 2] / f_img,
+                          pts=[(c + (s.min() + q * np.ptp(s)) * d).tolist() for q in (0.15, 0.35, 0.5, 0.65, 0.85)])
         if len(obs) < 5:
             report[lab] = {"frames": len(obs), "kept": False}
             continue
@@ -236,6 +279,16 @@ def main() -> int:
         out[f"{lab}_r"] = np.float32(np.clip(np.median([o["r"] for o in obs.values()]), 0.015, 0.035))
         report[lab] = {"seen_frames": len(obs), "frames_with_fill": len(T), "first": int(min(T)), "last": int(max(T)),
                        "length_m": round(L, 2), "holders": sorted({f"{o['p']}:{o['h']}" for _, o in frames})}
+    if a.seeds:
+        # point seeds for a tracker: per kept label, held sightings spread over its frames (largest staff first)
+        objs = {}
+        for n_obs, lab, _, _, obs in sorted(staffs, key=lambda x: -x[0]):
+            if f"{lab}_t" not in out:
+                continue
+            fs = sorted(obs)
+            pick = sorted({fs[int(i)] for i in np.linspace(0, len(fs) - 1, min(a.seeds_per, len(fs)))})
+            objs[lab] = [{"frame": int(f), "points": obs[f]["pts"]} for f in pick]
+        a.seeds.write_text(json.dumps({"objects": objs}), encoding="utf-8")
     out["labels"] = np.array(json.dumps(sorted(k[:-2] for k in out if k.endswith("_t"))))
     np.savez_compressed(a.out, **out)
     print(json.dumps(report, indent=1))
