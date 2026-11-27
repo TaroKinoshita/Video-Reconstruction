@@ -19,6 +19,9 @@ Per stick label:
 - the holder is the majority of nearby sightings (--holder-win), so it does not jump to a passing hand;
 - direction smoothed in the hand's own frame (--sigma-dir); the staff stays in the hand --extend frames past
   its first and last sighting;
+- with --video, a filled direction is searched in a cone around the carried one for the best line in the
+  picture (on-line pixels nearer the staff colour than pixels beside them; with --bg-render, pixels that
+  differ more from the rendered background than pixels beside them, outside the rendered people);
 - one staff per person and frame (staffs are held two-handed): the label seen on more frames wins (whole-frame and hand-window masks overlap).
 Output per label "<label>_t", "<label>_a", "<label>_b" world ends (PREP space), "<label>_r"; "labels".
 """
@@ -86,6 +89,13 @@ def main() -> int:
                     "the staff on both sides (the staff turns with the hand)")
     ap.add_argument("--seeds", type=Path, default=None, help="write point seeds (JSON) for gpu/observe/run_sam3_points.py")
     ap.add_argument("--seeds-per", type=int, default=6)
+    ap.add_argument("--video", type=Path, default=None, help="film (PREP size): filled staffs are checked against it")
+    ap.add_argument("--people-masks", type=Path, default=None)
+    ap.add_argument("--bg-render", type=Path, default=None, help="renders r%%04d.png of the scene without people and "
+                    "props: the line check then looks at film-minus-background, so trunks and posts do not count")
+    ap.add_argument("--people-render", type=Path, default=None, help="renders with people but without props")
+    ap.add_argument("--cone", type=float, default=60.0, help="degrees searched around a carried direction")
+    ap.add_argument("--turn-cost", type=float, default=0.25, help="score lost for turning the whole cone away")
     ap.add_argument("--extend", type=int, default=10, help="frames a staff stays in the hand past its first/last sighting")
     ap.add_argument("--sigma-dir", type=float, default=2.0, help="frames; smoothing of the direction in the hand's frame")
     ap.add_argument("--holder-win", type=int, default=4, help="sightings on each side for the holder majority")
@@ -203,6 +213,102 @@ def main() -> int:
                     add.append((f, dict(o, dirw=d)))
                     have.add(f)
         return sorted(frames + add, key=lambda x: x[0])
+
+    # film frames and people masks for checking filled staffs against the picture (optional)
+    video = None
+    if a.video is not None:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+        from vrecon.control.core import read_video_rgb
+        video = read_video_rgb(a.video).astype(np.float32)
+    pmasks = np.load(a.people_masks)["masks"] if a.people_masks is not None else None
+    sph = np.array([[np.cos(t) * np.sqrt(1 - z * z), np.sin(t) * np.sqrt(1 - z * z), z]
+                    for z, t in zip(np.linspace(-1, 1, 600), np.arange(600) * np.pi * (3 - np.sqrt(5)))])
+
+    fg_cache = {}
+
+    def fg_at(f):
+        """Film-minus-background difference (blurred) and the rendered people's shape on frame f, or (None, None)."""
+        if a.bg_render is None:
+            return None, None
+        if f not in fg_cache:
+            def rd(d):
+                im = cv2.imdecode(np.fromfile(str(d / f"r{f:04d}.png"), np.uint8), 1)[:, :, ::-1]
+                return cv2.resize(im, (W, H), interpolation=cv2.INTER_AREA).astype(np.float32)
+            bg = rd(a.bg_render)
+            diff = cv2.GaussianBlur(np.linalg.norm(video[f] - bg, axis=2), (0, 0), 1.5)
+            ppl = None
+            if a.people_render is not None:
+                ppl = np.linalg.norm(rd(a.people_render) - bg, axis=2) > 12
+                ppl = cv2.dilate(ppl.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
+            fg_cache.clear()
+            fg_cache[f] = (diff, ppl if ppl is not None else np.zeros((H, W), bool))
+        return fg_cache[f]
+
+    def line_score(f, G, dw, length, frac, colour):
+        """How much the picture looks like a staff along the projected far part: pixels on the line nearer the
+        staff colour than pixels beside it (both sides). Points on people are skipped (arms say nothing)."""
+        Xc, u, v = project(np.array([G + dw * length * q * frac for q in np.linspace(0.3, 1.0, 16)]), f)
+        if (Xc[:, 2] < 0.1).any():
+            return -1.0
+        _, gu, gv = project(G[None], f)
+        d = np.array([u[-1] - gu[0], v[-1] - gv[0]])
+        if np.linalg.norm(d) < 8:
+            return -1.0
+        n = np.array([-d[1], d[0]]) / np.linalg.norm(d)
+        img = video[f]
+        fg, ppl = fg_at(f)
+        sc, k = 0.0, 0
+        for x, y in zip(u, v):
+            xi, yi = int(round(x)), int(round(y))
+            if not (6 <= xi < W - 6 and 6 <= yi < H - 6):
+                continue
+            if pmasks is not None and pmasks[f, yi, xi] > 0:
+                continue
+            if fg is not None:
+                # foreground = film minus the rendered background (trunks drop out); people's rendered shapes skipped
+                if ppl[yi, xi]:
+                    continue
+                side = [fg[int(round(y + o * n[1])), int(round(x + o * n[0]))] for o in (-6, 6)]
+                sc += (fg[yi, xi] - max(side)) / 30.0
+                k += 1
+                continue
+            on = np.linalg.norm(img[yi, xi] - colour)
+            side = [np.linalg.norm(img[int(round(y + o * n[1])), int(round(x + o * n[0]))] - colour) for o in (-6, 6)]
+            sc += (min(side) - on) / 40.0
+            k += 1
+        return sc / k if k >= 5 else -1.0
+
+    def refine_by_image(frames, seen_fs, length, num):
+        """Filled frames (not seen in a mask) get the direction that best matches the picture within a cone around
+        the carried direction, with a penalty for turning away from it: carried directions drift."""
+        if video is None:
+            return frames
+        pix = [video[f][masks[f] == num] for f in seen_fs if (masks[f] == num).any()]
+        if not pix:
+            return frames
+        colour = np.median(np.concatenate(pix), 0)
+        res_ = []
+        for f, o in frames:
+            if f in seen_fs:
+                res_.append((f, o))
+                continue
+            G = grip_at(o["p"], o["h"], f)
+            if G is None:
+                res_.append((f, o))
+                continue
+            d0 = o["dirw"] / np.linalg.norm(o["dirw"])
+            Rw = cam_R[f]
+            d0c = d0 @ Rw  # world -> camera
+            cand = sph[sph @ d0c > np.cos(np.radians(a.cone))]
+            best, best_s = d0, None
+            for dc in np.vstack([d0c[None], cand]):
+                dwc = dc @ Rw.T
+                sc = line_score(f, G, dwc, length, o["frac"], colour)
+                sc -= a.turn_cost * np.degrees(np.arccos(np.clip(dc @ d0c, -1, 1))) / a.cone
+                if best_s is None or sc > best_s:
+                    best, best_s = dwc, sc
+            res_.append((f, dict(o, dirw=best)))
+        return res_
 
     def smooth_in_hand(frames, seen_fs):
         """Direction smoothed in the hand's own frame (weights: seen 1, filled 0.3), so a staff follows the hand
@@ -331,6 +437,7 @@ def main() -> int:
                                                frac=(1 - w) * o1["frac"] + w * o2["frac"], r=o1["r"])))
         frames.sort(key=lambda x: x[0])
         frames = extend_ends(frames, set(obs))
+        frames = refine_by_image(frames, set(obs), L, int(num))
         frames = smooth_in_hand(frames, set(obs))
         staffs.append((len(obs), lab, L, frames, obs))
     # one staff per person: where two labels (e.g. a whole-frame mask and a hand-window mask of the same staff) are
