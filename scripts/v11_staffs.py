@@ -17,6 +17,8 @@ Per stick label:
   carried from both sides and blended;
 - mask pieces on the main piece's line are joined (a hand cuts the mask); the span reaches at least the grip;
 - the holder is the majority of nearby sightings (--holder-win), so it does not jump to a passing hand;
+- direction smoothed in the hand's own frame (--sigma-dir); the staff stays in the hand --extend frames past
+  its first and last sighting;
 - one staff per person and frame (staffs are held two-handed): the label seen on more frames wins (whole-frame and hand-window masks overlap).
 Output per label "<label>_t", "<label>_a", "<label>_b" world ends (PREP space), "<label>_r"; "labels".
 """
@@ -84,6 +86,8 @@ def main() -> int:
                     "the staff on both sides (the staff turns with the hand)")
     ap.add_argument("--seeds", type=Path, default=None, help="write point seeds (JSON) for gpu/observe/run_sam3_points.py")
     ap.add_argument("--seeds-per", type=int, default=6)
+    ap.add_argument("--extend", type=int, default=10, help="frames a staff stays in the hand past its first/last sighting")
+    ap.add_argument("--sigma-dir", type=float, default=2.0, help="frames; smoothing of the direction in the hand's frame")
     ap.add_argument("--holder-win", type=int, default=4, help="sightings on each side for the holder majority")
     ap.add_argument("--max-len", type=float, default=2.5, help="metres; longer is not a hand-held staff")
     a = ap.parse_args()
@@ -154,6 +158,78 @@ def main() -> int:
             if np.median(np.abs(Q @ nrm)) < tol and np.abs(Q @ d).min() < span / 2 + span:
                 keep |= cc == k
         return keep
+
+    hand_ref = {}
+
+    def hand_frame(p, h, f):
+        """Rotation of the hand at frame f relative to its pose on a reference frame (Kabsch of hand vertices)."""
+        X = body_at(anim, p, f, a.gap)
+        if X is None:
+            return None
+        Q = X[hv[h]] - X[hv[h]].mean(0)
+        if (p, h) not in hand_ref:
+            hand_ref[(p, h)] = Q
+        P = hand_ref[(p, h)]
+        U, _, Vt = np.linalg.svd(P.T @ Q)
+        D = np.diag([1, 1, np.sign(np.linalg.det(U @ Vt))])
+        return (U @ D @ Vt).T
+
+    def extend_ends(frames, seen_fs):
+        """A staff stays in the hand for a short while past its first and last sighting of a holder (carried with
+        the hand): a fast swing hides it right where the fight is."""
+        if a.extend <= 0 or not frames:
+            return frames
+        have = {f for f, _ in frames}
+        add = []
+        runs, cur = [], [frames[0]]
+        for x in frames[1:]:
+            if x[0] == cur[-1][0] + 1 and x[1]["p"] == cur[-1][1]["p"]:
+                cur.append(x)
+            else:
+                runs.append(cur)
+                cur = [x]
+        runs.append(cur)
+        for run in runs:
+            for (f0, o), step in ((run[-1], 1), (run[0], -1)):
+                d = o["dirw"]
+                for k in range(1, a.extend + 1):
+                    f = f0 + step * k
+                    if f in have or f < 0 or f >= len(masks):
+                        break
+                    R = hand_rot(o["p"], o["h"], f - step, f)
+                    if R is None:
+                        break
+                    d = R @ d
+                    add.append((f, dict(o, dirw=d)))
+                    have.add(f)
+        return sorted(frames + add, key=lambda x: x[0])
+
+    def smooth_in_hand(frames, seen_fs):
+        """Direction smoothed in the hand's own frame (weights: seen 1, filled 0.3), so a staff follows the hand
+        smoothly instead of every per-frame mask."""
+        if a.sigma_dir <= 0:
+            return frames
+        loc = []
+        for f, o in frames:
+            R = hand_frame(o["p"], o["h"], f)
+            loc.append(None if R is None else R.T @ (o["dirw"] / np.linalg.norm(o["dirw"])))
+        res_ = []
+        for i, (f, o) in enumerate(frames):
+            if loc[i] is None:
+                res_.append((f, o))
+                continue
+            acc, wsum = np.zeros(3), 0.0
+            for j in range(max(0, i - 4 * int(a.sigma_dir) - 1), min(len(frames), i + 4 * int(a.sigma_dir) + 2)):
+                g, oj = frames[j]
+                if loc[j] is None or (oj["p"], oj["h"]) != (o["p"], o["h"]) or abs(g - f) > 3 * a.sigma_dir:
+                    continue
+                wj = np.exp(-0.5 * ((g - f) / a.sigma_dir) ** 2) * (1.0 if g in seen_fs else 0.3)
+                acc += wj * loc[j]
+                wsum += wj
+            d = acc / max(np.linalg.norm(acc), 1e-9)
+            R = hand_frame(o["p"], o["h"], f)
+            res_.append((f, dict(o, dirw=R @ d)))
+        return res_
 
     out, report, staffs = {}, {}, []
     for num, lab in id_map.items():
@@ -253,6 +329,9 @@ def main() -> int:
                         d = slerp_dir(fwd[k] / np.linalg.norm(fwd[k]), bwd[k] / np.linalg.norm(bwd[k]), w)
                         frames.append((k, dict(p=o1["p"], h=o1["h"], dirw=d,
                                                frac=(1 - w) * o1["frac"] + w * o2["frac"], r=o1["r"])))
+        frames.sort(key=lambda x: x[0])
+        frames = extend_ends(frames, set(obs))
+        frames = smooth_in_hand(frames, set(obs))
         staffs.append((len(obs), lab, L, frames, obs))
     # one staff per person: where two labels (e.g. a whole-frame mask and a hand-window mask of the same staff) are
     # held by the same person on a frame (either hand: staffs are held two-handed), the label seen on more frames keeps it
