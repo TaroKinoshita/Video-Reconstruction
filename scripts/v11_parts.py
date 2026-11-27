@@ -206,6 +206,22 @@ def main() -> int:
                     + (1 - fu) * fv * img[v0 + 1, u0] + fu * fv * img[v0 + 1, u0 + 1])
     tex_seen = np.isfinite(best).reshape(TH, TW)
     tex = tex.reshape(TH, TW, 3)
+    # ground not seen gets a tile of seen ground (mirrored so it repeats without seams) instead of flat cell colours;
+    # the film texture fades into it over about 0.5 m
+    P = int(round(3.0 / a.texel))
+    integ = cv2.integral(tex_seen.astype(np.uint8))
+    full = (integ[P:, P:] - integ[:-P, P:] - integ[P:, :-P] + integ[:-P, :-P]) == P * P
+    lum = cv2.blur(tex.mean(-1), (P, P))[P // 2:P // 2 + full.shape[0], P // 2:P // 2 + full.shape[1]]
+    if full.any():
+        target = np.median(tex[tex_seen].mean(-1))
+        cand = np.argwhere(full)
+        y_, x_ = cand[np.argmin(np.abs(lum[full] - target))]
+        patch = tex[y_:y_ + P, x_:x_ + P]
+    else:
+        patch = np.tile(np.median(tex[tex_seen], 0) if tex_seen.any() else [0.3, 0.25, 0.2], (P, P, 1))
+    tile = np.concatenate([np.concatenate([patch, patch[:, ::-1]], 1),
+                           np.concatenate([patch[::-1], patch[::-1, ::-1]], 1)], 0)
+    tex_alpha = cv2.GaussianBlur(cv2.erode(tex_seen.astype(np.float32), np.ones((9, 9), np.uint8)), (0, 0), 0.5 / a.texel / 2)
     seen_area = cv2.dilate(known.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)  # +-1 m around what was seen
 
     def ground_z(xq, yq):
@@ -295,7 +311,33 @@ def main() -> int:
     trunks = [t for t in trunks if t["frames"] >= 2 or t["r"] > 0.15]
 
     # ---- backdrop: what is left on the keyframes
+    # static check: a backdrop point must not be "seen through" from the other 4RC frames. A thing that moved
+    # (a swung staff, an arm missed by the masks) sits in front of what the other frames see at its pixel; a static
+    # surface is confirmed there (same depth) or hidden (behind). Kept: confirmations >= see-throughs.
+    Rc = [Rg @ prep["cam_R"][t] for t in rc_frames]
+    zmaps = [((pts[j] - cam_g[rc_frames[j]]) @ Rc[j])[..., 2] for j in range(n_rc)]
+
+    def static_ok(P: np.ndarray, i_self: int) -> np.ndarray:
+        conf_n = np.zeros(len(P), int)
+        thru_n = np.zeros(len(P), int)
+        for j in range(n_rc):
+            if j == i_self:
+                continue
+            Xc = (P - cam_g[rc_frames[j]]) @ Rc[j]
+            z = Xc[:, 2]
+            zs = np.maximum(z, 1e-6)
+            x4 = np.round((f_img * Xc[:, 0] / zs + W / 2) * s - ox).astype(int)
+            y4 = np.round((f_img * Xc[:, 1] / zs + H / 2) * s - oy).astype(int)
+            ins = (z > 0.3) & (x4 >= 0) & (x4 < w4) & (y4 >= 0) & (y4 < h4)
+            zm = np.full(len(P), np.nan)
+            zm[ins] = zmaps[j][y4[ins], x4[ins]]
+            ins[ins] &= ~people[j][y4[ins], x4[ins]]
+            conf_n += ins & (np.abs(zm - z) < 0.06 * z)
+            thru_n += ins & (zm > 1.15 * z)
+        return conf_n >= thru_n
+
     bd_v, bd_f, bd_c, off = [], [], [], 0
+    dropped_moving = 0
     taken_labels = [k for k in inst if k not in ("foliage",)]
     for kf in a.keyframes:
         i = rc_frames.index(kf)
@@ -308,6 +350,9 @@ def main() -> int:
         step = 2
         Pk, zk, kk, ck = Pw[::step, ::step], zc[::step, ::step], keep[::step, ::step], cols[i][::step, ::step]
         hh, ww = kk.shape
+        st = static_ok(Pk.reshape(-1, 3), i).reshape(hh, ww)
+        dropped_moving += int((kk & ~st).sum())
+        kk = kk & st
         ii = np.arange(hh * ww).reshape(hh, ww)
         q1, q2, q3, q4 = ii[:-1, :-1].ravel(), ii[:-1, 1:].ravel(), ii[1:, :-1].ravel(), ii[1:, 1:].ravel()
         tris = np.concatenate([np.stack([q1, q3, q2], 1), np.stack([q2, q3, q4], 1)])
@@ -393,7 +438,7 @@ def main() -> int:
     out = {"parts": np.array(json.dumps(parts)), "ground_v": ground_v.astype(np.float32),
            "ground_f": ground_f.astype(np.int32), "ground_col": lin(cg).astype(np.float32),
            "ground_seen": seen.astype(bool), "ground_tex": (np.clip(tex, 0, 1) * 255).astype(np.uint8),
-           "ground_tex_seen": tex_seen, "ground_tex_box": np.array([tx0, ty0, tw, th], np.float64), "backdrop_v": np.concatenate(bd_v).astype(np.float32),
+           "ground_tex_seen": tex_seen, "ground_tex_alpha": tex_alpha.astype(np.float32), "ground_tile": (np.clip(tile, 0, 1) * 255).astype(np.uint8), "ground_tile_m": 2 * P * a.texel, "ground_tex_box": np.array([tx0, ty0, tw, th], np.float64), "backdrop_v": np.concatenate(bd_v).astype(np.float32),
            "backdrop_f": np.concatenate(bd_f).astype(np.int32), "backdrop_col": lin(np.concatenate(bd_c)).astype(np.float32)}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(a.out, **out)
@@ -401,7 +446,7 @@ def main() -> int:
                       "looked_at_m2": round(looked_m2), "trunks_seen_out_to_m": round(far, 1),
                       "trunks": len(trunks), "posts": len(posts), "beams": len(beams), "imagined_trees": len(imagined),
                       "canopy": len(canopy), "density_per_100m2": round(density * 100, 2),
-                      "seen_ground_m2": round(seen_m2), "backdrop_tris": int(sum(len(f) for f in bd_f)),
+                      "seen_ground_m2": round(seen_m2), "backdrop_tris": int(sum(len(f) for f in bd_f)), "backdrop_points_dropped_moving": dropped_moving,
                       "camera_height_m": [round(float(cam_g[f][2] - ground_z(cam_g[f][0], cam_g[f][1])), 2) for f in (0, 150, 305)]},
                      indent=1))
     return 0

@@ -99,7 +99,8 @@ def film_material(name: str, attr_name: str = "film"):
     attr = nt.nodes.new("ShaderNodeVertexColor")
     attr.layer_name = attr_name
     bsdf = nt.nodes["Principled BSDF"]
-    bsdf.inputs["Roughness"].default_value = 0.9
+    bsdf.inputs["Roughness"].default_value = 1.0
+    bsdf.inputs["Specular IOR Level"].default_value = 0.0  # film colours already hold the light; no sky sheen
     nt.links.new(attr.outputs["Color"], bsdf.inputs["Base Color"])
     return mat
 
@@ -111,6 +112,7 @@ def object_colour_material(name: str, roughness: float = 0.9):
     info_node = nt.nodes.new("ShaderNodeObjectInfo")
     bsdf = nt.nodes["Principled BSDF"]
     bsdf.inputs["Roughness"].default_value = roughness
+    bsdf.inputs["Specular IOR Level"].default_value = 0.1
     nt.links.new(info_node.outputs["Color"], bsdf.inputs["Base Color"])
     return mat
 
@@ -152,7 +154,8 @@ else:
         tex, seen_t = pz["ground_tex"], pz["ground_tex_seen"]
         TH, TW = seen_t.shape
         img = bpy.data.images.new("ground_film", TW, TH, alpha=True)
-        rgba = np.concatenate([tex.astype(np.float32) / 255, seen_t[..., None].astype(np.float32)], -1)
+        alpha = pz["ground_tex_alpha"] if "ground_tex_alpha" in pz.files else seen_t.astype(np.float32)
+        rgba = np.concatenate([tex.astype(np.float32) / 255, alpha[..., None].astype(np.float32)], -1)
         img.pixels.foreach_set(rgba.ravel())
         img.pack()
         x0, y0, tw, th = pz["ground_tex_box"]
@@ -172,7 +175,27 @@ else:
         vc = next(n for n in nt.nodes if n.type == "VERTEX_COLOR")
         bsdf = nt.nodes["Principled BSDF"]
         nt.links.new(t.outputs["Alpha"], mix.inputs["Factor"])
-        nt.links.new(vc.outputs["Color"], mix.inputs[6])
+        if "ground_tile" in pz.files:  # unseen ground: a repeating tile of seen ground instead of cell colours
+            tl = pz["ground_tile"]
+            timg = bpy.data.images.new("ground_tile", tl.shape[1], tl.shape[0], alpha=False)
+            timg.pixels.foreach_set(np.concatenate([tl.astype(np.float32) / 255, np.ones(tl.shape[:2] + (1,), np.float32)],
+                                                   -1).ravel())
+            timg.pack()
+            uv2 = me.uv_layers.new(name="tile")
+            tm = float(pz["ground_tile_m"])
+            uv2.data.foreach_set("uv", np.stack([V[lv, 0] / tm, V[lv, 1] / tm], 1).astype(np.float32).ravel())
+            uvn = nt.nodes.new("ShaderNodeUVMap")
+            uvn.uv_map = "tile"
+            t2 = nt.nodes.new("ShaderNodeTexImage")
+            t2.image = timg
+            t2.extension = "REPEAT"
+            nt.links.new(uvn.outputs["UV"], t2.inputs["Vector"])
+            uv1 = nt.nodes.new("ShaderNodeUVMap")
+            uv1.uv_map = "UVMap"
+            nt.links.new(uv1.outputs["UV"], t.inputs["Vector"])
+            nt.links.new(t2.outputs["Color"], mix.inputs[6])
+        else:
+            nt.links.new(vc.outputs["Color"], mix.inputs[6])
         nt.links.new(t.outputs["Color"], mix.inputs[7])
         nt.links.new(mix.outputs[2], bsdf.inputs["Base Color"])
     coloured_mesh("Backdrop", pz["backdrop_v"], pz["backdrop_f"], pz["backdrop_col"], env)
