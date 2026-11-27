@@ -1,4 +1,4 @@
-# Review instructions for GPT: F002 reconstruction (v9, second round)
+# Review instructions for GPT: F002 reconstruction (v9, second round; final scene v11)
 
 You are an outside reviewer. Give an honest second opinion: no flattery, and no fixes applied. Do not edit files in this repository. Write your answer as one report.
 
@@ -12,7 +12,7 @@ Everything in the scene comes from the clip alone. The benchmark's ground truth 
 
 ## What to look at
 
-- `runs/mave/F002/review/compare_v9.mp4` (main input; not in git; `compare.mp4` is the v4 you reviewed first):
+- `runs/mave/F002/review/compare_v9.mp4` (main input for the second review; final: `compare_v11.mp4`; not in git; `compare.mp4` is the v4 you reviewed first):
   - left half: the film;
   - right half: the scene rendered from the reconstructed camera on every frame.
 - `runs/mave/F002/scene_v9.blend` (optional; Blender 4.5+). Collections:

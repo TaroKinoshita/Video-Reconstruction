@@ -3,6 +3,18 @@
 Read this first. History: `docs/HANDOFF_EN.md` (and the Japanese `docs/HANDOFF.md`). Plan and decisions:
 `docs/PLAN.md` (16.6 = review decisions D1-D8). Review and work packages: `docs/REVIEW_INSTRUCTIONS.md`.
 
+## F002 (MAVEBench, forest staff fight) — closed 2026-11-28 at v11
+
+- Final scene: `runs/mave/F002/scene_v11.blend`; film vs render: `runs/mave/F002/review/compare_v11.mp4`;
+  work data (git-ignored): `runs/mave/F002/work/` (the Temp copies were partly deleted on 2026-11-28).
+- MAVE eval 86.8 (MAVE baseline 76.5); second GPT review 7/10 at v9. Details and history: `docs/PLAN_v1_1.md` 11.1-11.4.
+- Pipeline (all from the clip only): `scripts/v11_mave_prep.py` (camera) -> `gpu/body/run_sam3dbody.py` ->
+  `scripts/v11_people_anim.py` (fit-weighted smoothing) -> `scripts/v11_parts.py` -> SAM stick masks
+  (`gpu/observe/run_sam3.py`, `scripts/v11_hand_windows.py`, `gpu/observe/run_sam3_points.py`) ->
+  `scripts/v11_staffs.py` -> `scripts/v11_colour_gain.py` -> `src/vrecon/scene/mave_blend.py`.
+- Known gaps left as they are: staff at 00:09.0 (thin, blurred, crossing a body; no local tool segments it),
+  staff holder can switch people, sacks are part of the backdrop, imagined trunks too regular.
+
 ## Where things are
 
 - **v1.0 = tennis case study (V2V, RQ2) + RQ1 2x3 study** (user, 2026-11-18). RQ1 runs unattended:
