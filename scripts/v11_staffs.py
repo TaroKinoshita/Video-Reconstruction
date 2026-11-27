@@ -337,7 +337,7 @@ def main() -> int:
             res_.append((f, dict(o, dirw=R @ d)))
         return res_
 
-    out, report, staffs = {}, {}, []
+    out, report, staffs, short_seen = {}, {}, [], []
     for num, lab in id_map.items():
         seen = {}  # f -> (mask, person, hand)
         for f in range(len(masks)):
@@ -392,6 +392,8 @@ def main() -> int:
                           pts=[(c + (s.min() + q * np.ptp(s)) * d).tolist() for q in (0.15, 0.35, 0.5, 0.65, 0.85)])
         if len(obs) < 5:
             report[lab] = {"frames": len(obs), "kept": False}
+            if obs:  # too short for a staff, but a held sighting is still a good tracker seed
+                short_seen.append((lab, obs))
             continue
         # one length per staff: seen lengths back-projected at the grip depth (a slant only shortens them)
         L = float(np.percentile([o["lpx"] * o["gc"][2] / f_img for o in obs.values()], 80))
@@ -466,7 +468,8 @@ def main() -> int:
         report[lab] = {"seen_frames": len(obs), "frames_with_fill": len(T), "first": int(min(T)), "last": int(max(T)),
                        "length_m": round(L, 2), "holders": sorted({f"{o['p']}:{o['h']}" for _, o in frames})}
     if a.seeds:
-        # point seeds for a tracker: per kept label, held sightings spread over its frames (largest staff first)
+        # point seeds for a tracker: per kept label, held sightings spread over its frames (largest staff first);
+        # labels with too few sightings for a staff still give their sightings as seeds
         objs = {}
         for n_obs, lab, _, _, obs in sorted(staffs, key=lambda x: -x[0]):
             if f"{lab}_t" not in out:
@@ -474,6 +477,8 @@ def main() -> int:
             fs = sorted(obs)
             pick = sorted({fs[int(i)] for i in np.linspace(0, len(fs) - 1, min(a.seeds_per, len(fs)))})
             objs[lab] = [{"frame": int(f), "points": obs[f]["pts"]} for f in pick]
+        for lab, obs in short_seen:
+            objs[lab] = [{"frame": int(f), "points": obs[f]["pts"]} for f in sorted(obs)]
         a.seeds.write_text(json.dumps({"objects": objs}), encoding="utf-8")
     out["labels"] = np.array(json.dumps(sorted(k[:-2] for k in out if k.endswith("_t"))))
     np.savez_compressed(a.out, **out)
