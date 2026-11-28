@@ -1,7 +1,7 @@
 """One entry point: a single shot (video) -> editable Blender scene, the MAVE way (arXiv 2611.22464) with this
 project's tools. Stages run in order; a stage whose output exists is skipped (delete it to redo).
 
-  python scripts/mave_pipeline.py VIDEO WORK_DIR [--keyframes 10] [--body-step 2] [--max-people 4]
+  python scripts/mave_pipeline.py VIDEO WORK_DIR [--keyframes 10] [--body-step 1] [--max-people 4]
       [--agent sonnet|opus|none]
       [--people mave|own] [--mode empty|system] [--size W H] [--fps F]
 
@@ -90,6 +90,68 @@ def link_chunks(parts: list, N: int, hw: tuple, overlap: int) -> np.ndarray:
     return out
 
 
+def merge_tracks(m: np.ndarray, video: np.ndarray | None = None, max_gap: int = 16, max_dist: float = 0.2,
+                 min_frames: int = 15, edge_gap: int = 60, max_colour: float = 0.25) -> np.ndarray:
+    """Join track pieces of one person, then drop pieces seen on fewer than min_frames frames. Two passes:
+    1. continuations: the later piece starts within max_gap frames after the earlier one ends, its first mask
+       centre within max_dist x picture width of the earlier one's last (nearest first);
+    2. re-entries: the earlier piece left through the picture's edge and a piece starts within edge_gap frames
+       (the longest such piece: short fragments are often false detections).
+    With the video, pieces must also look alike (hue-saturation histogram distance < max_colour; this rejects
+    objects taken for people, not people dressed alike). Ids of kept tracks stay (the earliest id of a chain)."""
+    import cv2
+    H, W = m.shape[1:]
+    m = m.copy()
+
+    def info(i):
+        fr = np.where((m == i).any((1, 2)))[0]
+        if not len(fr):
+            return None
+        hist = None
+        if video is not None:
+            hist = np.zeros((16, 8))
+            for t in fr[::max(1, len(fr) // 20)]:
+                hsv = cv2.cvtColor(video[t], cv2.COLOR_RGB2HSV)[m[t] == i]
+                hist += np.histogram2d(hsv[:, 0], hsv[:, 1], bins=[16, 8], range=[[0, 180], [0, 256]])[0]
+            hist /= max(hist.sum(), 1)
+        return fr[0], fr[-1], np.argwhere(m[fr[0]] == i).mean(0), np.argwhere(m[fr[-1]] == i).mean(0), len(fr), hist
+
+    def alike(x, y):
+        return x[5] is None or 1 - np.sqrt(x[5] * y[5]).sum() < max_colour
+
+    for edge_pass in (False, True):
+        while True:
+            ids = [i for i in range(1, int(m.max()) + 1) if (m == i).any()]
+            inf = {i: info(i) for i in ids}
+            best = None
+            for a_ in ids:
+                ea, last = inf[a_][1], inf[a_][3]
+                at_edge = min(last[1], W - last[1]) < 0.05 * W or min(last[0], H - last[0]) < 0.05 * H
+                for b_ in ids:
+                    sb = inf[b_][0]
+                    if a_ == b_ or not alike(inf[a_], inf[b_]):
+                        continue
+                    if not edge_pass:
+                        d = np.linalg.norm(last - inf[b_][2]) / W
+                        if ea < sb <= ea + max_gap and d < max_dist:
+                            score = d
+                        else:
+                            continue
+                    elif at_edge and ea < sb <= ea + edge_gap:
+                        score = -inf[b_][4]
+                    else:
+                        continue
+                    if best is None or score < best[0]:
+                        best = (score, a_, b_)
+            if best is None:
+                break
+            m[m == best[2]] = best[1]
+    for i in range(1, int(m.max()) + 1):
+        if 0 < (m == i).any((1, 2)).sum() < min_frames:
+            m[m == i] = 0
+    return m
+
+
 def fit_focal(rc_path: Path, W: int, H: int, n: int) -> float:
     """The square-pixel focal of scripts/v11_mave_prep.py, at W x H."""
     rc = np.load(rc_path)
@@ -112,7 +174,7 @@ def main() -> int:
     ap.add_argument("video", type=Path)
     ap.add_argument("work", type=Path)
     ap.add_argument("--keyframes", type=int, default=10)
-    ap.add_argument("--body-step", type=int, default=2)
+    ap.add_argument("--body-step", type=int, default=1)
     ap.add_argument("--people-width", type=int, default=480, help="picture width for people tracking")
     ap.add_argument("--chunk", type=int, default=80, help="frames per people-tracking chunk")
     ap.add_argument("--overlap", type=int, default=8)
@@ -199,9 +261,10 @@ def main() -> int:
                      "--max-objects", a.max_people], logs / f"people_c{c}.log")
             parts_m.append((s0, s1, np.load(cm)))
         big = link_chunks(parts_m, N, (hs, ws), a.overlap)
-        big = np.stack([cv2.resize(m, (W, H), interpolation=cv2.INTER_NEAREST) for m in big])
+        big = merge_tracks(np.stack([cv2.resize(m, (W, H), interpolation=cv2.INTER_NEAREST) for m in big]), v)
         n_ids = int(big.max())
-        np.savez_compressed(people_m, masks=big, id_map=json.dumps({str(i): f"obs_{i - 1}" for i in range(1, n_ids + 1)}),
+        np.savez_compressed(people_m, masks=big, id_map=json.dumps({str(i): f"obs_{i - 1}" for i in range(1, n_ids + 1)
+                                                                    if (big == i).any()}),
                             meta=json.dumps({"tool": "sam3.1 chunked", "chunks": chunks}))
     sem_m = rc_dir / "sem.masks.npz"
     if stage("semantic", sem_m):
@@ -217,8 +280,11 @@ def main() -> int:
     body = w / "body"
     if stage("body", body / "done"):
         frames = sorted(set(range(0, N, a.body_step)) | set(kf))
+        d = np.load(people_m)
+        pm = d["masks"]
+        labels = [v for k, v in json.loads(str(d["id_map"])).items() if (pm == int(k)).any((1, 2)).sum() >= 0.35 * N]
         run([ENV["body"], ROOT / "gpu/body/run_sam3dbody.py", vid, people_m, body, "--focal", st["focal"],
-             "--frames", *frames], logs / "body.log")
+             "--frames", *frames, "--labels", *labels], logs / "body.log")
         (body / "done").write_text("ok", encoding="utf-8")
     prep = w / "prep.npz"
     if stage("prep", prep):
@@ -247,14 +313,14 @@ def main() -> int:
     if a.agent != "none" and stage("agent", agent_dir / "agent_summary.json"):
         if not (agent_dir / "run.json").exists():
             run([PY, ROOT / "scripts/agent_run.py", "init", agent_dir, ev, people, parts, "--video", vid, "--mode",
-                 a.mode, "--fps", st["fps"]], logs / "init.log")
+                 a.mode, "--fps", st["fps"]], logs / f"init_{a.mode}_{a.people}.log")
         model = {"sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"}[a.agent]
-        run([PY, ROOT / "scripts/agent_run.py", "run", agent_dir, "--model", model], logs / "agent.log")
+        run([PY, ROOT / "scripts/agent_run.py", "run", agent_dir, "--model", model], logs / f"agent_{a.mode}_{a.people}.log")
     out = w / f"scene_{a.mode}_{a.people}.blend"
     if a.agent != "none" and stage("blend", out):
         size = a.size or st["source_size"]
         run([PY, ROOT / "scripts/agent_run.py", "blend", agent_dir, prep, out, "--size", *size, "--fps", st["fps"]],
-            logs / "blend.log")
+            logs / f"blend_{a.mode}_{a.people}.log")
     print(json.dumps({"scene": str(out), "state": st}, indent=1))
     return 0
 

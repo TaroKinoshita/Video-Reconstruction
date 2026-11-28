@@ -114,7 +114,9 @@ Findings so far:
   recognises (trunk, wall, ceiling) and the near ground must now be built.
 - 4RC is not deterministic: two runs on the same frames differed by up to 13 % in depth. Scene parts and check
   evidence must come from the same run.
-- One entry point, video to .blend: `scripts/mave_pipeline.py`.
+- One entry point, video to .blend: `scripts/mave_pipeline.py`. Rebuilt from scratch with it, F002 scores 85.5
+  with our scene parts and no agent, and 86.1 when the agent corrects those parts (it removed ten "beams" that were
+  the fighters' staffs). The MAVE reproduction varies between runs: 73.9 and 78.5 on the same clip.
 
 Code: `src/vrecon/agent/` (primitives, evidence, checks, gravity, tools, MCP server), `scripts/agent_run.py` (evidence,
 run, verify, blend), `scripts/v11_*.py` (measurement steps), `src/vrecon/scene/mave_blend.py` (scene to .blend).
