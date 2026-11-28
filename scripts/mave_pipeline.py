@@ -8,10 +8,10 @@ project's tools. Stages run in order; a stage whose output exists is skipped (de
 WORK_DIR must be an ASCII path (the GPU tools read files with cv2). Stages:
   video      the shot at <= 960 px wide (video.mp4), frame count, fps
   frames     keyframes (evenly spaced) and the 4RC frames (keyframes + two between each pair, <= 30)
-  4rc        camera, depth and point maps of the 4RC frames (env 4rc)              [MAVE: DA3]
+  4rc / da3  camera, depth and point maps of the 4RC frames (env 4rc, or env da3 with --depth da3, as MAVE)
   people     SAM 3.1 people tracks on the whole shot (env observe)                [MAVE: SAM 3]
-  semantic   SAM 3.1 text prompts on the 4RC frames: ground, wall, ceiling, trunk, post, beam, foliage
-                                                                                   [MAVE: Mask2Former]
+  semantic   SAM 3.1 text prompts on the 4RC frames: ground, wall, ceiling, trunk, post, beam, foliage (parts)
+  mask2former  Mask2Former (ADE20K) labels for the evidence, as MAVE (env sem; --labels sam uses the SAM ones)
   focal      one focal length fitted to the 4RC point maps
   body       SAM 3D Body per person on every --body-step frame and the keyframes (env body)
   prep       camera per frame, people at the keyframes (scripts/v11_mave_prep.py)
@@ -39,7 +39,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 LOCAL = Path(os.environ.get("LOCALAPPDATA", "")) / "vrecon"
-ENV = {k: LOCAL / "envs" / k / "Scripts" / "python.exe" for k in ("4rc", "observe", "body")}
+ENV = {k: LOCAL / "envs" / k / "Scripts" / "python.exe" for k in ("4rc", "observe", "body", "sem", "da3")}
 PY = sys.executable
 SEM_SETS = ["ground=ground", "floor=ground", "wall=wall", "ceiling=ceiling", "tree trunk=trunk", "pole=post",
             "beam=beam", "foliage=foliage"]
@@ -180,6 +180,9 @@ def main() -> int:
     ap.add_argument("--overlap", type=int, default=8)
     ap.add_argument("--max-people", type=int, default=4, help="tracked at once (8 GB VRAM: 6 overflows at 960 px)")
     ap.add_argument("--people", choices=["mave", "own"], default="mave")
+    ap.add_argument("--depth", choices=["4rc", "da3"], default="4rc", help="cameras, depth and points (MAVE: da3)")
+    ap.add_argument("--labels", choices=["sam", "m2f"], default="m2f",
+                    help="semantic labels for the evidence (MAVE: Mask2Former); the system parts use SAM")
     ap.add_argument("--mode", choices=["empty", "system"], default="empty")
     ap.add_argument("--agent", choices=["sonnet", "opus", "none"], default="sonnet")
     ap.add_argument("--size", type=int, nargs=2, default=None, help="output picture size (default: the input's)")
@@ -239,7 +242,7 @@ def main() -> int:
     fj = json.loads((w / "frames.json").read_text(encoding="utf-8"))
     kf, fr = fj["keyframes"], fj["rc"]
 
-    if stage("4rc", rc_dir / "4rc.npz"):
+    if a.depth == "4rc" and stage("4rc", rc_dir / "4rc.npz"):
         run([ENV["4rc"], "inference.py", "--input", rc_dir / "frames", "--save", rc_dir / "4rc.npz"],
             logs / "4rc.log", cwd=LOCAL / "src" / "4RC")
     people_m = w / "people.masks.npz"
@@ -266,6 +269,13 @@ def main() -> int:
         np.savez_compressed(people_m, masks=big, id_map=json.dumps({str(i): f"obs_{i - 1}" for i in range(1, n_ids + 1)
                                                                     if (big == i).any()}),
                             meta=json.dumps({"tool": "sam3.1 chunked", "chunks": chunks}))
+    if a.depth == "da3" and stage("da3", rc_dir / "da3.npz"):
+        run([ENV["da3"], ROOT / "gpu/observe/run_da3.py", rc_dir / "frames", rc_dir / "da3.npz"], logs / "da3.log")
+    depth = rc_dir / f"{a.depth}.npz"
+    tag = "" if a.depth == "4rc" else f"_{a.depth}"
+    m2f = rc_dir / "m2f.masks.npz"
+    if a.labels == "m2f" and stage("mask2former", m2f):
+        run([ENV["sem"], ROOT / "gpu/observe/run_mask2former.py", rc_dir / "rc_frames.mp4", m2f], logs / "m2f.log")
     sem_m = rc_dir / "sem.masks.npz"
     if stage("semantic", sem_m):
         cmd = [ENV["observe"], ROOT / "gpu/observe/run_sam3.py", rc_dir / "rc_frames.mp4", sem_m, "--movers",
@@ -274,7 +284,7 @@ def main() -> int:
             cmd += ["--set", s_]
         run(cmd, logs / "semantic.log")
     if "focal" not in st:
-        st["focal"] = fit_focal(rc_dir / "4rc.npz", W, H, len(fr))
+        st["focal"] = fit_focal(depth, W, H, len(fr))
         save()
         print(f"[focal] {st['focal']:.1f} px")
     body = w / "body"
@@ -286,41 +296,42 @@ def main() -> int:
         run([ENV["body"], ROOT / "gpu/body/run_sam3dbody.py", vid, people_m, body, "--focal", st["focal"],
              "--frames", *frames, "--labels", *labels], logs / "body.log")
         (body / "done").write_text("ok", encoding="utf-8")
-    prep = w / "prep.npz"
+    prep = w / f"prep{tag}.npz"
     if stage("prep", prep):
-        run([PY, ROOT / "scripts/v11_mave_prep.py", rc_dir / "4rc.npz", rc_dir / "frames.json", people_m, body, prep,
+        run([PY, ROOT / "scripts/v11_mave_prep.py", depth, rc_dir / "frames.json", people_m, body, prep,
              "--size", W, H, "--keyframes", *kf, "--frames", N], logs / "prep.log")
-    anim = w / "people_own.npz"
+    anim = w / f"people_own{tag}.npz"
     if stage("anim", anim):
-        run([PY, ROOT / "scripts/v11_people_anim.py", prep, rc_dir / "4rc.npz", rc_dir / "frames.json", people_m,
+        run([PY, ROOT / "scripts/v11_people_anim.py", prep, depth, rc_dir / "frames.json", people_m,
              body, vid, anim], logs / "anim.log")
-    parts = w / "parts.npz"
+    parts = w / f"parts{tag}.npz"
     if stage("parts", parts):
-        run([PY, ROOT / "scripts/v11_parts.py", prep, rc_dir / "4rc.npz", rc_dir / "frames.json",
+        run([PY, ROOT / "scripts/v11_parts.py", prep, depth, rc_dir / "frames.json",
              rc_dir / "rc_frames.mp4", parts, "--labels", f"{sem_m}=ground,trunk,beam,foliage,post",
              "--people", people_m, "--keyframes", *kf, "--ground-masks", sem_m], logs / "parts.log")
     people = anim
     if a.people == "mave":
-        people = w / "people_mave.npz"
+        people = w / f"people_mave{tag}.npz"
         if stage("place (MAVE eq. 4-5)", people):
             run([PY, ROOT / "scripts/v11_people_place.py", prep, anim, body, people], logs / "place.log")
-    ev = w / "evidence.npz"
+    ev = w / f"evidence{tag}_{a.labels}.npz"
     if stage("evidence", ev):
-        run([PY, ROOT / "scripts/agent_run.py", "evidence", prep, parts, rc_dir / "4rc.npz", rc_dir / "frames.json",
+        run([PY, ROOT / "scripts/agent_run.py", "evidence", prep, parts, depth, rc_dir / "frames.json",
              ev, "--people-masks", rc_dir / "sem.masks.npz", "--up", "multi", "--people", people,
-             "--semantic", sem_m, "--no-calibrate"], logs / "evidence.log")
-    agent_dir = w / f"agent_{a.mode}_{a.people}"
+             "--semantic", m2f if a.labels == "m2f" else sem_m, "--no-calibrate"], logs / f"evidence{tag}_{a.labels}.log")
+    variant = f"{a.mode}_{a.people}{tag}_{a.labels}"
+    agent_dir = w / f"agent_{variant}"
     if a.agent != "none" and stage("agent", agent_dir / "agent_summary.json"):
         if not (agent_dir / "run.json").exists():
             run([PY, ROOT / "scripts/agent_run.py", "init", agent_dir, ev, people, parts, "--video", vid, "--mode",
-                 a.mode, "--fps", st["fps"]], logs / f"init_{a.mode}_{a.people}.log")
+                 a.mode, "--fps", st["fps"]], logs / f"init_{variant}.log")
         model = {"sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"}[a.agent]
-        run([PY, ROOT / "scripts/agent_run.py", "run", agent_dir, "--model", model], logs / f"agent_{a.mode}_{a.people}.log")
-    out = w / f"scene_{a.mode}_{a.people}.blend"
+        run([PY, ROOT / "scripts/agent_run.py", "run", agent_dir, "--model", model], logs / f"agent_{variant}.log")
+    out = w / f"scene_{variant}.blend"
     if a.agent != "none" and stage("blend", out):
         size = a.size or st["source_size"]
         run([PY, ROOT / "scripts/agent_run.py", "blend", agent_dir, prep, out, "--size", *size, "--fps", st["fps"]],
-            logs / f"blend_{a.mode}_{a.people}.log")
+            logs / f"blend_{variant}.log")
     print(json.dumps({"scene": str(out), "state": st}, indent=1))
     return 0
 

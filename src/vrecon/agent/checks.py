@@ -22,6 +22,7 @@ NEAR_WIN = 3  # observed depth taken as the nearest within this window: 4RC smoo
 PHI_FLAG, PHI_MIN_PX = 0.15, 20
 HEIGHT_OK = (1.45, 2.05)
 FOOT_UP, FOOT_DOWN, FOOT_MIN_FRAMES = 0.15, -0.12, 4
+INSIDE_JUSTIFIABLE = 0.15  # a body more than this far inside a primitive is a scene error, not a pose
 
 
 def rays(ev: dict, frame: int, us: np.ndarray, vs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -217,7 +218,8 @@ def coverage(ev: dict, scene: dict, mesh_vox: set | None) -> tuple[list[dict], d
         # must be built: the ground layer near the action, and near structure a segmenter recognised (trunk,
         # wall, ceiling); geometry nobody recognised (foliage, blur, depth noise) may be explained instead
         must = near < NEAR_M and ((kind == "layer" and st["points"] >= 300)
-                                  or (st.get("recognised") in ("trunk", "wall", "ceiling") and st["points"] >= 80))
+                                  or (st.get("recognised") in ("wall", "ceiling") and st["points"] >= 80)
+                                  or (st.get("recognised") == "trunk" and kind == "column" and st["points"] >= 80))
         iid = f"coverage:{st['class']}:{kind}:({c[0]:.0f},{c[1]:.0f},{c[2]:.0f})"
         info = {k: v for k, v in st.items() if k not in ("height_grid_2_5m",)}
         if kind == "layer":
@@ -314,7 +316,9 @@ def human(ev: dict, scene: dict, people: dict) -> tuple[list[dict], dict]:
                     inside[p["name"]].append((int(ts[j]), share))
         for name, hits in inside.items():
             fr = [h[0] for h in hits]
+            share = max(h[1] for h in hits)
             issues.append({"id": f"human:inside:{label}:{name}", "check": "human", "person": label, "primitive": name,
+                           "justifiable": share <= INSIDE_JUSTIFIABLE,
                            "frames": [min(fr), max(fr)], "max_share": round(max(h[1] for h in hits), 3),
                            "text": f"{label}'s body is inside {name} on {len(fr)} sampled frames between {min(fr)} "
                                    f"and {max(fr)} (up to {max(h[1] for h in hits):.0%} of the body)."})
