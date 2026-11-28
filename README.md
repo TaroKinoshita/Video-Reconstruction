@@ -102,16 +102,21 @@ Mapping of every MAVE part to this project, and all measurements: `docs/PLAN_v1_
 | People placement, own variant | One body size per person, kept in the picture by scaling about the camera centre | **87.1** (v12) |
 | People placement as in MAVE eq. 4-5 and 10 | Neck on the camera ray, one multiplier per person, foot-support scale | 85.8 / 85.7 (v13) |
 | Agent stage and checks as in MAVE 3.2-3.3 | LLM agent (Claude Sonnet 5.5 via `claude -p`) builds the set from an empty scene with query / edit / verify tools. Four checks: primitives in front of observed depth (eq. 12), uncovered support or wall surfaces, feet / height / penetration, floating or duplicated parts. The agent must submit; issues are resolved or justified | 80.3 (system parts as primitives: 85.3) |
+| All of MAVE together | People as in eq. 4-5, up direction from ground, wall, camera and body cues (eq. 3), semantic labels (SAM 3.1 text prompts in place of Mask2Former), agent from an empty scene; only recognised structure and the near ground must be built, everything else may be justified | **78.5** (paper's MAVE on F002: 76.5) |
 
 Findings so far:
+- The reproduction of MAVE as a whole scores 78.5 on F002, close to the paper's MAVE (76.5). It tracks the people
+  best of all versions; its depth order is lower than our own scene parts, because the agent places few trees.
 - The faithful MAVE people placement scores lower than our own variant on this clip. Both are kept.
-- The agent loop runs end to end, but the agent took a shortcut. It built only 4 primitives (ground, one post, a
-  wall) and justified 48 issues instead of placing the trees it could see. Next, tighten which issues a
-  justification can clear.
+- How strict the submit check is matters a lot. When any issue could be justified, the agent built 4 primitives and
+  explained the rest away (80.3). When it had to build every nearby vertical structure, it covered the fighters
+  with boxes (61.7), because many of those "structures" were blurred limbs and staffs. Only what a segmenter
+  recognises (trunk, wall, ceiling) and the near ground must now be built.
 - 4RC is not deterministic: two runs on the same frames differed by up to 13 % in depth. Scene parts and check
   evidence must come from the same run.
+- One entry point, video to .blend: `scripts/mave_pipeline.py`.
 
-Code: `src/vrecon/agent/` (primitives, evidence, checks, tools, MCP server), `scripts/agent_run.py` (evidence,
+Code: `src/vrecon/agent/` (primitives, evidence, checks, gravity, tools, MCP server), `scripts/agent_run.py` (evidence,
 run, verify, blend), `scripts/v11_*.py` (measurement steps), `src/vrecon/scene/mave_blend.py` (scene to .blend).
 
 ## Setup

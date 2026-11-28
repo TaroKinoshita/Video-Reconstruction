@@ -1,7 +1,8 @@
 """One entry point: a single shot (video) -> editable Blender scene, the MAVE way (arXiv 2611.22464) with this
 project's tools. Stages run in order; a stage whose output exists is skipped (delete it to redo).
 
-  python scripts/mave_pipeline.py VIDEO WORK_DIR [--keyframes 10] [--body-step 2] [--agent sonnet|opus|none]
+  python scripts/mave_pipeline.py VIDEO WORK_DIR [--keyframes 10] [--body-step 2] [--max-people 4]
+      [--agent sonnet|opus|none]
       [--people mave|own] [--mode empty|system] [--size W H] [--fps F]
 
 WORK_DIR must be an ASCII path (the GPU tools read files with cv2). Stages:
@@ -54,6 +55,41 @@ def run(cmd: list, log: Path, cwd: Path | None = None) -> None:
         raise SystemExit(f"stage failed, see {log}")
 
 
+def link_chunks(parts: list, N: int, hw: tuple, overlap: int) -> np.ndarray:
+    """Masks of overlapping chunks [(start, end, npz)] as one track set: a chunk's track takes the global id of the
+    previous chunk's track it overlaps most (IoU over the shared frames > 0.3), else a new id."""
+    out = np.zeros((N,) + hw, np.uint16)
+    nxt = 1
+    for c, (s0, s1, d) in enumerate(parts):
+        m = d["masks"]
+        ids = [int(k) for k in json.loads(str(d["id_map"]))]
+        mapping = {}
+        if c > 0:
+            sh = range(s0, min(s1, parts[c - 1][1]))
+            scores = []
+            for i in ids:
+                for g in range(1, nxt):
+                    a_ = np.stack([m[t - s0] == i for t in sh])
+                    b_ = np.stack([out[t] == g for t in sh])
+                    u = (a_ | b_).sum()
+                    if u:
+                        scores.append(((a_ & b_).sum() / u, i, g))
+            for iou, i, g in sorted(scores, reverse=True):
+                if iou > 0.3 and i not in mapping and g not in mapping.values():
+                    mapping[i] = g
+        for i in ids:
+            if i not in mapping:
+                mapping[i] = nxt
+                nxt += 1
+        start = s0 if c == 0 else s0 + overlap // 2  # the overlap's second half comes from the new chunk
+        for t in range(start, s1):
+            fr = m[t - s0]
+            out[t] = 0
+            for i, g in mapping.items():
+                out[t][fr == i] = g
+    return out
+
+
 def fit_focal(rc_path: Path, W: int, H: int, n: int) -> float:
     """The square-pixel focal of scripts/v11_mave_prep.py, at W x H."""
     rc = np.load(rc_path)
@@ -77,6 +113,10 @@ def main() -> int:
     ap.add_argument("work", type=Path)
     ap.add_argument("--keyframes", type=int, default=10)
     ap.add_argument("--body-step", type=int, default=2)
+    ap.add_argument("--people-width", type=int, default=480, help="picture width for people tracking")
+    ap.add_argument("--chunk", type=int, default=80, help="frames per people-tracking chunk")
+    ap.add_argument("--overlap", type=int, default=8)
+    ap.add_argument("--max-people", type=int, default=4, help="tracked at once (8 GB VRAM: 6 overflows at 960 px)")
     ap.add_argument("--people", choices=["mave", "own"], default="mave")
     ap.add_argument("--mode", choices=["empty", "system"], default="empty")
     ap.add_argument("--agent", choices=["sonnet", "opus", "none"], default="sonnet")
@@ -142,8 +182,27 @@ def main() -> int:
             logs / "4rc.log", cwd=LOCAL / "src" / "4RC")
     people_m = w / "people.masks.npz"
     if stage("people", people_m):
-        run([ENV["observe"], ROOT / "gpu/observe/run_sam3.py", vid, people_m, "--movers", "person",
-             "--max-objects", "6"], logs / "people.log")
+        # tracked in overlapping chunks on a small copy (SAM 3.1's memory grows along the video: on 8 GB a 306-frame
+        # run slowed from 10 to 40 s a frame), people linked across chunks by mask overlap, masks scaled back up
+        v = read_video_rgb(str(vid))
+        ws = min(W, a.people_width)
+        hs = int(round(H * ws / W / 2) * 2)
+        small = np.stack([cv2.resize(f, (ws, hs), interpolation=cv2.INTER_AREA) for f in v])
+        chunks = [(s0, min(s0 + a.chunk, N)) for s0 in range(0, N, a.chunk - a.overlap) if s0 == 0 or s0 + a.overlap < N]
+        parts_m = []
+        for c, (s0, s1) in enumerate(chunks):
+            cv_ = w / f"people_c{c}.mp4"
+            cm = w / f"people_c{c}.masks.npz"
+            if not cm.exists():
+                encode_mp4(small[s0:s1], cv_, fps=st["fps"])
+                run([ENV["observe"], ROOT / "gpu/observe/run_sam3.py", cv_, cm, "--movers", "person",
+                     "--max-objects", a.max_people], logs / f"people_c{c}.log")
+            parts_m.append((s0, s1, np.load(cm)))
+        big = link_chunks(parts_m, N, (hs, ws), a.overlap)
+        big = np.stack([cv2.resize(m, (W, H), interpolation=cv2.INTER_NEAREST) for m in big])
+        n_ids = int(big.max())
+        np.savez_compressed(people_m, masks=big, id_map=json.dumps({str(i): f"obs_{i - 1}" for i in range(1, n_ids + 1)}),
+                            meta=json.dumps({"tool": "sam3.1 chunked", "chunks": chunks}))
     sem_m = rc_dir / "sem.masks.npz"
     if stage("semantic", sem_m):
         cmd = [ENV["observe"], ROOT / "gpu/observe/run_sam3.py", rc_dir / "rc_frames.mp4", sem_m, "--movers",
