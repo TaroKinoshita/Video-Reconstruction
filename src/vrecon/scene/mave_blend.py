@@ -43,6 +43,9 @@ parts = json.loads(str(pz["parts"])) if pz is not None else None
 spec = json.load(open(argv[argv.index("--spec") + 1], encoding="utf-8")) if "--spec" in argv else None
 GR = np.array(parts["world_R"]) if parts else np.eye(3)
 Gt = np.array(parts["world_t"]) if parts else np.zeros(3)
+UP = np.array(spec["up_R"]) if spec is not None and spec.get("up_R") else None  # estimated up (MAVE eq. 3)
+if UP is not None:  # the whole world turned: camera and people through gw, the kept system meshes below
+    GR, Gt = UP @ GR, UP @ Gt
 
 
 def gw(X: np.ndarray) -> np.ndarray:
@@ -274,6 +277,11 @@ if spec is not None:
         if ob.name.startswith(("Trunk_", "Post_", "Beam_", "ImTrunk_", "Canopy_")) or \
                 (ob.name in system and not keep.get(system[ob.name])):
             bpy.data.objects.remove(ob, do_unlink=True)
+    if UP is not None:
+        M4 = Matrix([list(r) + [0.0] for r in UP.tolist()] + [[0.0, 0.0, 0.0, 1.0]])
+        for ob in list(bpy.data.objects):
+            if ob.name in system:
+                ob.matrix_world = M4 @ ob.matrix_world
     import bmesh
     from mathutils import Euler
 

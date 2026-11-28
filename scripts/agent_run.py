@@ -48,6 +48,8 @@ justify -> submit. Rules:
   ceiling surfaces should be covered by something (coverage check); feet should rest on a support, bodies should
   not sink into primitives, heights should be plausible (human check); nothing floating, duplicated or buried, and
   the camera never inside a primitive (completeness check). Look at orbit / top views once for the whole structure.
+- Issues marked "justifiable": false cannot be explained away: build or fix them (structures in the action area,
+  a person's height, floating / duplicated / buried primitives, the camera inside a primitive).
 - Justify only what is truly right as it is (a jump, a sitting pose, depth noise on far foliage), with the reason.
 - Prefer few, larger primitives for large surfaces; name them by what they are.
 - Time: aim to submit by {target} minutes; the hard limit is {limit} minutes, after which the last saved scene
@@ -71,9 +73,18 @@ def cmd_evidence(a) -> int:
     from vrecon.agent import evidence
     frames = json.loads(Path(a.rc_frames).read_text(encoding="utf-8"))
     pm = None
-    if a.people_masks:
-        pm = np.load(a.people_masks)["masks"] > 0
-    rep = evidence.build(Path(a.prep), Path(a.parts), Path(a.rc), frames, pm, Path(a.out), step=a.step)
+    if a.people_masks:  # person tracks only (obs_N), so a file with set labels too can be passed
+        d = np.load(a.people_masks)
+        ids = [int(k) for k, v in json.loads(str(d["id_map"])).items() if v.startswith("obs_")]
+        pm = np.isin(d["masks"], ids)
+    sem = None
+    if a.semantic:
+        sd = np.load(a.semantic)
+        alias = {"ground": "support", "floor": "support", "post": "trunk", "pole": "trunk"}
+        names = {k: alias.get(v, v) for k, v in json.loads(str(sd["id_map"])).items() if not v.startswith("obs_")}
+        sem = (sd["masks"], names)
+    rep = evidence.build(Path(a.prep), Path(a.parts), Path(a.rc), frames, pm, Path(a.out), step=a.step, up_mode=a.up, calibrate=not a.no_calibrate,
+                         people_path=Path(a.people) if a.people else None, semantic=sem)
     print(json.dumps(rep, indent=1))
     return 0
 
@@ -175,8 +186,10 @@ def cmd_blend(a) -> int:
     run = Path(a.run).resolve()
     meta = json.loads((run / "run.json").read_text(encoding="utf-8"))
     spec = run / "spec.json"
+    sc = json.loads((run / "scene.json").read_text(encoding="utf-8"))
+    sc["up_R"] = np.load(meta["evidence"])["up_R"].tolist() if "up_R" in np.load(meta["evidence"]).files else None
     Path(a.out).resolve().parent.mkdir(parents=True, exist_ok=True)
-    spec.write_text((run / "scene.json").read_text(encoding="utf-8"), encoding="utf-8")
+    spec.write_text(json.dumps(sc), encoding="utf-8")
     cmd = [a.blender, "-b", "--factory-startup", "-P", str(ROOT / "src/vrecon/scene/mave_blend.py"), "--",
            str(Path(a.prep).resolve()), str(Path(a.out).resolve()), "--size", str(a.size[0]), str(a.size[1]),
            "--fps", str(a.fps), "--people-anim", meta["people"], "--parts", meta["parts"], "--spec", str(spec)]
@@ -195,6 +208,11 @@ def main() -> int:
         e.add_argument(n)
     e.add_argument("--people-masks", default=None)
     e.add_argument("--step", type=int, default=4)
+    e.add_argument("--no-calibrate", action="store_true", help="parts and evidence come from the same 4RC run")
+    e.add_argument("--up", choices=["ground", "multi"], default="ground", help="multi: MAVE eq. 3")
+    e.add_argument("--people", default=None, help="people npz for the upright cue (--up multi)")
+    e.add_argument("--semantic", default=None, help="run_sam3.py masks on the 4RC frames with set labels support, "
+                   "wall, ceiling, trunk (stand-in for MAVE's Mask2Former)")
     i = sub.add_parser("init")
     for n in ("run", "evidence", "people", "parts"):
         i.add_argument(n)

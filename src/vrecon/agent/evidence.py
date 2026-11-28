@@ -8,9 +8,10 @@ evidence.npz:
   f, size                       focal in pixels at size (W, H) of the full video picture
   kf [K]                        keyframes with observed depth (the 4RC frames)
   depth [K,h,w]                 observed depth (camera z, metres) at size / step, inf where not observed
-  Q [M,3], Q_cls [M], Q_kf [M]  static points (people and low confidence removed); class 0 support (faces up),
+  Q [M,3], Q_cls [M], Q_kf [M]  static points (Q_n: unit normals, facing the camera) (people and low confidence removed); class 0 support (faces up),
                                 1 vertical, 2 ceiling (faces down, above the camera), 3 other; keyframe index
-  ground_v [G,3]                the fitted ground height field (regular grid)
+  ground_v [G,3]                the fitted ground height field (regular grid, in the parts' world: up_R turns it)
+  up_R [3,3]                    parts world -> evidence world (identity unless the up was estimated, eq. 3)
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ import numpy as np
 
 A = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], float)  # 4RC world (y down) -> prep world (z up)
 CLASSES = ("support", "vertical", "ceiling", "other")
+SEM = ("support", "wall", "ceiling", "trunk")  # semantic labels (Q_sem index)
 
 
 def umeyama(src: np.ndarray, dst: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
@@ -43,7 +45,10 @@ def levelled_cameras(prep: dict, GR: np.ndarray, Gt: np.ndarray) -> tuple[np.nda
 class Ground:
     """Height of the fitted ground at (x, y): bilinear on the regular grid of ground_v."""
 
-    def __init__(self, gv: np.ndarray):
+    def __init__(self, gv: np.ndarray, R: np.ndarray | None = None):
+        """gv: a regular grid in its own frame; R turns that frame into the evidence world (queries come in the
+        evidence world)."""
+        self.R = None if R is None or np.allclose(R, np.eye(3)) else np.asarray(R, float)
         xs, ys = np.unique(gv[:, 0].round(4)), np.unique(gv[:, 1].round(4))
         self.x0, self.y0 = xs[0], ys[0]
         self.cell = float(np.median(np.diff(xs)))
@@ -54,6 +59,17 @@ class Ground:
         self.z[iy, ix] = gv[:, 2]
 
     def __call__(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        if self.R is None:
+            return self._h(x, y)
+        x, y = np.asarray(x, float), np.asarray(y, float)
+        z = np.zeros(np.broadcast(x, y).shape)
+        Rt = self.R.T
+        for _ in range(4):  # the height where the turned surface meets the vertical line at (x, y)
+            p = np.stack(np.broadcast_arrays(x, y, z), -1) @ Rt.T
+            z = z + (self._h(p[..., 0], p[..., 1]) - p[..., 2]) / Rt[2, 2]
+        return z
+
+    def _h(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         fx = np.clip((np.asarray(x) - self.x0) / self.cell, 0, self.nx - 1.001)
         fy = np.clip((np.asarray(y) - self.y0) / self.cell, 0, self.ny - 1.001)
         i, j = fx.astype(int), fy.astype(int)
@@ -64,10 +80,20 @@ class Ground:
 
 
 def build(prep_path: Path, parts_path: Path, rc_path: Path, rc_frames: list[int], person_masks: np.ndarray | None,
-          out: Path, step: int = 4, q_step: int = 3, calibrate: bool = True) -> dict:
+          out: Path, step: int = 4, q_step: int = 3, calibrate: bool = True, up_mode: str = "ground",
+          people_path: Path | None = None, semantic: tuple | None = None) -> dict:
     """person_masks: bool [K, H, W] on the 4RC frames (any resolution), or None.
     calibrate: when the scene was built from another 4RC run (4RC is not deterministic: depths of two runs differed
-    by 3-13 % on F002), scale each keyframe's depth so that its ground pixels meet the scene's ground."""
+    by 3-13 % on F002), scale each keyframe's depth so that its ground pixels meet the scene's ground.
+    up_mode: "ground" keeps the parts' world (z = normal of the fitted ground plane); "multi" estimates up from ground,
+    ceiling and wall normals, the cameras and the people's upright direction (MAVE eq. 3, gravity.py) and turns
+    the evidence world so that it is +z (stored as up_R; the session and the .blend apply the same turn).
+    semantic: (masks [K, H, W] on the 4RC frames, {mask number: class name}) with class names support, wall,
+    ceiling, trunk (MAVE labels points with Mask2Former; any segmenter works). Labelled points take their label's
+    class (trunk counts as vertical), unlabelled ones keep the class from their normal; Q_sem keeps the label
+    (-1 none), and the checks require building only what was recognised.
+    people_path also removes points within 0.4 m of any body on that frame (blurred limbs and held props that
+    the masks missed would otherwise count as static structure)."""
     prep = dict(np.load(prep_path))
     info = json.loads(str(prep["info"]))
     W, H = info["size"]
@@ -87,7 +113,17 @@ def build(prep_path: Path, parts_path: Path, rc_path: Path, rc_frames: list[int]
     h, w = H // step, W // step
     fs = f_img / step
     depth = np.full((K, h, w), np.inf, np.float32)
-    Qs, Qc, Qk, ratios = [], [], [], []
+    Qs, Qc, Qk, Qn, Qsem, ratios = [], [], [], [], [], []
+    body_vox = None
+    if people_path is not None:
+        an = np.load(people_path)
+        body_vox = {}
+        for l in json.loads(str(an["labels"])):
+            for t, V in zip(an[f"{l}_t"], an[f"{l}_v"]):
+                if int(t) in rc_frames:
+                    k3 = np.floor((V.astype(np.float64) @ GR.T + Gt) / 0.4).astype(np.int64) + (1 << 20)
+                    keys = (k3[:, 0] << 42) | (k3[:, 1] << 21) | k3[:, 2]
+                    body_vox[int(t)] = np.unique(np.concatenate([body_vox.get(int(t), np.zeros(0, np.int64)), keys]))
     ground = Ground(pz["ground_v"])
     up = np.array([0, 0, 1.0])
     for i, f in enumerate(rc_frames):
@@ -117,6 +153,15 @@ def build(prep_path: Path, parts_path: Path, rc_path: Path, rc_frames: list[int]
             pv = np.clip((v * step * m.shape[0] / H).astype(int), 0, m.shape[0] - 1)
             person = m[pv, pu] > 0
         sel = keep & inside & ~person
+        if body_vox is not None and f in body_vox:
+            k3 = np.floor(X / 0.4).astype(np.int64)
+            near = np.zeros(len(X), bool)
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    for dz in (-1, 0, 1):
+                        kk = k3 + [dx, dy, dz] + (1 << 20)
+                        near |= np.isin((kk[:, 0] << 42) | (kk[:, 1] << 21) | kk[:, 2], body_vox[f])
+            sel &= ~near
         if calibrate:  # this run's depth against the scene's ground (built from an earlier run): one ratio per frame
             idx = np.where(sel)[0][::7]
             ts_ = np.geomspace(0.3, 60, 300)
@@ -148,18 +193,53 @@ def build(prep_path: Path, parts_path: Path, rc_path: Path, rc_frames: list[int]
         cls[cz > 0.8] = 0
         cls[np.abs(cz) < 0.35] = 1
         cls[(cz < -0.8) & (X[:, 2] > cam_T[f][2])] = 2
+        sem = np.full(len(X), -1, np.int8)
+        if semantic is not None:
+            sm, names = semantic
+            m = sm[i]
+            pu = np.clip((u * step * m.shape[1] / W).astype(int), 0, m.shape[1] - 1)
+            pv = np.clip((v * step * m.shape[0] / H).astype(int), 0, m.shape[0] - 1)
+            lab = m[pv, pu]
+            for num, name in names.items():
+                if name in SEM:
+                    sem[lab == int(num)] = SEM.index(name)
+            cls = np.where(sem < 0, cls, np.array([0, 1, 2, 1])[np.maximum(sem, 0)])
         grid = np.zeros((h4, w4), bool)
         grid[::q_step, ::q_step] = True
         qsel = sel & (grid.ravel() | (cls == 1) | (cls == 2))  # every vertical / ceiling point, a sample of the rest
         Qs.append(X[qsel])
         Qc.append(cls[qsel])
         Qk.append(np.full(qsel.sum(), i))
+        Qn.append(n[qsel].astype(np.float16))
+        Qsem.append(sem[qsel])
     ev = {"cam_R": cam_R, "cam_T": cam_T, "f": np.float64(f_img), "size": np.array([W, H]), "step": np.int32(step),
           "kf": np.array(rc_frames), "depth": depth, "Q": np.concatenate(Qs).astype(np.float32),
           "Q_cls": np.concatenate(Qc).astype(np.int8), "Q_kf": np.concatenate(Qk).astype(np.int16),
+          "Q_n": np.concatenate(Qn), "Q_sem": np.concatenate(Qsem),
           "ground_v": pz["ground_v"]}
+    up_R, up_info = np.eye(3), None
+    if up_mode == "multi":
+        from vrecon.agent import gravity
+        ppl = {}
+        if people_path is not None:
+            an = np.load(people_path)
+            ppl = {l: {"v": an[f"{l}_v"].astype(np.float64) @ GR.T + Gt} for l in json.loads(str(an["labels"]))}
+        r = gravity.estimate(*gravity.cues_from(ev, ppl))
+        u = r["up"]
+        v = np.cross(u, [0, 0, 1.0])
+        sn, c = np.linalg.norm(v), float(u[2])
+        if sn > 1e-9:
+            k = v / sn
+            K_ = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+            up_R = np.eye(3) + sn * K_ + (1 - c) * K_ @ K_
+        ev["cam_R"] = np.einsum("ij,tjk->tik", up_R, ev["cam_R"])
+        ev["cam_T"] = ev["cam_T"] @ up_R.T
+        ev["Q"] = (ev["Q"].astype(np.float64) @ up_R.T).astype(np.float32)
+        ev["Q_n"] = (ev["Q_n"].astype(np.float64) @ up_R.T).astype(np.float16)
+        up_info = {"tilt_deg": round(r["tilt_from_start_deg"], 2), "up_in_parts_world": np.round(u, 4).tolist()}
+    ev["up_R"] = up_R
     np.savez_compressed(out, **ev)
-    report = {"keyframes": K, "align_scale": s, "align_resid_m_max": float(resid.max()),
+    report = {"up": up_info, "keyframes": K, "align_scale": s, "align_resid_m_max": float(resid.max()),
               "align_rot_deg_max": float(max(rot_err)), "ground_ratio_per_keyframe": ratios, "depth_px_observed": float(np.isfinite(depth).mean()),
               "points": int(len(ev["Q"])), "classes": {c: int((ev["Q_cls"] == k).sum()) for k, c in enumerate(CLASSES)}}
     Path(str(out) + ".json").write_text(json.dumps(report, indent=1), encoding="utf-8")
@@ -190,6 +270,14 @@ def _grid_components(xy: np.ndarray, cell: float, min_pts: int, diag: bool) -> l
                     stack.append(n)
         out.append(np.array(comp))
     return sorted(out, key=len, reverse=True)
+
+
+def _recognised(sem: np.ndarray) -> str | None:
+    """The segmenter's label for most of these points (None when under half are labelled)."""
+    lab = sem[sem >= 0]
+    if len(lab) < 0.5 * max(len(sem), 1):
+        return None
+    return SEM[int(np.bincount(lab).argmax())]
 
 
 def extract_structures(ev: dict) -> list[dict]:
@@ -224,16 +312,34 @@ def extract_structures(ev: dict) -> list[dict]:
                     "extent_min": lo.round(2).tolist(), "extent_max": hi.round(2).tolist(),
                     "area_m2": round(len({(int(a // 1), int(b // 1)) for a, b in P[:, :2]}) * 1.0, 1),
                     "height_grid_2_5m": grid[:80]})
+    sem_all = ev["Q_sem"] if "Q_sem" in ev else np.full(len(X), -1)
+    for lab in ("trunk", "wall"):  # what a segmenter recognised: grouped on its own
+        m = sem_all == SEM.index(lab)
+        P_all, kf_all = X[m], ev["Q_kf"][m]
+        for comp in _grid_components(P_all[:, :2], 0.25, 2, diag=True)[:60]:
+            P = P_all[comp]
+            if len(P) < 40:
+                continue
+            lo, hi = np.percentile(P, 3, 0), np.percentile(P, 97, 0)
+            w_ = float(max(hi[0] - lo[0], hi[1] - lo[1]))
+            out.append({"class": "vertical", "kind": "column" if w_ < 2.0 else "wall-like", "points": int(len(P)),
+                        "center": np.median(P, 0).round(2).tolist(), "extent_min": lo.round(2).tolist(),
+                        "extent_max": hi.round(2).tolist(), "plan_width_m": round(w_, 2), "recognised": lab,
+                        "keyframes_seen": sorted({int(ev["kf"][i]) for i in kf_all[comp]})[:10]})
+    rest_m = ~np.isin(sem_all, [SEM.index("trunk"), SEM.index("wall")])
+    X, cls = X[rest_m], cls[rest_m]
+    ev = dict(ev, Q_kf=ev["Q_kf"][rest_m], Q_sem=sem_all[rest_m])
     for k, name in ((1, "vertical"), (2, "ceiling")):
         V = X[cls == k]
         kfs = ev["Q_kf"][cls == k]
+        semk = ev["Q_sem"][cls == k]
         # columns: plan cells whose points stack over >= 1.5 m of height (trunks, posts, poles)
         keys = np.floor(V[:, :2] / 0.25).astype(np.int64)
         zb = np.floor(V[:, 2] / 0.25).astype(np.int64)
         cell_z: dict = {}
         for (a, b), z in zip(map(tuple, keys), zb):
             cell_z.setdefault((a, b), set()).add(int(z))
-        tall = np.array([len(cell_z[(a, b)]) >= 6 for a, b in map(tuple, keys)])
+        tall = np.array([len(cell_z[(a, b)]) >= 6 for a, b in map(tuple, keys)], bool)
         idx_t = np.where(tall)[0]
         for comp in _grid_components(V[idx_t, :2], 0.25, 1, diag=True)[:60]:
             P = V[idx_t[comp]]
@@ -244,6 +350,7 @@ def extract_structures(ev: dict) -> list[dict]:
             out.append({"class": name, "kind": "column" if w_ < 2.0 else "wall-like", "points": int(len(P)),
                         "center": np.median(P, 0).round(2).tolist(), "extent_min": lo.round(2).tolist(),
                         "extent_max": hi.round(2).tolist(), "plan_width_m": round(w_, 2),
+                        "recognised": _recognised(semk[idx_t[comp]]),
                         "keyframes_seen": sorted({int(ev["kf"][i]) for i in kfs[idx_t[comp]]})[:10]})
         rest = np.where(~tall)[0]
         for comp in _grid_components(V[rest, :2], 1.0, 10, diag=True)[:8]:
@@ -261,5 +368,5 @@ def extract_structures(ev: dict) -> list[dict]:
 
 def load(path: Path) -> dict:
     d = dict(np.load(path))
-    d["ground"] = Ground(d["ground_v"])
+    d["ground"] = Ground(d["ground_v"], d.get("up_R"))
     return d

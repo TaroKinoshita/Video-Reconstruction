@@ -188,25 +188,48 @@ def describe_cluster(ev: dict, X: np.ndarray, cls: str, idx: np.ndarray) -> dict
             "keyframes_seen": sorted({int(ev["kf"][k]) for k in ev["Q_kf"][idx]})[:12]}
 
 
+NEAR_M = 15.0  # uncovered structure this close to the camera path is in the action area
+
+
 def coverage(ev: dict, scene: dict, mesh_vox: set | None) -> tuple[list[dict], dict]:
+    """Uncovered observed points, grouped as the structures tool groups them (support layers, columns such as
+    trunks and posts, wider wall-like groups, masses), so each issue is one thing the agent can build."""
+    from vrecon.agent.evidence import extract_structures
     X = ev["Q"].astype(np.float64)
     dist = np.linalg.norm(X - ev["cam_T"][ev["kf"][ev["Q_kf"]]], axis=1)
     tol = 0.2 + 0.02 * dist
     cov = covered(ev, scene, X, tol, mesh_vox)
-    issues, summary = [], {}
+    summary = {}
     for k, cls in enumerate(CLASSES[:3]):
         sel = ev["Q_cls"] == k
-        if not sel.any():
+        if sel.any():
+            summary[cls] = round(float(cov[sel].mean()), 3)
+    un = ~cov & (ev["Q_cls"] <= 2)
+    sub = dict(ev, **{k: ev[k][un] for k in ("Q", "Q_cls", "Q_kf", "Q_n", "Q_sem") if k in ev})
+    cams = ev["cam_T"]
+    issues = []
+    for st in extract_structures(sub):
+        c = st.get("center") or [(a + b) / 2 for a, b in zip(st["extent_min"], st["extent_max"])]
+        near = float(np.min(np.linalg.norm(cams[:, :2] - np.asarray(c[:2]), axis=1)))
+        kind = st["kind"]
+        if kind == "layer" and st["points"] < 300:
             continue
-        summary[cls] = round(float(cov[sel].mean()), 3)
-        un = np.where(sel & ~cov)[0]
-        for comp in clusters(X[un])[:12]:
-            info = describe_cluster(ev, X, cls, un[comp])
-            c = info["center"]
-            iid = f"coverage:{cls}:({c[0]:.0f},{c[1]:.0f},{c[2]:.0f})"
-            issues.append({"id": iid, "check": "coverage", **info,
-                           "text": f"{info['points']} observed {cls} points around {c} are not covered by the scene "
-                                   f"(extent {info['extent_min']} to {info['extent_max']})."})
+        # must be built: the ground layer near the action, and near structure a segmenter recognised (trunk,
+        # wall, ceiling); geometry nobody recognised (foliage, blur, depth noise) may be explained instead
+        must = near < NEAR_M and ((kind == "layer" and st["points"] >= 300)
+                                  or (st.get("recognised") in ("trunk", "wall", "ceiling") and st["points"] >= 80))
+        iid = f"coverage:{st['class']}:{kind}:({c[0]:.0f},{c[1]:.0f},{c[2]:.0f})"
+        info = {k: v for k, v in st.items() if k not in ("height_grid_2_5m",)}
+        if kind == "layer":
+            info["height_grid_2_5m"] = st["height_grid_2_5m"][:30]
+        issues.append({"id": iid, "check": "coverage", **info, "center": [round(float(v), 2) for v in c],
+                       "distance_from_camera_path_m": round(near, 1), "justifiable": not must,
+                       "text": f"Observed {st['class']} {kind}"
+                               + (f" recognised as {st['recognised']}" if st.get("recognised") else "")
+                               + f" ({st['points']} points) around "
+                               f"{[round(float(v), 1) for v in c]}, extent {st['extent_min']} to {st['extent_max']}, "
+                               f"{near:.0f} m from the camera path, is not covered by the scene."
+                               + ("" if not must else " It is in the action area: build it (cannot be justified).")})
     return issues, summary
 
 
@@ -259,7 +282,7 @@ def human(ev: dict, scene: dict, people: dict) -> tuple[list[dict], dict]:
                                                      else float("nan"), 3),
                           "frames": [int(ts[0]), int(ts[-1])], "removed_segments": st.get("removed", [])}
         if not HEIGHT_OK[0] <= H_est <= HEIGHT_OK[1]:
-            issues.append({"id": f"human:height:{label}", "check": "human", "person": label,
+            issues.append({"id": f"human:height:{label}", "check": "human", "person": label, "justifiable": False,
                            "height_m": round(float(H_est), 2),
                            "text": f"{label} comes out {H_est:.2f} m tall (scale k {st.get('k', 1.0):.3f}); "
                                    f"adults are usually {HEIGHT_OK[0]}-{HEIGHT_OK[1]} m."})
@@ -350,7 +373,10 @@ def verify(ev: dict, scene: dict, people: dict, mesh_vox: set | None) -> dict:
     issues = iv + ic + ih + ik
     just = scene.get("justified", {})
     for i in issues:
-        i["justified"] = just.get(i["id"])
+        if i["check"] == "complete":
+            i["justifiable"] = False
+        i.setdefault("justifiable", True)
+        i["justified"] = just.get(i["id"]) if i["justifiable"] else None
     return {"issues": issues, "coverage_share": cov, "people": hum,
             "counts": {c: sum(1 for i in issues if i["check"] == c) for c in ("video", "coverage", "human", "complete")},
             "open": sum(1 for i in issues if not i["justified"])}

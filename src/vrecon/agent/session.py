@@ -55,14 +55,15 @@ class Session:
         pz = np.load(r["parts"])
         parts = json.loads(str(pz["parts"]))
         GR, Gt = np.array(parts["world_R"]), np.array(parts["world_t"])
+        UR = ev.get("up_R", np.eye(3))  # evidence world = parts world turned so the estimated up is +z
         an = np.load(r["people"])
         people = {}
         for label in json.loads(str(an["labels"])):
             ts = an[f"{label}_t"].astype(int)
-            V = (an[f"{label}_v"].astype(np.float64) @ GR.T + Gt).astype(np.float32)
+            V = ((an[f"{label}_v"].astype(np.float64) @ GR.T + Gt) @ UR.T).astype(np.float32)
             ext = V[:, :, 2].max(1) - V[:, :, 2].min(1)
             people[label] = {"t": ts, "v": V, "height": float(np.percentile(ext, 95))}
-        bd = pz["backdrop_v"].astype(np.float64)
+        bd = pz["backdrop_v"].astype(np.float64) @ UR.T
         return {"ev": ev, "people": people, "backdrop_v": bd, "backdrop_vox": checks.mesh_voxels(bd),
                 "video": None}
 
@@ -363,6 +364,11 @@ class Session:
     def justify(self, issue_id: str, reason: str) -> dict:
         if not reason:
             return {"error": "a reason is required"}
+        last = self.dir / "issues.json"
+        if last.exists():
+            for i in json.loads(last.read_text(encoding="utf-8")).get("issues", []):
+                if i["id"] == issue_id and not i.get("justifiable", True):
+                    return {"error": f"{issue_id} cannot be justified: fix it with an edit (or set_human_scale)"}
         sc = self.scene()
         sc.setdefault("justified", {})[issue_id] = reason
         self._save(sc, f"justify {issue_id}")

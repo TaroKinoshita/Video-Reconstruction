@@ -48,7 +48,7 @@ def test_empty_start_build_ground_and_scale(tmp_path):
     init_run(tmp_path / "run", tmp_path / "ev.npz", tmp_path / "people.npz", tmp_path / "parts.npz", None, "empty")
     s = Session(tmp_path / "run")
     v = s.verify()
-    assert v["counts"]["coverage"] >= 1
+    assert v["coverage_share"]["support"] == 0
     assert any(i["id"].startswith("human:unsupported:obs_0") for i in v["issues"])
     # system meshes are locked in an empty start
     assert s.edit([{"op": "fixed", "ground": True}])["applied"] is False
