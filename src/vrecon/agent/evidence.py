@@ -1,0 +1,265 @@
+"""The geometric evidence D of one shot (MAVE eq. 6), in the levelled scene world (z up, metres).
+
+Built from the shot's own analysis only (4RC point maps, SAM people masks, the camera of scripts/v11_mave_prep.py,
+the ground of scripts/v11_parts.py); nothing from a benchmark's ground truth.
+
+evidence.npz:
+  cam_R [N,3,3], cam_T [N,3]   camera per video frame (OpenCV axes as columns, centre), levelled world
+  f, size                       focal in pixels at size (W, H) of the full video picture
+  kf [K]                        keyframes with observed depth (the 4RC frames)
+  depth [K,h,w]                 observed depth (camera z, metres) at size / step, inf where not observed
+  Q [M,3], Q_cls [M], Q_kf [M]  static points (people and low confidence removed); class 0 support (faces up),
+                                1 vertical, 2 ceiling (faces down, above the camera), 3 other; keyframe index
+  ground_v [G,3]                the fitted ground height field (regular grid)
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+A = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], float)  # 4RC world (y down) -> prep world (z up)
+CLASSES = ("support", "vertical", "ceiling", "other")
+
+
+def umeyama(src: np.ndarray, dst: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
+    """s, R, t with dst ~ s R src + t (least squares)."""
+    ms, md = src.mean(0), dst.mean(0)
+    a, b = src - ms, dst - md
+    U, S, Vt = np.linalg.svd(b.T @ a / len(src))
+    D = np.eye(3)
+    D[2, 2] = np.sign(np.linalg.det(U @ Vt))
+    R = U @ D @ Vt
+    s = float((S * np.diag(D)).sum() / (a ** 2).sum(1).mean())
+    return s, R, md - s * R @ ms
+
+
+def levelled_cameras(prep: dict, GR: np.ndarray, Gt: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    return np.einsum("ij,tjk->tik", GR, prep["cam_R"]), prep["cam_T"] @ GR.T + Gt
+
+
+class Ground:
+    """Height of the fitted ground at (x, y): bilinear on the regular grid of ground_v."""
+
+    def __init__(self, gv: np.ndarray):
+        xs, ys = np.unique(gv[:, 0].round(4)), np.unique(gv[:, 1].round(4))
+        self.x0, self.y0 = xs[0], ys[0]
+        self.cell = float(np.median(np.diff(xs)))
+        self.nx, self.ny = len(xs), len(ys)
+        ix = np.round((gv[:, 0] - self.x0) / self.cell).astype(int)
+        iy = np.round((gv[:, 1] - self.y0) / self.cell).astype(int)
+        self.z = np.full((self.ny, self.nx), np.nan)
+        self.z[iy, ix] = gv[:, 2]
+
+    def __call__(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        fx = np.clip((np.asarray(x) - self.x0) / self.cell, 0, self.nx - 1.001)
+        fy = np.clip((np.asarray(y) - self.y0) / self.cell, 0, self.ny - 1.001)
+        i, j = fx.astype(int), fy.astype(int)
+        u, v = fx - i, fy - j
+        z = self.z
+        return ((1 - u) * (1 - v) * z[j, i] + u * (1 - v) * z[j, i + 1] + (1 - u) * v * z[j + 1, i]
+                + u * v * z[j + 1, i + 1])
+
+
+def build(prep_path: Path, parts_path: Path, rc_path: Path, rc_frames: list[int], person_masks: np.ndarray | None,
+          out: Path, step: int = 4, q_step: int = 3, calibrate: bool = True) -> dict:
+    """person_masks: bool [K, H, W] on the 4RC frames (any resolution), or None.
+    calibrate: when the scene was built from another 4RC run (4RC is not deterministic: depths of two runs differed
+    by 3-13 % on F002), scale each keyframe's depth so that its ground pixels meet the scene's ground."""
+    prep = dict(np.load(prep_path))
+    info = json.loads(str(prep["info"]))
+    W, H = info["size"]
+    f_img = info["f_img"]
+    pz = np.load(parts_path)
+    parts = json.loads(str(pz["parts"]))
+    GR, Gt = np.array(parts["world_R"]), np.array(parts["world_t"])
+    rc = np.load(rc_path)
+    K = len(rc_frames)
+    c2w = np.stack([rc[f"pred_{i}_extrinsic"].reshape(4, 4) for i in range(K)])
+    # this 4RC run against the camera already in the scene: one similarity (4RC world -> prep world)
+    s, Rs, ts = umeyama(c2w[:, :3, 3], prep["cam_T"][rc_frames])
+    resid = np.linalg.norm((s * c2w[:, :3, 3] @ Rs.T + ts) - prep["cam_T"][rc_frames], axis=1)
+    rot_err = [np.degrees(np.arccos(np.clip((np.trace((Rs @ c2w[i, :3, :3]).T @ prep["cam_R"][f]) - 1) / 2, -1, 1)))
+               for i, f in enumerate(rc_frames)]
+    cam_R, cam_T = levelled_cameras(prep, GR, Gt)
+    h, w = H // step, W // step
+    fs = f_img / step
+    depth = np.full((K, h, w), np.inf, np.float32)
+    Qs, Qc, Qk, ratios = [], [], [], []
+    ground = Ground(pz["ground_v"])
+    up = np.array([0, 0, 1.0])
+    for i, f in enumerate(rc_frames):
+        # image-aligned: each 4RC pixel's depth in its own camera, at its own picture position (4RC resizes the
+        # long side to 512 and centre-crops), back-projected through the scene's camera; so the evidence agrees
+        # with the picture even where this run's camera turned a few degrees from the scene's
+        P = rc[f"pred_{i}_pts"].reshape(rc[f"pred_{i}_pts"].shape[-3:]).astype(np.float64)
+        h4, w4 = P.shape[:2]
+        conf = rc[f"pred_{i}_conf"].reshape(h4, w4)
+        w2c = np.linalg.inv(c2w[i])
+        z = s * (P.reshape(-1, 3) @ w2c[:3, :3].T + w2c[:3, 3])[:, 2]
+        s4 = 512 / max(W, H)
+        ox, oy = round(W * s4) // 2 - w4 // 2, round(H * s4) // 2 - h4 // 2
+        gj, gi = np.meshgrid(np.arange(w4), np.arange(h4))
+        u = ((gj.ravel() + ox + 0.5) / s4) / step  # pixel at the evidence resolution
+        v = ((gi.ravel() + oy + 0.5) / s4) / step
+        ray = np.stack([(u - w / 2) / fs, (v - h / 2) / fs, np.ones_like(u)], 1) @ cam_R[f].T
+        X = cam_T[f] + z[:, None] * ray  # levelled world
+        keep = (conf.ravel() > np.percentile(conf, 10)) & (z > 0.05)
+        ui, vi = np.floor(u).astype(int), np.floor(v).astype(int)
+        inside = (ui >= 0) & (ui < w) & (vi >= 0) & (vi < h)
+        person = np.zeros(h4 * w4, bool)
+        if person_masks is not None:
+            m = person_masks[i].astype(np.uint8)
+            m = cv2.dilate(m, np.ones((5, 5), np.uint8))
+            pu = np.clip((u * step * m.shape[1] / W).astype(int), 0, m.shape[1] - 1)
+            pv = np.clip((v * step * m.shape[0] / H).astype(int), 0, m.shape[0] - 1)
+            person = m[pv, pu] > 0
+        sel = keep & inside & ~person
+        if calibrate:  # this run's depth against the scene's ground (built from an earlier run): one ratio per frame
+            idx = np.where(sel)[0][::7]
+            ts_ = np.geomspace(0.3, 60, 300)
+            Pm = cam_T[f][None, None] + ts_[:, None, None] * ray[idx][None]
+            below = Pm[..., 2] < ground(Pm[..., 0], Pm[..., 1])
+            first = np.where(below.any(0), below.argmax(0), -1)
+            tg = np.where(first >= 0, ts_[np.maximum(first, 0)], np.inf)
+            r = z[idx] / tg
+            r = r[np.isfinite(r) & (np.abs(r - 1) < 0.3)]
+            ratio = float(np.median(r)) if len(r) > 200 else 1.0
+            ratios.append(round(ratio, 4))
+            z = z / ratio
+            X = cam_T[f] + z[:, None] * ray
+        flat = vi[sel] * w + ui[sel]
+        d = depth[i].ravel()
+        np.minimum.at(d, flat, z[sel].astype(np.float32))
+        depth[i] = d.reshape(h, w)
+        # normals from the point map grid
+        G = X.reshape(h4, w4, 3)
+        du = np.zeros_like(G)
+        dv = np.zeros_like(G)
+        du[:, 1:-1] = G[:, 2:] - G[:, :-2]
+        dv[1:-1] = G[2:] - G[:-2]
+        n = np.cross(du, dv).reshape(-1, 3)
+        n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-9)
+        n *= np.where(((cam_T[f] - X) * n).sum(1, keepdims=True) < 0, -1, 1)  # facing the camera
+        cz = n @ up
+        cls = np.full(len(X), 3)
+        cls[cz > 0.8] = 0
+        cls[np.abs(cz) < 0.35] = 1
+        cls[(cz < -0.8) & (X[:, 2] > cam_T[f][2])] = 2
+        grid = np.zeros((h4, w4), bool)
+        grid[::q_step, ::q_step] = True
+        qsel = sel & (grid.ravel() | (cls == 1) | (cls == 2))  # every vertical / ceiling point, a sample of the rest
+        Qs.append(X[qsel])
+        Qc.append(cls[qsel])
+        Qk.append(np.full(qsel.sum(), i))
+    ev = {"cam_R": cam_R, "cam_T": cam_T, "f": np.float64(f_img), "size": np.array([W, H]), "step": np.int32(step),
+          "kf": np.array(rc_frames), "depth": depth, "Q": np.concatenate(Qs).astype(np.float32),
+          "Q_cls": np.concatenate(Qc).astype(np.int8), "Q_kf": np.concatenate(Qk).astype(np.int16),
+          "ground_v": pz["ground_v"]}
+    np.savez_compressed(out, **ev)
+    report = {"keyframes": K, "align_scale": s, "align_resid_m_max": float(resid.max()),
+              "align_rot_deg_max": float(max(rot_err)), "ground_ratio_per_keyframe": ratios, "depth_px_observed": float(np.isfinite(depth).mean()),
+              "points": int(len(ev["Q"])), "classes": {c: int((ev["Q_cls"] == k).sum()) for k, c in enumerate(CLASSES)}}
+    Path(str(out) + ".json").write_text(json.dumps(report, indent=1), encoding="utf-8")
+    return report
+
+
+def _grid_components(xy: np.ndarray, cell: float, min_pts: int, diag: bool) -> list[np.ndarray]:
+    """Point groups whose plan-view cells (with >= min_pts points) touch; largest first."""
+    keys = np.floor(xy / cell).astype(np.int64)
+    cells: dict = {}
+    for i, k in enumerate(map(tuple, keys)):
+        cells.setdefault(k, []).append(i)
+    full = {k for k, v in cells.items() if len(v) >= min_pts}
+    nb = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx or dy) and (diag or not (dx and dy))]
+    seen, out = set(), []
+    for k in full:
+        if k in seen:
+            continue
+        stack, comp = [k], []
+        seen.add(k)
+        while stack:
+            c = stack.pop()
+            comp.extend(cells[c])
+            for dx, dy in nb:
+                n = (c[0] + dx, c[1] + dy)
+                if n in full and n not in seen:
+                    seen.add(n)
+                    stack.append(n)
+        out.append(np.array(comp))
+    return sorted(out, key=len, reverse=True)
+
+
+def extract_structures(ev: dict) -> list[dict]:
+    """Geometric evidence in the shape the agent builds with (MAVE's support layers L, walls W, ceilings U; here
+    without a semantic model): support layers as fitted planes with a coarse height grid, vertical and ceiling
+    points as separate plan-view groups (columns such as trunks or posts, or larger masses such as walls or foliage)."""
+    X, cls = ev["Q"].astype(np.float64), ev["Q_cls"]
+    out = []
+    S = X[cls == 0]
+    for comp in _grid_components(S[:, :2], 1.0, 5, diag=False)[:6]:
+        P = S[comp]
+        if len(P) < 300:
+            continue
+        A_ = np.c_[P[:, 0], P[:, 1], np.ones(len(P))]
+        keep = np.ones(len(P), bool)
+        for _ in range(3):
+            coef = np.linalg.lstsq(A_[keep], P[keep, 2], rcond=None)[0]
+            r = P[:, 2] - A_ @ coef
+            mad = np.median(np.abs(r[keep])) + 1e-6
+            keep = np.abs(r) < 3 * mad + 0.05
+        lo, hi = np.percentile(P, 2, 0), np.percentile(P, 98, 0)
+        g = {}
+        for (x, y, z) in P[keep]:
+            g.setdefault((int(np.floor(x / 2.5)), int(np.floor(y / 2.5))), []).append(z)
+        grid = sorted([[round((i + 0.5) * 2.5, 2), round((j + 0.5) * 2.5, 2), round(float(np.median(v)), 2)]
+                       for (i, j), v in g.items() if len(v) >= 20])
+        n = np.array([-coef[0], -coef[1], 1.0])
+        out.append({"class": "support", "kind": "layer", "points": int(len(P)),
+                    "plane_z_eq": f"z = {coef[0]:.4f} x + {coef[1]:.4f} y + {coef[2]:.3f}",
+                    "tilt_deg": round(float(np.degrees(np.arccos(1 / np.linalg.norm(n)))), 1),
+                    "residual_m": round(float(np.median(np.abs(r[keep]))), 3),
+                    "extent_min": lo.round(2).tolist(), "extent_max": hi.round(2).tolist(),
+                    "area_m2": round(len({(int(a // 1), int(b // 1)) for a, b in P[:, :2]}) * 1.0, 1),
+                    "height_grid_2_5m": grid[:80]})
+    for k, name in ((1, "vertical"), (2, "ceiling")):
+        V = X[cls == k]
+        kfs = ev["Q_kf"][cls == k]
+        # columns: plan cells whose points stack over >= 1.5 m of height (trunks, posts, poles)
+        keys = np.floor(V[:, :2] / 0.25).astype(np.int64)
+        zb = np.floor(V[:, 2] / 0.25).astype(np.int64)
+        cell_z: dict = {}
+        for (a, b), z in zip(map(tuple, keys), zb):
+            cell_z.setdefault((a, b), set()).add(int(z))
+        tall = np.array([len(cell_z[(a, b)]) >= 6 for a, b in map(tuple, keys)])
+        idx_t = np.where(tall)[0]
+        for comp in _grid_components(V[idx_t, :2], 0.25, 1, diag=True)[:60]:
+            P = V[idx_t[comp]]
+            if len(P) < 30:
+                continue
+            lo, hi = np.percentile(P, 3, 0), np.percentile(P, 97, 0)
+            w_ = float(max(hi[0] - lo[0], hi[1] - lo[1]))
+            out.append({"class": name, "kind": "column" if w_ < 2.0 else "wall-like", "points": int(len(P)),
+                        "center": np.median(P, 0).round(2).tolist(), "extent_min": lo.round(2).tolist(),
+                        "extent_max": hi.round(2).tolist(), "plan_width_m": round(w_, 2),
+                        "keyframes_seen": sorted({int(ev["kf"][i]) for i in kfs[idx_t[comp]]})[:10]})
+        rest = np.where(~tall)[0]
+        for comp in _grid_components(V[rest, :2], 1.0, 10, diag=True)[:8]:
+            P = V[rest[comp]]
+            if len(P) < 200:
+                continue
+            lo, hi = np.percentile(P, 5, 0), np.percentile(P, 95, 0)
+            out.append({"class": name, "kind": "mass", "points": int(len(P)),
+                        "center": np.median(P, 0).round(2).tolist(), "extent_min": lo.round(2).tolist(),
+                        "extent_max": hi.round(2).tolist(),
+                        "plan_width_m": round(float(max(hi[0] - lo[0], hi[1] - lo[1])), 2),
+                        "keyframes_seen": sorted({int(ev["kf"][i]) for i in kfs[rest[comp]]})[:10]})
+    return out
+
+
+def load(path: Path) -> dict:
+    d = dict(np.load(path))
+    d["ground"] = Ground(d["ground_v"])
+    return d

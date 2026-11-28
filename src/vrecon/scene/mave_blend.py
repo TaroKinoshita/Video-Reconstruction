@@ -13,6 +13,10 @@ With --parts PARTS.npz (scripts/v11_parts.py) the world is turned so the ground 
 background is built as parts: Ground (height field, film colours), Trunk_*, Post_*, Beam_*, Canopy_* (unit meshes
 scaled, colour per object), Backdrop (what is not split yet, film colours), and the "Imagined" collection (trees
 outside every camera's view, custom property imagined = 1).
+With --spec SCENE.json (an agent run's scene, src/vrecon/agent; needs --parts for the world) the parts' trees, posts,
+beams and canopies are replaced by the agent's primitives ("Blockout" collection; box, cylinder, plane, ellipsoid),
+Ground / Backdrop / ForestWall are kept only when its "fixed" says so, and each person gets its scale k about the
+camera centres (MAVE eq. 10) and is hidden on removed frames (or left out when the whole track was removed).
 With --people-gain R G B the people's film colours are multiplied (linear) to undo the scene lighting's darkening.
 With --staffs STAFFS.npz (scripts/v11_staffs.py) each held staff is one cylinder in the "Props" collection, keyed on
 the frames where it is held and hidden elsewhere.
@@ -34,6 +38,9 @@ pz = np.load(argv[argv.index("--parts") + 1]) if "--parts" in argv else None
 people_gain = ([float(argv[argv.index("--people-gain") + k]) for k in (1, 2, 3)] if "--people-gain" in argv
                else [1.0, 1.0, 1.0])
 parts = json.loads(str(pz["parts"])) if pz is not None else None
+# agent scene (src/vrecon/agent): primitives replace the parts' trees / posts / beams, system meshes kept or dropped,
+# one scale k per person about the camera centres, removed tracks / segments
+spec = json.load(open(argv[argv.index("--spec") + 1], encoding="utf-8")) if "--spec" in argv else None
 GR = np.array(parts["world_R"]) if parts else np.eye(3)
 Gt = np.array(parts["world_t"]) if parts else np.zeros(3)
 
@@ -260,6 +267,48 @@ else:
     world.node_tree.nodes["Background"].inputs["Strength"].default_value = 1.0
     scene.world = world
 
+if spec is not None:
+    keep = spec.get("fixed", {})
+    system = {"Ground": "ground", "Backdrop": "backdrop", "ForestWall": "forest_wall"}
+    for ob in list(bpy.data.objects):
+        if ob.name.startswith(("Trunk_", "Post_", "Beam_", "ImTrunk_", "Canopy_")) or \
+                (ob.name in system and not keep.get(system[ob.name])):
+            bpy.data.objects.remove(ob, do_unlink=True)
+    import bmesh
+    from mathutils import Euler
+
+    def unit(kind):
+        me = bpy.data.meshes.new(f"unit_{kind}")
+        bm = bmesh.new()
+        if kind in ("box", "plane"):
+            bmesh.ops.create_cube(bm, size=1.0)
+        elif kind == "cylinder":
+            bmesh.ops.create_cone(bm, cap_ends=True, segments=24, radius1=0.5, radius2=0.5, depth=1)
+        else:
+            bmesh.ops.create_icosphere(bm, subdivisions=3, radius=0.5)
+        bm.to_mesh(me)
+        bm.free()
+        if kind in ("cylinder", "ellipsoid"):
+            for poly in me.polygons:
+                poly.use_smooth = True
+        me.materials.append(object_colour_material(f"prim_{kind}"))
+        return me
+
+    units = {k: unit(k) for k in ("box", "plane", "cylinder", "ellipsoid")}
+    blockout = bpy.data.collections.new("Blockout")
+    env.children.link(blockout)
+    for p in spec["primitives"]:
+        ob = bpy.data.objects.new(p["name"], units[p["type"]])
+        blockout.objects.link(ob)
+        ob.location = p["center"]
+        sx, sy, sz_ = p["size"]
+        ob.scale = (sx, sy, 0.02 if p["type"] == "plane" else sz_)
+        ob.rotation_mode = "XYZ"
+        ob.rotation_euler = Euler([np.radians(v) for v in p.get("rotation", [0, 0, 0])], "XYZ")
+        ob.color = (*p.get("colour", [0.5, 0.5, 0.5])[:3], 1)
+        ob["class"] = p.get("class", "")
+        ob["imagined"] = int(bool(p.get("imagined")))
+
 # people
 people = bpy.data.collections.new("People")
 scene.collection.children.link(people)
@@ -283,7 +332,20 @@ def colour_material(name: str):
 def animated_person(label: str, collection):
     ts, Vs, F = anim[f"{label}_t"], anim[f"{label}_v"], anim[f"{label}_f"]
     Vs = np.stack([gw(v) for v in Vs]) if parts else Vs
+    st = spec["people"].get(label, {}) if spec is not None else {}
+    if st.get("k", 1.0) != 1.0:  # MAVE eq. 10: the whole track about the camera centres (picture kept)
+        o = gw(d["cam_T"][ts])[:, None]
+        Vs = (o + np.float32(st["k"]) * (Vs - o)).astype(np.float32)
     ob = mesh_object(label, Vs[0], F, collection, (0.7, 0.7, 0.7, 1))
+    if st.get("removed"):
+        gone = set()
+        for a_, b_, *_ in st["removed"]:
+            gone |= set(range(int(a_), int(b_) + 1))
+        for f in range(N):
+            if f == 0 or (f in gone) != ((f - 1) in gone):
+                ob.hide_render = ob.hide_viewport = f in gone
+                ob.keyframe_insert("hide_render", frame=f + 1)
+                ob.keyframe_insert("hide_viewport", frame=f + 1)
     me = ob.data
     col = me.color_attributes.new("film", "FLOAT_COLOR", "POINT")
     rgba = np.concatenate([np.clip(anim[f"{label}_col"] * np.float32(people_gain), 0, 1), np.ones((len(Vs[0]), 1), np.float32)], 1)
@@ -321,6 +383,8 @@ def animated_person(label: str, collection):
 
 if anim is not None:
     for label in json.loads(str(anim["labels"])):
+        if spec is not None and spec["people"].get(label, {}).get("track_removed"):
+            continue
         sub = bpy.data.collections.new(label)
         people.children.link(sub)
         animated_person(label, sub)
