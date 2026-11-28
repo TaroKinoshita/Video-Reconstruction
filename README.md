@@ -69,7 +69,7 @@ video ─► observe ───────────────────�
   teleporting things), plus an optional image-reading judge.
 - **Generation**: a clay render of the scene is the video input, crops of the source give the look.
 
-## Status (2026-11-23)
+## Status (2026-11-28)
 
 - **v1.0 done (2026-11-19)**: the tennis case study above, and a 2×3 study on synthetic clips (`evaluation/RESULTS.md`).
 - **In progress: multi-cut film clips.** One world for all cuts, close-ups placed against the same person, an AI
@@ -78,6 +78,41 @@ video ─► observe ───────────────────�
   clips are published.
 - Details: [`docs/STATUS.md`](docs/STATUS.md). Plans: [`docs/PLAN_v2.md`](docs/PLAN_v2.md) (Japanese),
   [`docs/DESIGN_v3.md`](docs/DESIGN_v3.md) (Japanese), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Direction since 2026-11-28: reproduce MAVE, then go beyond it
+
+MAVE (arXiv 2611.22464) builds an editable Blender blockout of a single film shot. It does this in three stages:
+measure the camera, people and geometry; let an LLM agent place primitives; then check the result against the
+evidence. It is scored on MAVEBench. Its code is not public yet: the README said "coming soon" on 2026-11-28.
+
+The plan:
+1. **Reproduce MAVE from the paper with our own tools**, one part at a time, so that each part can be swapped
+   for MAVE's own once it is released. Each reproduced part is scored against our own version on the same clip.
+2. **Keep our own improvements** where they score better, as separate versions.
+3. **Go beyond MAVE** where it stops: it covers one shot only, so the plan adds several cuts in one world and
+   imagined surroundings outside the view (`docs/PLAN_v1_1.md` section 12).
+
+Mapping of every MAVE part to this project, and all measurements: `docs/PLAN_v1_1.md` sections 11-12 (Japanese).
+
+### Done so far (MAVEBench clip F002, a forest staff fight; MAVE's own score on it: 76.5)
+
+| Step | What | MAVEBench total |
+|---|---|---|
+| Measure (own pipeline) | 4RC camera and depth, SAM 3.1 people, SAM 3D Body motion with fit-weighted smoothing, ground, trunks, posts and beams as parts, held staffs | 86.8 (v11) |
+| People placement, own variant | One body size per person, kept in the picture by scaling about the camera centre | **87.1** (v12) |
+| People placement as in MAVE eq. 4-5 and 10 | Neck on the camera ray, one multiplier per person, foot-support scale | 85.8 / 85.7 (v13) |
+| Agent stage and checks as in MAVE 3.2-3.3 | LLM agent (Claude Sonnet 5.5 via `claude -p`) builds the set from an empty scene with query / edit / verify tools. Four checks: primitives in front of observed depth (eq. 12), uncovered support or wall surfaces, feet / height / penetration, floating or duplicated parts. The agent must submit; issues are resolved or justified | 80.3 (system parts as primitives: 85.3) |
+
+Findings so far:
+- The faithful MAVE people placement scores lower than our own variant on this clip. Both are kept.
+- The agent loop runs end to end, but the agent took a shortcut. It built only 4 primitives (ground, one post, a
+  wall) and justified 48 issues instead of placing the trees it could see. Next, tighten which issues a
+  justification can clear.
+- 4RC is not deterministic: two runs on the same frames differed by up to 13 % in depth. Scene parts and check
+  evidence must come from the same run.
+
+Code: `src/vrecon/agent/` (primitives, evidence, checks, tools, MCP server), `scripts/agent_run.py` (evidence,
+run, verify, blend), `scripts/v11_*.py` (measurement steps), `src/vrecon/scene/mave_blend.py` (scene to .blend).
 
 ## Setup
 
